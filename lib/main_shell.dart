@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'events/events_page.dart';
 import 'home/home_feed_page.dart';
 import 'main.dart';
 
@@ -19,7 +20,7 @@ class _MainShellState extends State<MainShell> {
 
   static const _pages = [
     _ComingSoonPage(title: 'Devocionais'),
-    _ComingSoonPage(title: 'Eventos'),
+    EventsPage(),
     HomeFeedPage(),
     _ComingSoonPage(title: 'Contribua'),
     _MaisPage(),
