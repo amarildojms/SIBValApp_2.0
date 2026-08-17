@@ -1,0 +1,174 @@
+{
+  "project_info": {
+    "project_number": "1086803129414",
+    "project_id": "sibval-app-project",
+    "storage_bucket": "sibval-app-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086803129414:android:e1680e10fa350069c90647",
+        "android_client_info": {
+          "package_name": "com.example.sibvalapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086803129414-vt8u88tpljqtrh3bofs7b2eua2qh62g7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sibvalapp",
+            "certificate_hash": "88c4196fb3bb3d2393d39f7cacef80e1634d4f0f"
+          }
+        },
+        {
+          "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBudLKr7W97b5vv_rSkTeKfHfHmGGWomWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086803129414:android:a56db2d5fc651d1fc90647",
+        "android_client_info": {
+          "package_name": "com.sibval.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086803129414-789romq18kuqohmsmb67fsa4vmaog17o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.app",
+            "certificate_hash": "88c4196fb3bb3d2393d39f7cacef80e1634d4f0f"
+          }
+        },
+        {
+          "client_id": "1086803129414-e3q6d1dm7q47t09bule0upds2tuasdhc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.app",
+            "certificate_hash": "d307a5a115d9eca53359677ee73093fdc23dac95"
+          }
+        },
+        {
+          "client_id": "1086803129414-f0d43r81660ugscdh9v0ri2302f1tdb9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.app",
+            "certificate_hash": "b75b05883069be04b8d88a553395f5bf24f35743"
+          }
+        },
+        {
+          "client_id": "1086803129414-fm06vejfcvcukeorkf7rev82dn3l1jim.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.app",
+            "certificate_hash": "8429d46d57ac71ddf5fe0a2cd3da50f9e61d185f"
+          }
+        },
+        {
+          "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBudLKr7W97b5vv_rSkTeKfHfHmGGWomWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086803129414:android:ee777f08cb924169c90647",
+        "android_client_info": {
+          "package_name": "com.sibval.sibval_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBudLKr7W97b5vv_rSkTeKfHfHmGGWomWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086803129414:android:18cbb8fd565f1f3bc90647",
+        "android_client_info": {
+          "package_name": "com.sibval.sibval_app_2_0"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086803129414-0hoabk5eo1g5nlcp348t27gc428rdkhu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.sibval_app_2_0",
+            "certificate_hash": "88c4196fb3bb3d2393d39f7cacef80e1634d4f0f"
+          }
+        },
+        {
+          "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBudLKr7W97b5vv_rSkTeKfHfHmGGWomWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
