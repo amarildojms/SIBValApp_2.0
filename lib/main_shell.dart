@@ -1,9 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'bible/bible_book_list_page.dart';
+import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'home/home_feed_page.dart';
+import 'hymnal/hymn_list_page.dart';
 import 'main.dart';
+import 'models/hymn.dart';
 
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
 /// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
@@ -19,7 +23,7 @@ class _MainShellState extends State<MainShell> {
   int _index = 2; // Início é a aba central, igual ao app original.
 
   static const _pages = [
-    _ComingSoonPage(title: 'Devocionais'),
+    DevotionalsListPage(),
     EventsPage(),
     HomeFeedPage(),
     _ComingSoonPage(title: 'Contribua'),
@@ -69,18 +73,45 @@ class _MaisPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Mais')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(FirebaseAuth.instance.currentUser?.email ?? '', style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => FirebaseAuth.instance.signOut(),
-              child: const Text('Sair'),
+      body: ListView(
+        children: [
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.menu_book, color: Colors.white70),
+            title: const Text('Bíblia', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const BibleBookListPage()),
             ),
-          ],
-        ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.library_music_outlined, color: Colors.white70),
+            title: const Text('Cantor Cristão', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao)),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.library_music_outlined, color: Colors.white70),
+            title: const Text('Hinário Cristão', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao)),
+            ),
+          ),
+          const Divider(color: Colors.white24),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Text(FirebaseAuth.instance.currentUser?.email ?? '', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => FirebaseAuth.instance.signOut(),
+                  child: const Text('Sair'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
