@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -5,6 +7,15 @@ plugins {
     // END: FlutterFire Configuration
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Mesma chave de upload usada pelo app nativo (SIBValApp2) — vive fora do
+// repositório (C:\Users\Administrador\keystores\) para nunca ser commitada.
+val releaseKeystoreProperties = Properties().apply {
+    val propsFile = File("C:/Users/Administrador/keystores/sibvalapp-keystore.properties")
+    if (propsFile.exists()) {
+        propsFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -32,11 +43,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseKeystoreProperties.containsKey("storeFile")) {
+            create("release") {
+                storeFile = file(releaseKeystoreProperties.getProperty("storeFile"))
+                storePassword = releaseKeystoreProperties.getProperty("storePassword")
+                keyAlias = releaseKeystoreProperties.getProperty("keyAlias")
+                keyPassword = releaseKeystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystoreProperties.containsKey("storeFile")) {
+                signingConfigs.getByName("release")
+            } else {
+                // Sem a chave de upload disponível nesta máquina, cai pro debug pra
+                // `flutter run --release` continuar funcionando.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

@@ -149,6 +149,14 @@
           }
         },
         {
+          "client_id": "1086803129414-j74v756hpv5ht6fq6jtb55g4oj205co1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sibval.sibval_app_2_0",
+            "certificate_hash": "d307a5a115d9eca53359677ee73093fdc23dac95"
+          }
+        },
+        {
           "client_id": "1086803129414-tlk8t2139e6jgrovqdsqjbjed0j80eb8.apps.googleusercontent.com",
           "client_type": 3
         }
