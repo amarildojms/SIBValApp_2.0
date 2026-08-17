@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/post_repository.dart';
+import '../theme/app_theme.dart';
 import 'post_card.dart';
 import 'post_comments_page.dart';
 
@@ -25,16 +26,16 @@ class HomeFeedPage extends ConsumerWidget {
           error: (error, _) => ListView(
             children: [
               const SizedBox(height: 80),
-              Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+              Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
             ],
           ),
           data: (posts) {
             if (posts.isEmpty) {
               return ListView(
-                children: const [
-                  SizedBox(height: 80),
+                children: [
+                  const SizedBox(height: 80),
                   Center(
-                    child: Text('Nenhuma notícia publicada ainda.', style: TextStyle(color: Colors.white70)),
+                    child: Text('Nenhuma notícia publicada ainda.', style: TextStyle(color: context.textSecondary)),
                   ),
                 ],
               );

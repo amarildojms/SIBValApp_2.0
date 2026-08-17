@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../theme/app_theme.dart';
+
 /// Espelha data/model/Partner.kt — lista estática, sem Firestore.
 class _Partner {
   const _Partner(this.name, this.url);
@@ -30,9 +32,9 @@ class PartnersPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             'Conheça as instituições às quais somos filiados. Toque em cada uma para visitar seu site.',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: context.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 12),
           for (final partner in _partners)

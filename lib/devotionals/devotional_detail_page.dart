@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/devotional.dart';
+import '../theme/app_theme.dart';
 
 const _fontSizeKey = 'devotional_font_size';
 const _defaultFontSize = 16.0;
@@ -84,7 +85,7 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : devotional == null
-              ? const Center(child: Text('Devocional não encontrada.', style: TextStyle(color: Colors.white70)))
+              ? Center(child: Text('Devocional não encontrada.', style: TextStyle(color: context.textSecondary)))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -92,20 +93,20 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
                     children: [
                       Text(
                         devotional.title,
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: context.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis)),
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(color: context.textSecondary, fontSize: 14),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         devotional.text,
-                        style: TextStyle(color: Colors.white, fontSize: _fontSize, height: 1.4),
+                        style: TextStyle(color: context.textPrimary, fontSize: _fontSize, height: 1.4),
                       ),
                       const SizedBox(height: 16),
-                      Text('Por ${devotional.author}', style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                      Text('Por ${devotional.author}', style: TextStyle(color: context.textSecondary, fontSize: 14)),
                     ],
                   ),
                 ),

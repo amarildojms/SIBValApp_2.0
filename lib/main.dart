@@ -8,6 +8,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
 import 'auth/login_page.dart';
 import 'main_shell.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_preference.dart';
 
 /// Client OAuth "web" do projeto Firebase (mesmo para todos os apps do projeto,
 /// inclusive o Android nativo) — equivalente ao `default_web_client_id` que o
@@ -23,43 +25,18 @@ void main() async {
   runApp(const ProviderScope(child: SibValApp()));
 }
 
-// Paleta reaproveitada de app/src/main/res/values/colors.xml do app Android original.
-class SibValColors {
-  static const navyBlue = Color(0xFF112D39);
-  static const navyBlueLight = Color(0xFF1C4A5E);
-  static const navyBlueDark = Color(0xFF0A1D24);
-  static const goldAccent = Color(0xFFC9A24B);
-}
-
-class SibValApp extends StatelessWidget {
+class SibValApp extends ConsumerWidget {
   const SibValApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'SIB Val App',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: SibValColors.navyBlueDark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: SibValColors.goldAccent,
-          brightness: Brightness.dark,
-          primary: SibValColors.goldAccent,
-          surface: SibValColors.navyBlue,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: SibValColors.navyBlue,
-          foregroundColor: Colors.white,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: SibValColors.goldAccent,
-            foregroundColor: SibValColors.navyBlueDark,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       home: const AuthGate(),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/bible_repository.dart';
+import '../theme/app_theme.dart';
 import 'bible_reader_page.dart';
 
 /// Espelha BibleChapterPickerFragment.kt: grade de capítulos (5 por linha).
@@ -19,7 +20,7 @@ class BibleChapterPickerPage extends ConsumerWidget {
       appBar: AppBar(title: Text(bookName)),
       body: countAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
         data: (count) => GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -60,7 +61,7 @@ class _ChapterButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         onTap: onTap,
         child: Center(
-          child: Text('$chapter', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          child: Text('$chapter', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
         ),
       ),
     );

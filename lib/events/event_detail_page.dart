@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/event.dart';
+import '../theme/app_theme.dart';
 import '../util/weekday_format.dart';
 
 const _appShareLink = 'https://sibval-app-project.web.app/eventos';
@@ -72,7 +73,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : event == null
-              ? const Center(child: Text('Evento não encontrado.', style: TextStyle(color: Colors.white70)))
+              ? Center(child: Text('Evento não encontrado.', style: TextStyle(color: context.textSecondary)))
               : _buildContent(context, event, uid),
     );
   }
@@ -102,33 +103,33 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                     Expanded(
                       child: Text(
                         event.title,
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: context.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                     ),
                     IconButton(
                       onPressed: () => _share(event, localDate),
-                      icon: const Icon(Icons.share_outlined, color: Colors.white70),
+                      icon: Icon(Icons.share_outlined, color: context.textSecondary),
                     ),
                     IconButton(
                       onPressed: uid == null ? null : _toggleLike,
                       icon: Icon(
                         liked ? Icons.favorite : Icons.favorite_border,
-                        color: liked ? Colors.redAccent : Colors.white70,
+                        color: liked ? Colors.redAccent : context.textSecondary,
                       ),
                     ),
-                    Text('${event.likedBy.length}', style: const TextStyle(color: Colors.white)),
+                    Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary)),
                   ],
                 ),
                 if (event.description.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text(event.description, style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4)),
+                  Text(event.description, style: TextStyle(color: context.textPrimary, fontSize: 16, height: 1.4)),
                 ],
                 const SizedBox(height: 16),
-                Text('Local: ${event.location}', style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text('Local: ${event.location}', style: TextStyle(color: context.textSecondary, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text(
                   '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  style: TextStyle(color: context.textSecondary, fontSize: 14),
                 ),
                 if (event.requiresRegistration && event.registrationLink.isNotEmpty) ...[
                   const SizedBox(height: 20),

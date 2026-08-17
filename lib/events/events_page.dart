@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/event.dart';
+import '../theme/app_theme.dart';
 import 'event_card.dart';
 import 'event_detail_page.dart';
 
@@ -40,7 +41,7 @@ class EventsPage extends ConsumerWidget {
             error: (error, _) => ListView(
               children: [
                 const SizedBox(height: 80),
-                Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+                Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
               ],
             ),
             data: (events) {
@@ -58,7 +59,7 @@ class EventsPage extends ConsumerWidget {
                         tab == EventsTab.recorrente
                             ? 'Nenhuma programação semanal no momento.'
                             : 'Nenhum evento programado no momento.',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(color: context.textSecondary),
                       ),
                     ),
                   ],
@@ -76,9 +77,9 @@ class EventsPage extends ConsumerWidget {
                     onTap: () => _openDetail(context, featured.id),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'Próximos Eventos',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: context.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   for (final event in rest)

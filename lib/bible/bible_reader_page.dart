@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_repository.dart';
 import '../models/bible.dart';
+import '../theme/app_theme.dart';
 
 const _fontSizeKey = 'bible_font_size';
 const _defaultFontSize = 16.0;
@@ -118,7 +119,7 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
                   child: versesAsync.when(
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (error, _) =>
-                        Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+                        Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
                     data: (verses) => SingleChildScrollView(
                       key: ValueKey('$_bookId-$_chapter'),
                       padding: const EdgeInsets.all(20),
@@ -166,7 +167,7 @@ class _VersesText extends StatelessWidget {
               text: '${verse.number} ',
               style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: fontSize * 0.65),
             ),
-            TextSpan(text: '${verse.text} ', style: TextStyle(color: Colors.white, fontSize: fontSize, height: 1.5)),
+            TextSpan(text: '${verse.text} ', style: TextStyle(color: context.textPrimary, fontSize: fontSize, height: 1.5)),
           ],
         ],
       ),

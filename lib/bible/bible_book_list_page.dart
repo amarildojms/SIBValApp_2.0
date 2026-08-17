@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/bible_repository.dart';
 import '../models/bible.dart';
+import '../theme/app_theme.dart';
 import 'bible_chapter_picker_page.dart';
 
 /// Espelha BibleBookListFragment.kt: lista de livros dividida em Antigo e
@@ -19,10 +20,11 @@ class BibleBookListPage extends ConsumerWidget {
       appBar: AppBar(title: const Text('Bíblia')),
       body: booksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+        error: (error, _) =>
+            Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
         data: (books) {
           if (books.isEmpty) {
-            return const Center(child: Text('Livros não encontrados.', style: TextStyle(color: Colors.white70)));
+            return Center(child: Text('Livros não encontrados.', style: TextStyle(color: context.textSecondary)));
           }
           final oldTestamentId = books.firstWhere((b) => b.id == BibleRepository.firstBookId).testamentId;
           final oldTestament = books.where((b) => b.testamentId == oldTestamentId).toList();
@@ -67,7 +69,7 @@ class _BookTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text(book.name, style: const TextStyle(color: Colors.white)),
+      title: Text(book.name, style: TextStyle(color: context.textPrimary)),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => BibleChapterPickerPage(bookId: book.id, bookName: book.name)),
       ),

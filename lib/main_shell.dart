@@ -7,10 +7,11 @@ import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
-import 'main.dart';
 import 'models/hymn.dart';
 import 'partners/partners_page.dart';
 import 'prayer/prayer_page.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_settings_page.dart';
 
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
 /// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
@@ -63,7 +64,7 @@ class _ComingSoonPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Center(
-        child: Text('Em breve.', style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white70)),
+        child: Text('Em breve.', style: TextStyle(color: context.textSecondary, fontSize: 16)),
       ),
     );
   }
@@ -80,53 +81,63 @@ class _MaisPage extends StatelessWidget {
         children: [
           const SizedBox(height: 8),
           ListTile(
-            leading: const Icon(Icons.menu_book, color: Colors.white70),
-            title: const Text('Bíblia', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.menu_book, color: context.textSecondary),
+            title: Text('Bíblia', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const BibleBookListPage()),
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.library_music_outlined, color: Colors.white70),
-            title: const Text('Cantor Cristão', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.library_music_outlined, color: context.textSecondary),
+            title: Text('Cantor Cristão', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao)),
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.library_music_outlined, color: Colors.white70),
-            title: const Text('Hinário Cristão', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.library_music_outlined, color: context.textSecondary),
+            title: Text('Hinário Cristão', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao)),
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.cake_outlined, color: Colors.white70),
-            title: const Text('Aniversariantes', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.cake_outlined, color: context.textSecondary),
+            title: Text('Aniversariantes', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const BirthdaysPage()),
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.favorite_outline, color: Colors.white70),
-            title: const Text('Pedido de Oração', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.favorite_outline, color: context.textSecondary),
+            title: Text('Pedido de Oração', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PrayerPage()),
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.handshake_outlined, color: Colors.white70),
-            title: const Text('Vínculos Institucionais', style: TextStyle(color: Colors.white)),
+            leading: Icon(Icons.handshake_outlined, color: context.textSecondary),
+            title: Text('Vínculos Institucionais', style: TextStyle(color: context.textPrimary)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PartnersPage()),
             ),
           ),
-          const Divider(color: Colors.white24),
+          ListTile(
+            leading: Icon(Icons.brightness_6_outlined, color: context.textSecondary),
+            title: Text('Tema', style: TextStyle(color: context.textPrimary)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
+            ),
+          ),
+          Divider(color: Theme.of(context).colorScheme.outlineVariant),
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                Text(FirebaseAuth.instance.currentUser?.email ?? '', style: const TextStyle(color: Colors.white70)),
+                Text(
+                  FirebaseAuth.instance.currentUser?.email ?? '',
+                  style: TextStyle(color: context.textSecondary),
+                ),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => FirebaseAuth.instance.signOut(),

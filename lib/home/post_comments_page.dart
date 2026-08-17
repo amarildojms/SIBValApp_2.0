@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../data/post_repository.dart';
 import '../models/comment.dart';
+import '../theme/app_theme.dart';
 
 /// Espelha PostCommentsFragment.kt/PostCommentsViewModel.kt.
 class PostCommentsPage extends ConsumerStatefulWidget {
@@ -76,8 +77,8 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _comments.isEmpty
-                    ? const Center(
-                        child: Text('Nenhum comentário ainda.', style: TextStyle(color: Colors.white70)),
+                    ? Center(
+                        child: Text('Nenhum comentário ainda.', style: TextStyle(color: context.textSecondary)),
                       )
                     : ListView.builder(
                         itemCount: _comments.length,
@@ -86,13 +87,13 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
                           return ListTile(
                             title: Text(
                               comment.authorName.isNotEmpty ? comment.authorName : 'Alguém',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
                             ),
-                            subtitle: Text(comment.text, style: const TextStyle(color: Colors.white70)),
+                            subtitle: Text(comment.text, style: TextStyle(color: context.textSecondary)),
                             trailing: comment.createdAt != null
                                 ? Text(
                                     _dateFormat.format(comment.createdAt!),
-                                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                    style: TextStyle(color: context.textTertiary, fontSize: 11),
                                   )
                                 : null,
                           );

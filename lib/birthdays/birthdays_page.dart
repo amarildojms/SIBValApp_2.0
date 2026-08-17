@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../data/member_repository.dart';
 import '../models/member.dart';
+import '../theme/app_theme.dart';
 
 /// Espelha BirthdaysFragment.kt/BirthdaysViewModel.kt: calendário do mês (grade
 /// de 7 colunas, domingo primeiro) com os dias que têm aniversariante
@@ -63,7 +64,7 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
       appBar: AppBar(title: const Text('Aniversariantes')),
       body: membersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
         data: (members) {
           final birthdayDays = members.where((m) => m.birthMonth == _month).map((m) => m.birthDay).toSet();
           final firstOfMonth = DateTime(_year, _month, 1);
@@ -82,9 +83,9 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    IconButton(onPressed: _previousMonth, icon: const Icon(Icons.chevron_left, color: Colors.white)),
-                    Text(capitalizedLabel, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    IconButton(onPressed: _nextMonth, icon: const Icon(Icons.chevron_right, color: Colors.white)),
+                    IconButton(onPressed: _previousMonth, icon: Icon(Icons.chevron_left, color: context.textPrimary)),
+                    Text(capitalizedLabel, style: TextStyle(color: context.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                    IconButton(onPressed: _nextMonth, icon: Icon(Icons.chevron_right, color: context.textPrimary)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -105,10 +106,10 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
                 ),
                 const SizedBox(height: 24),
                 if (selectedMembers.isEmpty)
-                  const Center(
+                  Center(
                     child: Padding(
-                      padding: EdgeInsets.only(top: 24),
-                      child: Text('Nenhum aniversariante neste dia.', style: TextStyle(color: Colors.white70)),
+                      padding: const EdgeInsets.only(top: 24),
+                      child: Text('Nenhum aniversariante neste dia.', style: TextStyle(color: context.textSecondary)),
                     ),
                   )
                 else
@@ -157,7 +158,7 @@ class _DayCell extends StatelessWidget {
                 Text(
                   '$day',
                   style: TextStyle(
-                    color: isSelected ? Colors.black : Colors.white,
+                    color: isSelected ? Theme.of(context).colorScheme.onPrimary : context.textPrimary,
                     fontWeight: hasBirthday ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),

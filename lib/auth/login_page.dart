@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../theme/app_theme.dart';
+
 /// Resultado de [resolveApprovalState] — espelha o `AuthUiState` do app Android
 /// original (ui/auth/AuthUiState.kt): depois de autenticar, ainda é preciso
 /// checar o documento em `users/{uid}` porque nem toda conta autenticada pode
@@ -176,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
                   '2ª Igreja Batista\nem Valparaíso',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
+                        color: context.textPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                 ),

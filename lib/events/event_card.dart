@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../main.dart';
+import '../theme/app_theme.dart';
 import '../models/event.dart';
 
 /// Espelha item_event_card.xml/EventAdapter.kt: thumbnail 64dp, título, data
@@ -25,8 +25,8 @@ class EventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localDate = toSaoPauloTime(event.dateTimeUtc);
+    final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
     return Card(
-      color: SibValColors.navyBlueLight,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       clipBehavior: Clip.antiAlias,
@@ -45,9 +45,9 @@ class EventCard extends StatelessWidget {
                       ? Image.network(
                           event.flyerUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) => Container(color: SibValColors.navyBlueLight),
+                          errorBuilder: (context, error, stack) => Container(color: placeholderColor),
                         )
-                      : Container(color: SibValColors.navyBlueLight),
+                      : Container(color: placeholderColor),
                 ),
               ),
               const SizedBox(width: 12),
@@ -59,12 +59,12 @@ class EventCard extends StatelessWidget {
                       event.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _dateFormat.format(localDate),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: context.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),
@@ -76,10 +76,10 @@ class EventCard extends StatelessWidget {
                     onPressed: onLikeTap,
                     icon: Icon(
                       liked ? Icons.favorite : Icons.favorite_border,
-                      color: liked ? Colors.redAccent : Colors.white70,
+                      color: liked ? Colors.redAccent : context.textSecondary,
                     ),
                   ),
-                  Text('${event.likedBy.length}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary, fontSize: 12)),
                 ],
               ),
             ],

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/hymnal_repository.dart';
 import '../models/hymn.dart';
+import '../theme/app_theme.dart';
 
 const _fontSizeKey = 'hymn_font_size';
 const _defaultFontSize = 16.0;
@@ -67,10 +68,10 @@ class _HymnDetailPageState extends ConsumerState<HymnDetailPage> {
           : hymnAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) =>
-                  Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+                  Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
               data: (hymn) {
                 if (hymn == null) {
-                  return const Center(child: Text('Hino não encontrado.', style: TextStyle(color: Colors.white70)));
+                  return Center(child: Text('Hino não encontrado.', style: TextStyle(color: context.textSecondary)));
                 }
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
@@ -79,10 +80,10 @@ class _HymnDetailPageState extends ConsumerState<HymnDetailPage> {
                     children: [
                       Text(
                         '${hymn.number} — ${hymn.title}',
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
-                      Text(hymn.lyrics, style: TextStyle(color: Colors.white, fontSize: _fontSize, height: 1.5)),
+                      Text(hymn.lyrics, style: TextStyle(color: context.textPrimary, fontSize: _fontSize, height: 1.5)),
                     ],
                   ),
                 );

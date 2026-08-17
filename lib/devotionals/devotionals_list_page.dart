@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
+import '../theme/app_theme.dart';
 import 'devotional_detail_page.dart';
 
 /// Espelha DevotionalListFragment.kt: lista de devocionais publicados, não lidos
@@ -27,15 +28,20 @@ class DevotionalsListPage extends ConsumerWidget {
           error: (error, _) => ListView(
             children: [
               const SizedBox(height: 80),
-              Center(child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white))),
+              Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
             ],
           ),
           data: (devotionals) {
             if (devotionals.isEmpty) {
               return ListView(
-                children: const [
-                  SizedBox(height: 80),
-                  Center(child: Text('Nenhuma devocional publicada ainda.', style: TextStyle(color: Colors.white70))),
+                children: [
+                  const SizedBox(height: 80),
+                  Center(
+                    child: Text(
+                      'Nenhuma devocional publicada ainda.',
+                      style: TextStyle(color: context.textSecondary),
+                    ),
+                  ),
                 ],
               );
             }
@@ -44,7 +50,7 @@ class DevotionalsListPage extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final devotional = devotionals[index];
                 final isUnread = uid != null && !devotional.readBy.contains(uid);
-                final color = isUnread ? Colors.white : Colors.white38;
+                final color = isUnread ? context.textPrimary : context.textTertiary;
                 return ListTile(
                   title: Text(
                     devotional.title,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../main.dart';
+import '../theme/app_theme.dart';
 import '../models/post.dart';
 
 /// Espelha item_post.xml/PostAdapter.kt: cabeçalho (autor + hora), texto,
@@ -25,8 +25,8 @@ class PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardColor = Theme.of(context).cardColor;
     return Card(
-      color: SibValColors.navyBlueLight,
       margin: const EdgeInsets.all(8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       clipBehavior: Clip.antiAlias,
@@ -40,13 +40,13 @@ class PostCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     post.authorName.isNotEmpty ? post.authorName : 'SIB Val App',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
                   ),
                 ),
                 if (post.createdAt != null)
                   Text(
                     _dateFormat.format(post.createdAt!),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(color: context.textSecondary, fontSize: 12),
                   ),
               ],
             ),
@@ -54,13 +54,13 @@ class PostCard extends StatelessWidget {
           if (post.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-              child: Text(post.text, style: const TextStyle(color: Colors.white)),
+              child: Text(post.text, style: TextStyle(color: context.textPrimary)),
             ),
           if (post.imageUrl.isNotEmpty)
             AspectRatio(
               aspectRatio: 16 / 9,
               child: Container(
-                color: SibValColors.navyBlueLight,
+                color: cardColor,
                 child: Image.network(
                   post.imageUrl,
                   fit: BoxFit.cover,
@@ -80,16 +80,16 @@ class PostCard extends StatelessWidget {
                   onPressed: onLikeTap,
                   icon: Icon(
                     liked ? Icons.favorite : Icons.favorite_border,
-                    color: liked ? Colors.redAccent : Colors.white70,
+                    color: liked ? Colors.redAccent : context.textSecondary,
                   ),
                 ),
-                Text('${post.likedBy.length}', style: const TextStyle(color: Colors.white)),
+                Text('${post.likedBy.length}', style: TextStyle(color: context.textPrimary)),
                 const SizedBox(width: 16),
                 IconButton(
                   onPressed: onCommentTap,
-                  icon: const Icon(Icons.chat_bubble_outline, color: Colors.white70),
+                  icon: Icon(Icons.chat_bubble_outline, color: context.textSecondary),
                 ),
-                Text('${post.commentCount}', style: const TextStyle(color: Colors.white)),
+                Text('${post.commentCount}', style: TextStyle(color: context.textPrimary)),
               ],
             ),
           ),
