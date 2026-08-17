@@ -1,0 +1,50 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/prayer_request.dart';
+
+/// Espelha app/src/main/java/com/sibval/app/data/repository/PrayerRepository.kt.
+/// Arquivados e telefone do responsável ficam para depois.
+class PrayerRepository {
+  PrayerRepository(this._firestore);
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _requests => _firestore.collection('prayerRequests');
+
+  Future<void> submit(PrayerRequest request) async {
+    final doc = _requests.doc();
+    await doc.set({
+      'id': doc.id,
+      'uid': '',
+      'authorName': request.authorName,
+      'authorPhone': request.authorPhone,
+      'authorEmail': request.authorEmail,
+      'isAnonymous': request.isAnonymous,
+      'text': request.text,
+      'isArchived': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<List<PrayerRequest>> getAll({int limit = 200}) async {
+    final snapshot = await _requests
+        .where('isArchived', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snapshot.docs.map(PrayerRequest.fromFirestore).toList();
+  }
+
+  Future<void> delete(String id) {
+    return _requests.doc(id).delete();
+  }
+}
+
+final prayerRepositoryProvider = Provider<PrayerRepository>((ref) {
+  return PrayerRepository(FirebaseFirestore.instance);
+});
+
+final prayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
+  return ref.watch(prayerRepositoryProvider).getAll();
+});

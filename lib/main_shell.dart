@@ -2,12 +2,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'bible/bible_book_list_page.dart';
+import 'birthdays/birthdays_page.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
 import 'main.dart';
 import 'models/hymn.dart';
+import 'partners/partners_page.dart';
+import 'prayer/prayer_page.dart';
 
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
 /// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
@@ -95,6 +98,27 @@ class _MaisPage extends StatelessWidget {
             title: const Text('Hinário Cristão', style: TextStyle(color: Colors.white)),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao)),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cake_outlined, color: Colors.white70),
+            title: const Text('Aniversariantes', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const BirthdaysPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.favorite_outline, color: Colors.white70),
+            title: const Text('Pedido de Oração', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PrayerPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.handshake_outlined, color: Colors.white70),
+            title: const Text('Vínculos Institucionais', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PartnersPage()),
             ),
           ),
           const Divider(color: Colors.white24),
