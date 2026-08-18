@@ -1,8 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'admin/manage_users_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
+import 'data/user_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'gallery/album_list_page.dart';
@@ -71,11 +74,16 @@ class _ComingSoonPage extends StatelessWidget {
   }
 }
 
-class _MaisPage extends StatelessWidget {
+class _MaisPage extends ConsumerWidget {
   const _MaisPage();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(currentUserProfileProvider);
+    final isAdmin = profileAsync.asData?.value?.isAdmin ?? false;
+    final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
+    final pendingCount = pendingCountAsync.asData?.value ?? 0;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Mais')),
       body: ListView(
@@ -137,6 +145,17 @@ class _MaisPage extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
             ),
           ),
+          if (isAdmin)
+            ListTile(
+              leading: Icon(Icons.admin_panel_settings_outlined, color: context.textSecondary),
+              title: Text('Gerenciar Usuários', style: TextStyle(color: context.textPrimary)),
+              trailing: pendingCount > 0
+                  ? Badge(label: Text('$pendingCount'))
+                  : null,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ManageUsersPage()),
+              ),
+            ),
           Divider(color: Theme.of(context).colorScheme.outlineVariant),
           Padding(
             padding: const EdgeInsets.all(24),
