@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'admin/event_email_senders_page.dart';
 import 'admin/manage_users_page.dart';
 import 'admin/members_page.dart';
 import 'bible/bible_book_list_page.dart';
@@ -84,6 +85,7 @@ class _MaisPage extends ConsumerWidget {
     final profile = profileAsync.asData?.value;
     final isAdmin = profile?.isAdmin ?? false;
     final canManageBirthdays = profile?.canManageBirthdays ?? false;
+    final canManageEventos = profile?.canManageEventos ?? false;
     final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
 
@@ -165,6 +167,14 @@ class _MaisPage extends ConsumerWidget {
                   : null,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ManageUsersPage()),
+              ),
+            ),
+          if (canManageEventos)
+            ListTile(
+              leading: Icon(Icons.email_outlined, color: context.textSecondary),
+              title: Text('Remetentes de E-mail de Eventos', style: TextStyle(color: context.textPrimary)),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const EventEmailSendersPage()),
               ),
             ),
           Divider(color: Theme.of(context).colorScheme.outlineVariant),
