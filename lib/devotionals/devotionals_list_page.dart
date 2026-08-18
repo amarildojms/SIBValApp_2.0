@@ -52,22 +52,26 @@ class DevotionalsListPage extends ConsumerWidget {
               );
             }
             return ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: devotionals.length,
               itemBuilder: (context, index) {
                 final devotional = devotionals[index];
                 final isUnread = uid != null && !devotional.readBy.contains(uid);
                 final color = isUnread ? context.textPrimary : context.textTertiary;
-                return ListTile(
-                  title: Text(
-                    devotional.title,
-                    style: TextStyle(color: color, fontWeight: isUnread ? FontWeight.bold : FontWeight.normal),
-                  ),
-                  subtitle: Text(
-                    _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis)),
-                    style: TextStyle(color: color),
-                  ),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => DevotionalDetailPage(devotionalId: devotional.id)),
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Text(
+                      devotional.title,
+                      style: TextStyle(color: color, fontWeight: isUnread ? FontWeight.bold : FontWeight.normal),
+                    ),
+                    subtitle: Text(
+                      _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis)),
+                      style: TextStyle(color: color),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => DevotionalDetailPage(devotionalId: devotional.id)),
+                    ),
                   ),
                 );
               },

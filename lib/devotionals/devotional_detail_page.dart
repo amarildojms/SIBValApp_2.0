@@ -74,43 +74,113 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
   Widget build(BuildContext context) {
     final devotional = _devotional;
     return Scaffold(
-      appBar: SibValAppBar(
-        isHome: false,
-        actions: [
-          IconButton(onPressed: () => _changeFontSize(-_fontSizeStep), icon: const Icon(Icons.text_decrease)),
-          IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),
-          if (devotional != null)
-            IconButton(onPressed: () => _share(devotional), icon: const Icon(Icons.share_outlined)),
-        ],
-      ),
+      appBar: const SibValAppBar(isHome: false),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : devotional == null
               ? Center(child: Text('Devocional não encontrada.', style: TextStyle(color: context.textSecondary)))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        devotional.title,
-                        style: TextStyle(color: context.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
+              : Column(
+                  children: [
+                    _DevotionalHeader(
+                      title: devotional.title,
+                      onDecreaseFont: () => _changeFontSize(-_fontSizeStep),
+                      onIncreaseFont: () => _changeFontSize(_fontSizeStep),
+                      onShare: () => _share(devotional),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.of(context).padding.bottom),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'DEVOCIONAL DIÁRIO',
+                              style: TextStyle(
+                                color: SibValColors.goldAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis)),
+                              style: TextStyle(color: context.textSecondary, fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              devotional.text,
+                              style: TextStyle(color: context.textPrimary, fontSize: _fontSize, height: 1.4),
+                            ),
+                            const SizedBox(height: 20),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                'Por ${devotional.author}',
+                                style: TextStyle(
+                                  color: context.textSecondary,
+                                  fontSize: 14,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis)),
-                        style: TextStyle(color: context.textSecondary, fontSize: 14),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        devotional.text,
-                        style: TextStyle(color: context.textPrimary, fontSize: _fontSize, height: 1.4),
-                      ),
-                      const SizedBox(height: 16),
-                      Text('Por ${devotional.author}', style: TextStyle(color: context.textSecondary, fontSize: 14)),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+    );
+  }
+}
+
+/// Cabeçalho fixo (não rola com o texto): título da devocional e, próximo a
+/// ele, os botões de zoom da fonte e compartilhar — espelha o
+/// `devotionalHeader` de fragment_devotional_detail.xml no app nativo.
+class _DevotionalHeader extends StatelessWidget {
+  const _DevotionalHeader({
+    required this.title,
+    required this.onDecreaseFont,
+    required this.onIncreaseFont,
+    required this.onShare,
+  });
+
+  final String title;
+  final VoidCallback onDecreaseFont;
+  final VoidCallback onIncreaseFont;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 4,
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(color: context.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              onPressed: onDecreaseFont,
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.text_decrease),
+            ),
+            IconButton(
+              onPressed: onIncreaseFont,
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.text_increase),
+            ),
+            IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined)),
+          ],
+        ),
+      ),
     );
   }
 }
