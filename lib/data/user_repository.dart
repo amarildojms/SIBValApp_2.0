@@ -18,6 +18,7 @@ class CurrentUserProfile {
   bool get canViewPrayerRequests => isAdmin || roles.contains('intercessao');
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
   bool get canManageEventos => isAdmin || roles.contains('eventos');
+  bool get canManageGallery => isAdmin || roles.contains('midia');
 }
 
 final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {

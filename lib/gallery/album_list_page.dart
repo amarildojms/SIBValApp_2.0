@@ -2,21 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/gallery_repository.dart';
+import '../data/post_repository.dart' show currentUidProvider;
+import '../data/user_repository.dart';
 import '../models/album.dart';
 import '../theme/app_theme.dart';
 import 'album_photos_page.dart';
 
 /// Espelha AlbumListFragment.kt: grade de álbuns (2 colunas). Criar/apagar
-/// álbum é ação de quem tem o cargo Mídia — fica para a fase do Painel Admin.
+/// álbum é ação de quem tem o cargo Mídia (ou admin).
 class AlbumListPage extends ConsumerWidget {
   const AlbumListPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final albumsAsync = ref.watch(albumsProvider);
+    final profileAsync = ref.watch(currentUserProfileProvider);
+    final canManageGallery = profileAsync.asData?.value?.canManageGallery ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Galeria')),
+      floatingActionButton: canManageGallery
+          ? FloatingActionButton(
+              onPressed: () => _showCreateAlbumDialog(context, ref),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(albumsProvider.future),
         child: albumsAsync.when(
@@ -47,28 +57,56 @@ class AlbumListPage extends ConsumerWidget {
                 childAspectRatio: 0.9,
               ),
               itemCount: albums.length,
-              itemBuilder: (context, index) => _AlbumTile(album: albums[index]),
+              itemBuilder: (context, index) =>
+                  _AlbumTile(album: albums[index], canManageGallery: canManageGallery),
             );
           },
         ),
       ),
     );
   }
+
+  void _showCreateAlbumDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Criar álbum'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Nome')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.of(dialogContext).pop();
+              final uid = ref.read(currentUidProvider) ?? '';
+              await ref.read(galleryRepositoryProvider).createAlbum(name, uid);
+              ref.invalidate(albumsProvider);
+            },
+            child: const Text('Criar'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _AlbumTile extends StatelessWidget {
-  const _AlbumTile({required this.album});
+class _AlbumTile extends ConsumerWidget {
+  const _AlbumTile({required this.album, required this.canManageGallery});
 
   final Album album;
+  final bool canManageGallery;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => AlbumPhotosPage(albumId: album.id, albumName: album.name)),
       ),
+      onLongPress: canManageGallery ? () => _confirmDelete(context, ref) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -97,6 +135,27 @@ class _AlbumTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir álbum'),
+        content: Text('Tem certeza que deseja excluir "${album.name}"? Todas as fotos dele também serão apagadas.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await ref.read(galleryRepositoryProvider).deleteAlbum(album.id);
+              ref.invalidate(albumsProvider);
+            },
+            child: const Text('Excluir'),
           ),
         ],
       ),
