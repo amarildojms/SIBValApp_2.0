@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'admin/event_email_senders_page.dart';
 import 'admin/manage_users_page.dart';
 import 'admin/members_page.dart';
+import 'admin/recurring_event_flyer_repository_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'data/user_repository.dart';
@@ -167,6 +168,14 @@ class _MaisPage extends ConsumerWidget {
                   : null,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ManageUsersPage()),
+              ),
+            ),
+          if (isAdmin)
+            ListTile(
+              leading: Icon(Icons.collections_outlined, color: context.textSecondary),
+              title: Text('Repositório de Flyers', style: TextStyle(color: context.textPrimary)),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const RecurringEventFlyerRepositoryPage()),
               ),
             ),
           if (canManageEventos)
