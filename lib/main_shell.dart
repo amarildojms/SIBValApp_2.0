@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'admin/manage_users_page.dart';
+import 'admin/members_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'data/user_repository.dart';
@@ -80,7 +81,9 @@ class _MaisPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final isAdmin = profileAsync.asData?.value?.isAdmin ?? false;
+    final profile = profileAsync.asData?.value;
+    final isAdmin = profile?.isAdmin ?? false;
+    final canManageBirthdays = profile?.canManageBirthdays ?? false;
     final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
 
@@ -124,6 +127,14 @@ class _MaisPage extends ConsumerWidget {
               MaterialPageRoute(builder: (_) => const BirthdaysPage()),
             ),
           ),
+          if (canManageBirthdays)
+            ListTile(
+              leading: Icon(Icons.people_outline, color: context.textSecondary),
+              title: Text('Membros', style: TextStyle(color: context.textPrimary)),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MembersPage()),
+              ),
+            ),
           ListTile(
             leading: Icon(Icons.favorite_outline, color: context.textSecondary),
             title: Text('Pedido de Oração', style: TextStyle(color: context.textPrimary)),

@@ -8,6 +8,9 @@ class Member {
   final int birthDay;
   final int birthMonth;
   final String photoUrl;
+  final String storagePath;
+  final String createdBy;
+  final DateTime? createdAt;
 
   const Member({
     required this.id,
@@ -16,6 +19,9 @@ class Member {
     required this.birthDay,
     required this.birthMonth,
     required this.photoUrl,
+    required this.storagePath,
+    required this.createdBy,
+    required this.createdAt,
   });
 
   factory Member.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -27,6 +33,9 @@ class Member {
       birthDay: (data['birthDay'] as num?)?.toInt() ?? 0,
       birthMonth: (data['birthMonth'] as num?)?.toInt() ?? 0,
       photoUrl: data['photoUrl'] as String? ?? '',
+      storagePath: data['storagePath'] as String? ?? '',
+      createdBy: data['createdBy'] as String? ?? '',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }
 }
