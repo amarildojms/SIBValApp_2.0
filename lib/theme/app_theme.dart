@@ -100,3 +100,23 @@ extension AppColors on BuildContext {
   Color get textSecondary => Theme.of(this).colorScheme.onSurfaceVariant;
   Color get textTertiary => Theme.of(this).colorScheme.outline;
 }
+
+/// Título de tela dentro do corpo — a SibValAppBar nunca mostra texto (só a
+/// logo), então cada tela mostra seu próprio título aqui, igual ao nativo
+/// (ex.: "Devocionais" em dourado no topo do conteúdo).
+class ScreenTitle extends StatelessWidget {
+  const ScreenTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        text,
+        style: const TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold, fontSize: 22),
+      ),
+    );
+  }
+}

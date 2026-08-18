@@ -8,10 +8,17 @@ import 'post_repository.dart' show currentUidProvider;
 /// (isAdmin || roles.contains(...)). Só o necessário até agora: nome (pra
 /// pré-preencher formulários) e a permissão de ver pedidos de oração.
 class CurrentUserProfile {
-  const CurrentUserProfile({required this.name, required this.email, required this.isAdmin, required this.roles});
+  const CurrentUserProfile({
+    required this.name,
+    required this.email,
+    required this.photoUrl,
+    required this.isAdmin,
+    required this.roles,
+  });
 
   final String name;
   final String email;
+  final String photoUrl;
   final bool isAdmin;
   final List<String> roles;
 
@@ -19,6 +26,15 @@ class CurrentUserProfile {
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
   bool get canManageEventos => isAdmin || roles.contains('eventos');
   bool get canManageGallery => isAdmin || roles.contains('midia');
+
+  /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
+  /// e-mail se não houver nome cadastrado.
+  String get shortName {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return email;
+    if (parts.length == 1) return parts.first;
+    return '${parts.first} ${parts.last}';
+  }
 }
 
 final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {
@@ -30,6 +46,7 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
   return CurrentUserProfile(
     name: data['name'] as String? ?? '',
     email: data['email'] as String? ?? '',
+    photoUrl: data['photoUrl'] as String? ?? '',
     isAdmin: data['isAdmin'] as bool? ?? false,
     roles: List<String>.from(data['roles'] as List? ?? const []),
   );

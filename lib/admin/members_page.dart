@@ -9,6 +9,7 @@ import '../data/member_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/member.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha MembersFragment.kt/MembersViewModel.kt: lista de membros (alimenta
 /// a tela de Aniversariantes), busca por nome, adicionar/editar/excluir com
@@ -36,13 +37,14 @@ class _MembersPageState extends ConsumerState<MembersPage> {
     final membersAsync = ref.watch(membersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Membros')),
+      appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showDialog<void>(context: context, builder: (_) => const _MemberDialog(existing: null)),
         child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
+          const ScreenTitle('Membros'),
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(

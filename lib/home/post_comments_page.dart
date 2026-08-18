@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../data/post_repository.dart';
 import '../models/comment.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha PostCommentsFragment.kt/PostCommentsViewModel.kt.
 class PostCommentsPage extends ConsumerStatefulWidget {
@@ -70,9 +71,10 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Comentários')),
+      appBar: const SibValAppBar(isHome: false),
       body: Column(
         children: [
+          const ScreenTitle('Comentários'),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())

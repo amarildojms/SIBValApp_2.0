@@ -9,6 +9,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/gallery_image.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 import 'image_viewer_page.dart';
 
 /// Espelha GaleriaFragment.kt: grade de fotos do álbum (3 colunas). Subir e
@@ -26,16 +27,21 @@ class AlbumPhotosPage extends ConsumerWidget {
     final canManageGallery = profileAsync.asData?.value?.canManageGallery ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: Text(albumName)),
+      appBar: const SibValAppBar(isHome: false),
       floatingActionButton: canManageGallery
           ? FloatingActionButton(
               onPressed: () => _upload(context, ref),
               child: const Icon(Icons.add_a_photo_outlined),
             )
           : null,
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(albumImagesProvider(albumId).future),
-        child: imagesAsync.when(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ScreenTitle(albumName),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.refresh(albumImagesProvider(albumId).future),
+              child: imagesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ListView(
             children: [
@@ -82,8 +88,11 @@ class AlbumPhotosPage extends ConsumerWidget {
                 );
               },
             );
-          },
-        ),
+              },
+            ),
+          ),
+          ),
+        ],
       ),
     );
   }

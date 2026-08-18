@@ -6,6 +6,7 @@ import '../data/prayer_repository.dart';
 import '../data/user_repository.dart';
 import '../models/prayer_request.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha PrayerFragment.kt/PrayerViewModel.kt: formulário de envio (anônimo
 /// ou identificado) sempre visível, lista só pra quem tem permissão
@@ -98,10 +99,11 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
     final canView = profile?.canViewPrayerRequests ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pedido de Oração')),
+      appBar: const SibValAppBar(isHome: false),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const ScreenTitle('Pedido de Oração'),
           TextField(
             controller: _textController,
             maxLines: 4,

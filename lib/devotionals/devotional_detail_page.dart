@@ -8,6 +8,7 @@ import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/devotional.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 const _fontSizeKey = 'devotional_font_size';
 const _defaultFontSize = 16.0;
@@ -73,8 +74,8 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
   Widget build(BuildContext context) {
     final devotional = _devotional;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Devocional'),
+      appBar: SibValAppBar(
+        isHome: false,
         actions: [
           IconButton(onPressed: () => _changeFontSize(-_fontSizeStep), icon: const Icon(Icons.text_decrease)),
           IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),

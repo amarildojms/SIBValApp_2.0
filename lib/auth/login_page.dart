@@ -87,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       switch (approval) {
         case ApprovalResult.approved:
-          break; // AuthGate troca de tela sozinho ao ouvir authStateChanges.
+          Navigator.of(context).pop();
         case ApprovalResult.pendingApproval:
           _showMessage('Seu cadastro ainda está aguardando aprovação.');
         case ApprovalResult.rejected:
@@ -126,7 +126,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       switch (approval) {
         case ApprovalResult.approved:
-          break; // AuthGate troca de tela sozinho ao ouvir authStateChanges.
+          Navigator.of(context).pop();
         case ApprovalResult.pendingApproval:
           _showMessage('Seu cadastro ainda está aguardando aprovação.');
         case ApprovalResult.rejected:
@@ -167,6 +167,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(leading: const BackButton()),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

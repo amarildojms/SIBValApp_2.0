@@ -10,6 +10,7 @@ import '../events/event_detail_page.dart';
 import '../home/post_comments_page.dart';
 import '../models/notification.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha NotificationsFragment.kt/NotificationsViewModel.kt: lista de
 /// notificações (lidas em cinza, não lidas em destaque), tocar marca como
@@ -27,10 +28,15 @@ class NotificationsPage extends ConsumerWidget {
     final uid = ref.watch(currentUidProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Notificações')),
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(notificationsProvider.future),
-        child: notificationsAsync.when(
+      appBar: const SibValAppBar(isHome: false),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ScreenTitle('Notificações'),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.refresh(notificationsProvider.future),
+              child: notificationsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ListView(
             children: [
@@ -68,8 +74,11 @@ class NotificationsPage extends ConsumerWidget {
                 );
               },
             );
-          },
+              },
+            ),
+          ),
         ),
+      ],
       ),
     );
   }

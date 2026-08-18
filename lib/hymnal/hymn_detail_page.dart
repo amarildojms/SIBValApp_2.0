@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/hymnal_repository.dart';
 import '../models/hymn.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 const _fontSizeKey = 'hymn_font_size';
 const _defaultFontSize = 16.0;
@@ -56,8 +57,8 @@ class _HymnDetailPageState extends ConsumerState<HymnDetailPage> {
     final hymnAsync = ref.watch(hymnDetailProvider((hymnal: widget.hymnal, songId: widget.songId)));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hino'),
+      appBar: SibValAppBar(
+        isHome: false,
         actions: [
           IconButton(onPressed: () => _changeFontSize(-_fontSizeStep), icon: const Icon(Icons.text_decrease)),
           IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),

@@ -10,6 +10,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../models/event.dart';
 import '../theme/app_theme.dart';
 import '../util/weekday_format.dart';
+import '../widgets/sibval_app_bar.dart';
 
 const _appShareLink = 'https://sibval-app-project.web.app/eventos';
 
@@ -69,7 +70,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
     final uid = ref.watch(currentUidProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('')),
+      appBar: const SibValAppBar(isHome: false),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : event == null

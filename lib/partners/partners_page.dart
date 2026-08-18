@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha data/model/Partner.kt — lista estática, sem Firestore.
 class _Partner {
@@ -28,10 +29,11 @@ class PartnersPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vínculos Institucionais')),
+      appBar: const SibValAppBar(isHome: false),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const ScreenTitle('Vínculos Institucionais'),
           Text(
             'Conheça as instituições às quais somos filiados. Toque em cada uma para visitar seu site.',
             style: TextStyle(color: context.textSecondary, fontSize: 14),

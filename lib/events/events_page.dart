@@ -5,6 +5,7 @@ import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/event.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 import 'event_card.dart';
 import 'event_detail_page.dart';
 
@@ -23,8 +24,8 @@ class EventsPage extends ConsumerWidget {
       length: 2,
       initialIndex: tab == EventsTab.pontual ? 0 : 1,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Confira nossas programações'),
+        appBar: SibValAppBar(
+          isHome: false,
           bottom: TabBar(
             onTap: (index) => ref.read(eventsTabProvider.notifier).state =
                 index == 0 ? EventsTab.pontual : EventsTab.recorrente,

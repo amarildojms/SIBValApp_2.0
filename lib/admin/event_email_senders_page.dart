@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/settings_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -32,13 +33,14 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
     final emailsAsync = ref.watch(eventEmailSendersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Remetentes de E-mail de Eventos')),
+      appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),
         child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
+          const ScreenTitle('Remetentes de E-mail de Eventos'),
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(

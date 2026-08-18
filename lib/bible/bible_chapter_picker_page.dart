@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/bible_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 import 'bible_reader_page.dart';
 
 /// Espelha BibleChapterPickerFragment.kt: grade de capítulos (5 por linha).
@@ -17,30 +18,39 @@ class BibleChapterPickerPage extends ConsumerWidget {
     final countAsync = ref.watch(bibleChapterCountProvider(bookId));
 
     return Scaffold(
-      appBar: AppBar(title: Text(bookName)),
-      body: countAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-        data: (count) => GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-          ),
-          itemCount: count,
-          itemBuilder: (context, index) {
-            final chapter = index + 1;
-            return _ChapterButton(
-              chapter: chapter,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => BibleReaderPage(bookId: bookId, bookName: bookName, chapter: chapter),
+      appBar: const SibValAppBar(isHome: false),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ScreenTitle(bookName),
+          Expanded(
+            child: countAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) =>
+                  Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
+              data: (count) => GridView.builder(
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
                 ),
+                itemCount: count,
+                itemBuilder: (context, index) {
+                  final chapter = index + 1;
+                  return _ChapterButton(
+                    chapter: chapter,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BibleReaderPage(bookId: bookId, bookName: bookName, chapter: chapter),
+                      ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,12 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'firebase_options.dart';
-import 'auth/login_page.dart';
 import 'main_shell.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_preference.dart';
@@ -37,30 +35,7 @@ class SibValApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
-      home: const AuthGate(),
-    );
-  }
-}
-
-/// Decide entre a tela de login e o placeholder pós-login com base no estado
-/// de autenticação do Firebase — equivalente ao check de `currentUser` que o
-/// LoginActivity.kt original faz no onCreate.
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.data != null) {
-          return const MainShell();
-        }
-        return const LoginPage();
-      },
+      home: const MainShell(),
     );
   }
 }

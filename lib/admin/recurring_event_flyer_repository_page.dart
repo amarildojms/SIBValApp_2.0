@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../data/recurring_event_flyer_repository.dart';
 import '../models/recurring_event_flyer.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha RecurringEventFlyerRepositoryFragment.kt/...ViewModel.kt/...Adapter.kt:
 /// grade de flyers cadastrados pra eventos recorrentes (CLA/EBD/CO/COO), mais a
@@ -22,7 +23,7 @@ class RecurringEventFlyerRepositoryPage extends ConsumerWidget {
     final flyersAsync = ref.watch(recurringEventFlyersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Repositório de Flyers')),
+      appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showModalBottomSheet<void>(
           context: context,
@@ -31,40 +32,49 @@ class RecurringEventFlyerRepositoryPage extends ConsumerWidget {
         ),
         child: const Icon(Icons.add),
       ),
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(recurringEventFlyersProvider.future),
-        child: flyersAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => ListView(
-            children: [
-              const SizedBox(height: 80),
-              Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-            ],
-          ),
-          data: (flyers) {
-            if (flyers.isEmpty) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Text('Nenhum flyer cadastrado ainda.', style: TextStyle(color: context.textSecondary)),
-                  ),
-                ],
-              );
-            }
-            return GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.95,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ScreenTitle('Repositório de Flyers'),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.refresh(recurringEventFlyersProvider.future),
+              child: flyersAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => ListView(
+                  children: [
+                    const SizedBox(height: 80),
+                    Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
+                  ],
+                ),
+                data: (flyers) {
+                  if (flyers.isEmpty) {
+                    return ListView(
+                      children: [
+                        const SizedBox(height: 80),
+                        Center(
+                          child:
+                              Text('Nenhum flyer cadastrado ainda.', style: TextStyle(color: context.textSecondary)),
+                        ),
+                      ],
+                    );
+                  }
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.95,
+                    ),
+                    itemCount: flyers.length,
+                    itemBuilder: (context, index) => _FlyerCard(flyer: flyers[index]),
+                  );
+                },
               ),
-              itemCount: flyers.length,
-              itemBuilder: (context, index) => _FlyerCard(flyer: flyers[index]),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -75,6 +75,7 @@ flutter:
     - assets/bible/alm1911.sqlite
     - assets/hymnals/cc.sqlite
     - assets/hymnals/hcc.sqlite
+    - assets/images/logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

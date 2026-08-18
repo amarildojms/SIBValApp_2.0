@@ -55,4 +55,8 @@ final postsProvider = FutureProvider.autoDispose<List<Post>>((ref) {
   return ref.watch(postRepositoryProvider).getPosts();
 });
 
-final currentUidProvider = Provider<String?>((ref) => FirebaseAuth.instance.currentUser?.uid);
+/// Reativo — dispara sozinho quando o usuário loga/desloga (o app não recria
+/// mais a árvore de widgets no login, ver AuthGate removido de main.dart).
+final authStateChangesProvider = StreamProvider<User?>((ref) => FirebaseAuth.instance.authStateChanges());
+
+final currentUidProvider = Provider<String?>((ref) => ref.watch(authStateChangesProvider).asData?.value?.uid);

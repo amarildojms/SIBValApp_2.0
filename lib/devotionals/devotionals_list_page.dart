@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 import 'devotional_detail_page.dart';
 
 /// Espelha DevotionalListFragment.kt: lista de devocionais publicados, não lidos
@@ -20,10 +21,15 @@ class DevotionalsListPage extends ConsumerWidget {
     final uid = ref.watch(currentUidProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Devocionais')),
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(devotionalsProvider.future),
-        child: devotionalsAsync.when(
+      appBar: const SibValAppBar(isHome: false),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ScreenTitle('Devocionais'),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.refresh(devotionalsProvider.future),
+              child: devotionalsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ListView(
             children: [
@@ -66,8 +72,11 @@ class DevotionalsListPage extends ConsumerWidget {
                 );
               },
             );
-          },
+              },
+            ),
+          ),
         ),
+      ],
       ),
     );
   }

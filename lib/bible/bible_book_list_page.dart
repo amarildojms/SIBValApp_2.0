@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/bible_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 import 'bible_chapter_picker_page.dart';
 
 /// Espelha BibleBookListFragment.kt: lista de livros dividida em Antigo e
@@ -17,7 +18,7 @@ class BibleBookListPage extends ConsumerWidget {
     final booksAsync = ref.watch(bibleBooksProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bíblia')),
+      appBar: const SibValAppBar(isHome: false),
       body: booksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
@@ -32,6 +33,7 @@ class BibleBookListPage extends ConsumerWidget {
 
           return ListView(
             children: [
+              const ScreenTitle('Bíblia'),
               const _SectionHeader('Antigo Testamento'),
               for (final book in oldTestament) _BookTile(book: book),
               const _SectionHeader('Novo Testamento'),

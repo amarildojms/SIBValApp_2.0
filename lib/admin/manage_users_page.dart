@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/user_repository.dart';
 import '../models/app_user.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 /// Espelha ManageUsersFragment.kt/ManageUsersViewModel.kt: lista de todos os
 /// usuários (pendentes primeiro), busca por nome/e-mail, aprovar/rejeitar
@@ -31,9 +32,10 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
     final usersAsync = ref.watch(allUsersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Gerenciar Usuários')),
+      appBar: const SibValAppBar(isHome: false),
       body: Column(
         children: [
+          const ScreenTitle('Gerenciar Usuários'),
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../widgets/sibval_app_bar.dart';
+import 'app_theme.dart';
 import 'theme_preference.dart';
 
 /// Espelha a tela de Tema do app nativo (ThemePreference.kt): claro, escuro
@@ -13,9 +15,10 @@ class ThemeSettingsPage extends ConsumerWidget {
     final currentMode = ref.watch(themeModeProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tema')),
+      appBar: const SibValAppBar(isHome: false),
       body: ListView(
         children: [
+          const ScreenTitle('Tema'),
           _ThemeOption(
             label: 'Automático',
             subtitle: 'Segue o tema do seu aparelho',

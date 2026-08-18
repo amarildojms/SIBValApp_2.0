@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/bible_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sibval_app_bar.dart';
 
 const _fontSizeKey = 'bible_font_size';
 const _defaultFontSize = 16.0;
@@ -104,8 +105,8 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     final hasNext = !(_bookId == BibleRepository.lastBookId && chapterCount != null && _chapter == chapterCount);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('$_bookName $_chapter'),
+      appBar: SibValAppBar(
+        isHome: false,
         actions: [
           IconButton(onPressed: () => _changeFontSize(-_fontSizeStep), icon: const Icon(Icons.text_decrease)),
           IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),
@@ -114,7 +115,9 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
       body: _loadingFontSize
           ? const Center(child: CircularProgressIndicator())
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                ScreenTitle('$_bookName $_chapter'),
                 Expanded(
                   child: versesAsync.when(
                     loading: () => const Center(child: CircularProgressIndicator()),
