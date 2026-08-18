@@ -5,6 +5,7 @@ import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
+import 'gallery/album_list_page.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
 import 'models/hymn.dart';
@@ -80,6 +81,13 @@ class _MaisPage extends StatelessWidget {
       body: ListView(
         children: [
           const SizedBox(height: 8),
+          ListTile(
+            leading: Icon(Icons.photo_library_outlined, color: context.textSecondary),
+            title: Text('Galeria', style: TextStyle(color: context.textPrimary)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AlbumListPage()),
+            ),
+          ),
           ListTile(
             leading: Icon(Icons.menu_book, color: context.textSecondary),
             title: Text('Bíblia', style: TextStyle(color: context.textPrimary)),
