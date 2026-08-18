@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/notification_repository.dart';
 import '../data/post_repository.dart';
+import '../notifications/notifications_page.dart';
 import '../theme/app_theme.dart';
 import 'post_card.dart';
 import 'post_comments_page.dart';
@@ -18,7 +20,31 @@ class HomeFeedPage extends ConsumerWidget {
     final uid = ref.watch(currentUidProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Início')),
+      appBar: AppBar(
+        title: const Text('Início'),
+        actions: [
+          Consumer(
+            builder: (context, ref, _) {
+              final notificationsAsync = ref.watch(notificationsProvider);
+              final unreadUid = ref.watch(currentUidProvider);
+              final unreadCount = notificationsAsync.asData?.value
+                      .where((n) => unreadUid != null && !n.readBy.contains(unreadUid))
+                      .length ??
+                  0;
+              return IconButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                ),
+                icon: Badge(
+                  label: Text('$unreadCount'),
+                  isLabelVisible: unreadCount > 0,
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(postsProvider.future),
         child: postsAsync.when(
