@@ -63,6 +63,16 @@ android {
                 // `flutter run --release` continuar funcionando.
                 signingConfigs.getByName("debug")
             }
+            // 19/08/2026: reduz o tamanho do APK (código Java/Kotlin morto de
+            // Firebase/Google Sign-In não utilizado, recursos não referenciados).
+            // Regras de manutenção em proguard-rules.pro — testar login,
+            // notificações e upload de foto depois de qualquer mudança aqui.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
