@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_user.dart';
 import '../models/member.dart';
 import 'post_repository.dart' show currentUidProvider;
+import 'user_repository.dart' show currentUserProfileProvider;
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/MemberRepository.kt.
 /// A foto já sai comprimida do image_picker (maxWidth/maxHeight/imageQuality),
@@ -38,6 +39,35 @@ class MemberRepository {
     final snapshot = await _members.where('linkedUid', isEqualTo: uid).limit(1).get();
     if (snapshot.docs.isEmpty) return null;
     return Member.fromFirestore(snapshot.docs.first);
+  }
+
+  /// Acha o membro do usuário logado. Tenta primeiro por `linkedUid` (rápido,
+  /// já indexado); membros aprovados antes desse campo existir (19/08/2026)
+  /// ainda não o têm, então cai pro CPF/e-mail — mesma busca de
+  /// `upsertFromUser` — e faz o backfill de `linkedUid` no documento achado,
+  /// pra próxima consulta já vir direto por `linkedUid`.
+  Future<Member?> getForCurrentUser({required String uid, required String cpf, required String email}) async {
+    final byLinkedUid = await getByLinkedUid(uid);
+    if (byLinkedUid != null) return byLinkedUid;
+
+    final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
+    final normalizedEmail = email.trim().toLowerCase();
+    QueryDocumentSnapshot<Map<String, dynamic>>? doc;
+    if (normalizedCpf.isNotEmpty) {
+      final byCpf = await _members.where('cpf', isEqualTo: normalizedCpf).limit(1).get();
+      if (byCpf.docs.isNotEmpty) doc = byCpf.docs.first;
+    }
+    if (doc == null && normalizedEmail.isNotEmpty) {
+      final byEmail = await _members.where('email', isEqualTo: normalizedEmail).limit(1).get();
+      if (byEmail.docs.isNotEmpty) doc = byEmail.docs.first;
+    }
+    if (doc == null) return null;
+
+    // Backfill best-effort: só funciona se o usuário logado for Secretaria/
+    // admin (regra de escrita de `members`); para os demais, o `catch` evita
+    // que a leitura (permitida a todo autenticado) quebre por causa disso.
+    doc.reference.set({'linkedUid': uid}, SetOptions(merge: true)).catchError((_) {});
+    return Member.fromFirestore(doc);
   }
 
   Future<Member> create({
@@ -278,11 +308,13 @@ final membersProvider = FutureProvider.autoDispose<List<Member>>((ref) {
   return ref.watch(memberRepositoryProvider).getAll();
 });
 
-/// Membro vinculado ao usuário logado (por `linkedUid`) — alimenta o % de
-/// cadastro e "Membro SIB Val há..." na tela Mais. `null` quando o usuário
-/// ainda não tem registro em `members` (ex.: cadastro pendente de aprovação).
+/// Membro vinculado ao usuário logado — alimenta o % de cadastro e "Membro
+/// SIB Val há..." na tela Mais. `null` quando o usuário ainda não tem
+/// registro em `members` (ex.: cadastro pendente de aprovação).
 final myMemberProvider = FutureProvider.autoDispose((ref) async {
   final uid = ref.watch(currentUidProvider);
   if (uid == null) return null;
-  return ref.watch(memberRepositoryProvider).getByLinkedUid(uid);
+  final profile = await ref.watch(currentUserProfileProvider.future);
+  if (profile == null) return null;
+  return ref.watch(memberRepositoryProvider).getForCurrentUser(uid: uid, cpf: profile.cpf, email: profile.email);
 });

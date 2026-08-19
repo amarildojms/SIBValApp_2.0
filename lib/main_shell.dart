@@ -317,6 +317,7 @@ class _MoreHeader extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: SibValColors.navyBlueLight, borderRadius: BorderRadius.circular(12)),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               CircleAvatar(
                 radius: 28,
@@ -338,14 +339,9 @@ class _MoreHeader extends ConsumerWidget {
                       'Editar perfil',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Cadastro $completionPercent% completo',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
                     if (membershipLabel != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           membershipLabel,
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -354,11 +350,53 @@ class _MoreHeader extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.white70),
+              const SizedBox(width: 8),
+              _CompletionBadge(percent: completionPercent),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "Bolinha" com anel de progresso mostrando o % de cadastro preenchido —
+/// fica no canto direito do card de perfil (`_MoreHeader`), com "Cadastro"
+/// em cima e "completo" embaixo.
+class _CompletionBadge extends StatelessWidget {
+  const _CompletionBadge({required this.percent});
+
+  final int percent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Cadastro', style: TextStyle(color: Colors.white70, fontSize: 9)),
+        const SizedBox(height: 2),
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value: (percent / 100).clamp(0, 1).toDouble(),
+                strokeWidth: 3,
+                backgroundColor: Colors.white24,
+                valueColor: const AlwaysStoppedAnimation(SibValColors.goldAccent),
+              ),
+              Text(
+                '$percent%',
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text('completo', style: TextStyle(color: Colors.white70, fontSize: 9)),
+      ],
     );
   }
 }

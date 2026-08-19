@@ -46,6 +46,8 @@ class _MembersPageState extends ConsumerState<MembersPage> {
     final membersAsync = ref.watch(membersProvider);
     final profileAsync = ref.watch(currentUserProfileProvider);
     final canManage = profileAsync.asData?.value?.canManageBirthdays ?? false;
+    final incompleteCount =
+        (membersAsync.asData?.value ?? const <Member>[]).where((m) => m.membershipDate == null).length;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -67,17 +69,22 @@ class _MembersPageState extends ConsumerState<MembersPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(labelText: 'Buscar por nome', prefixIcon: Icon(Icons.search)),
+              decoration: const InputDecoration(labelText: 'Buscar por nome ou CPF', prefixIcon: Icon(Icons.search)),
               onChanged: (value) => setState(() => _query = value),
             ),
           ),
           if (canManage)
             Padding(
               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              child: FilterChip(
-                label: const Text('Cadastros incompletos (sem data de membresia)'),
-                selected: _onlyIncomplete,
-                onSelected: (value) => setState(() => _onlyIncomplete = value),
+              child: Badge(
+                label: Text('$incompleteCount'),
+                isLabelVisible: incompleteCount > 0,
+                alignment: AlignmentDirectional.topEnd,
+                child: FilterChip(
+                  label: const Text('Cadastros incompletos (sem data de membresia)'),
+                  selected: _onlyIncomplete,
+                  onSelected: (value) => setState(() => _onlyIncomplete = value),
+                ),
               ),
             ),
           Expanded(
@@ -88,7 +95,13 @@ class _MembersPageState extends ConsumerState<MembersPage> {
               data: (members) {
                 var filtered = _query.trim().isEmpty
                     ? members
-                    : members.where((m) => m.name.toLowerCase().contains(_query.toLowerCase())).toList();
+                    : members.where((m) {
+                        final query = _query.toLowerCase();
+                        final queryDigits = _query.replaceAll(RegExp(r'\D'), '');
+                        final matchesName = m.name.toLowerCase().contains(query);
+                        final matchesCpf = queryDigits.isNotEmpty && m.cpf.contains(queryDigits);
+                        return matchesName || matchesCpf;
+                      }).toList();
                 if (canManage && _onlyIncomplete) {
                   filtered = filtered.where((m) => m.membershipDate == null).toList();
                 }
