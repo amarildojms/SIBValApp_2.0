@@ -8,8 +8,9 @@ import '../models/app_user.dart';
 import 'post_repository.dart' show currentUidProvider;
 
 /// Espelha os checks de permissão de app/src/main/java/com/sibval/app/data/model/User.kt
-/// (isAdmin || roles.contains(...)). Só o necessário até agora: nome (pra
-/// pré-preencher formulários) e a permissão de ver pedidos de oração.
+/// (isAdmin || roles.contains(...)). Também carrega os dados eclesiásticos
+/// opcionais (paridade com `AppUser`/`Member`, 19/08/2026) usados no % de
+/// cadastro exibido na tela Mais e pré-preenchimento de Editar Perfil.
 class CurrentUserProfile {
   const CurrentUserProfile({
     required this.name,
@@ -17,6 +18,16 @@ class CurrentUserProfile {
     required this.photoUrl,
     required this.isAdmin,
     required this.roles,
+    required this.cpf,
+    required this.hasBirthdate,
+    this.phone = '',
+    this.address = '',
+    this.admissionForm = '',
+    this.originChurch = '',
+    this.baptismDate,
+    this.maritalStatus = '',
+    this.ministry = '',
+    this.churchPosition = '',
   });
 
   final String name;
@@ -24,6 +35,16 @@ class CurrentUserProfile {
   final String photoUrl;
   final bool isAdmin;
   final List<String> roles;
+  final String cpf;
+  final bool hasBirthdate;
+  final String phone;
+  final String address;
+  final String admissionForm;
+  final String originChurch;
+  final DateTime? baptismDate;
+  final String maritalStatus;
+  final String ministry;
+  final String churchPosition;
 
   bool get canViewPrayerRequests => isAdmin || roles.contains('intercessao');
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
@@ -39,6 +60,21 @@ class CurrentUserProfile {
     if (parts.length == 1) return parts.first;
     return '${parts.first} ${parts.last}';
   }
+
+  /// % de cadastro preenchido: 4 campos sempre obrigatórios no registro
+  /// (nome, cpf, data de nascimento, e-mail) + 8 opcionais aqui + a data de
+  /// membresia (vem do `Member` vinculado, ver `myMemberProvider` — passada
+  /// à parte porque não existe mais em `users/{uid}`).
+  int completionPercent({required bool hasMembershipDate}) {
+    final requiredFilled = [name, cpf, email].where((v) => v.trim().isNotEmpty).length + (hasBirthdate ? 1 : 0);
+    final optionalFilled = [phone, address, admissionForm, originChurch, maritalStatus, ministry, churchPosition]
+            .where((v) => v.trim().isNotEmpty)
+            .length +
+        (baptismDate != null ? 1 : 0) +
+        (hasMembershipDate ? 1 : 0);
+    const totalFields = 13; // 4 obrigatórios + 8 opcionais + membershipDate
+    return (((requiredFilled + optionalFilled) / totalFields) * 100).round();
+  }
 }
 
 final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {
@@ -53,6 +89,16 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     photoUrl: data['photoUrl'] as String? ?? '',
     isAdmin: data['isAdmin'] as bool? ?? false,
     roles: List<String>.from(data['roles'] as List? ?? const []),
+    cpf: data['cpf'] as String? ?? '',
+    hasBirthdate: data['birthdate'] != null,
+    phone: data['phone'] as String? ?? '',
+    address: data['address'] as String? ?? '',
+    admissionForm: data['admissionForm'] as String? ?? '',
+    originChurch: data['originChurch'] as String? ?? '',
+    baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
+    maritalStatus: data['maritalStatus'] as String? ?? '',
+    ministry: data['ministry'] as String? ?? '',
+    churchPosition: data['churchPosition'] as String? ?? '',
   );
 });
 
@@ -75,7 +121,9 @@ class UserRepository {
   /// usuário, para suportar um cadastro de membresia mais completo. CPF é
   /// obrigatório nas duas telas que chamam este método (cadastro por e-mail
   /// e completar perfil via Google) — os demais ficam opcionais aqui, quem
-  /// exige o que é cada tela.
+  /// exige o que é cada tela. `membershipDate` não é mais coletado aqui
+  /// (19/08/2026) — passa a ser exclusividade do usuário autorizado (papel
+  /// Secretaria) via `MemberRepository`, ver `members_page.dart`.
   Future<void> createUserProfile({
     required String uid,
     required String name,
@@ -84,7 +132,6 @@ class UserRepository {
     required String cpf,
     String phone = '',
     String address = '',
-    DateTime? membershipDate,
     String admissionForm = '',
     String originChurch = '',
     DateTime? baptismDate,
@@ -103,7 +150,6 @@ class UserRepository {
       'cpf': normalizedCpf,
       'phone': phone,
       'address': address,
-      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
       'admissionForm': admissionForm,
       'originChurch': originChurch,
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
@@ -116,6 +162,32 @@ class UserRepository {
       'isAdmin': false,
       'isBlocked': false,
       'roles': <String>[],
+    });
+  }
+
+  /// Usado em `edit_profile_page.dart` — permite ao próprio usuário completar
+  /// os campos opcionais do cadastro (regra atual já permite:
+  /// `auth.uid == userId`). `membershipDate` não entra aqui de propósito.
+  Future<void> updateProfileDetails({
+    required String uid,
+    required String phone,
+    required String address,
+    required String admissionForm,
+    required String originChurch,
+    required DateTime? baptismDate,
+    required String maritalStatus,
+    required String ministry,
+    required String churchPosition,
+  }) {
+    return _users.doc(uid).update({
+      'phone': phone,
+      'address': address,
+      'admissionForm': admissionForm,
+      'originChurch': originChurch,
+      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'maritalStatus': maritalStatus,
+      'ministry': ministry,
+      'churchPosition': churchPosition,
     });
   }
 

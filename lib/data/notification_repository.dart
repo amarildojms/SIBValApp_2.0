@@ -13,11 +13,17 @@ class NotificationRepository {
 
   CollectionReference<Map<String, dynamic>> get _notifications => _firestore.collection('notifications');
 
-  Future<List<AppNotification>> getRecent({required bool isAdmin, required String uid, int limit = 50}) async {
+  Future<List<AppNotification>> getRecent({
+    required bool isAdmin,
+    required String uid,
+    bool canViewPrayerRequests = false,
+    int limit = 50,
+  }) async {
     final snapshot = await _notifications.orderBy('createdAt', descending: true).limit(limit).get();
     return snapshot.docs.map(AppNotification.fromFirestore).where((n) {
       return n.audience == NotificationAudience.all ||
           (n.audience == NotificationAudience.admin && isAdmin) ||
+          (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
           (n.audience == NotificationAudience.user && n.targetUid == uid);
     }).toList();
   }
@@ -42,5 +48,9 @@ final notificationsProvider = FutureProvider.autoDispose<List<AppNotification>>(
   final uid = ref.watch(currentUidProvider);
   if (uid == null) return const [];
   final profile = await ref.watch(currentUserProfileProvider.future);
-  return ref.watch(notificationRepositoryProvider).getRecent(isAdmin: profile?.isAdmin ?? false, uid: uid);
+  return ref.watch(notificationRepositoryProvider).getRecent(
+        isAdmin: profile?.isAdmin ?? false,
+        uid: uid,
+        canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,
+      );
 });

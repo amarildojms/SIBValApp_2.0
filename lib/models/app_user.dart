@@ -15,6 +15,14 @@ class AppUser {
   final bool isAdmin;
   final bool isBlocked;
   final List<String> roles;
+  final String phone;
+  final String address;
+  final String admissionForm;
+  final String originChurch;
+  final DateTime? baptismDate;
+  final String maritalStatus;
+  final String ministry;
+  final String churchPosition;
 
   const AppUser({
     required this.uid,
@@ -28,6 +36,14 @@ class AppUser {
     required this.isAdmin,
     required this.isBlocked,
     required this.roles,
+    this.phone = '',
+    this.address = '',
+    this.admissionForm = '',
+    this.originChurch = '',
+    this.baptismDate,
+    this.maritalStatus = '',
+    this.ministry = '',
+    this.churchPosition = '',
   });
 
   factory AppUser.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -44,6 +60,14 @@ class AppUser {
       isAdmin: data['isAdmin'] as bool? ?? false,
       isBlocked: data['isBlocked'] as bool? ?? false,
       roles: List<String>.from(data['roles'] as List? ?? const []),
+      phone: data['phone'] as String? ?? '',
+      address: data['address'] as String? ?? '',
+      admissionForm: data['admissionForm'] as String? ?? '',
+      originChurch: data['originChurch'] as String? ?? '',
+      baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
+      maritalStatus: data['maritalStatus'] as String? ?? '',
+      ministry: data['ministry'] as String? ?? '',
+      churchPosition: data['churchPosition'] as String? ?? '',
     );
   }
 
@@ -60,6 +84,14 @@ class AppUser {
       isAdmin: isAdmin,
       isBlocked: isBlocked ?? this.isBlocked,
       roles: roles ?? this.roles,
+      phone: phone,
+      address: address,
+      admissionForm: admissionForm,
+      originChurch: originChurch,
+      baptismDate: baptismDate,
+      maritalStatus: maritalStatus,
+      ministry: ministry,
+      churchPosition: churchPosition,
     );
   }
 }

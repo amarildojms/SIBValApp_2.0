@@ -68,3 +68,11 @@ final prayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((
 final archivedPrayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
   return ref.watch(prayerRepositoryProvider).getArchived();
 });
+
+/// Badge no ícone "Pedido de Oração" do menu Mais — pedidos ainda não
+/// encaminhados ao responsável (arquivar é efeito colateral de
+/// `PrayerPage._sendToResponsible`, então o badge cai sozinho depois disso).
+final pendingPrayerCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final requests = await ref.watch(prayerRequestsProvider.future);
+  return requests.length;
+});

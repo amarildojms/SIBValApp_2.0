@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_user.dart';
 import '../models/member.dart';
+import 'post_repository.dart' show currentUidProvider;
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/MemberRepository.kt.
 /// A foto já sai comprimida do image_picker (maxWidth/maxHeight/imageQuality),
@@ -32,6 +33,13 @@ class MemberRepository {
     return snapshot.docs.map(Member.fromFirestore).toList();
   }
 
+  Future<Member?> getByLinkedUid(String uid) async {
+    if (uid.isEmpty) return null;
+    final snapshot = await _members.where('linkedUid', isEqualTo: uid).limit(1).get();
+    if (snapshot.docs.isEmpty) return null;
+    return Member.fromFirestore(snapshot.docs.first);
+  }
+
   Future<Member> create({
     required String name,
     required String email,
@@ -40,6 +48,15 @@ class MemberRepository {
     required int birthMonth,
     required File? photoFile,
     required String uid,
+    String phone = '',
+    String address = '',
+    DateTime? membershipDate,
+    String admissionForm = '',
+    String originChurch = '',
+    DateTime? baptismDate,
+    String maritalStatus = '',
+    String ministry = '',
+    String churchPosition = '',
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
@@ -64,6 +81,15 @@ class MemberRepository {
       'storagePath': storagePath,
       'createdBy': uid,
       'createdAt': FieldValue.serverTimestamp(),
+      'phone': phone,
+      'address': address,
+      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
+      'admissionForm': admissionForm,
+      'originChurch': originChurch,
+      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'maritalStatus': maritalStatus,
+      'ministry': ministry,
+      'churchPosition': churchPosition,
     });
 
     return Member(
@@ -77,6 +103,15 @@ class MemberRepository {
       storagePath: storagePath,
       createdBy: uid,
       createdAt: DateTime.now(),
+      phone: phone,
+      address: address,
+      membershipDate: membershipDate,
+      admissionForm: admissionForm,
+      originChurch: originChurch,
+      baptismDate: baptismDate,
+      maritalStatus: maritalStatus,
+      ministry: ministry,
+      churchPosition: churchPosition,
     );
   }
 
@@ -88,6 +123,15 @@ class MemberRepository {
     required int birthDay,
     required int birthMonth,
     required File? photoFile,
+    String phone = '',
+    String address = '',
+    DateTime? membershipDate,
+    String admissionForm = '',
+    String originChurch = '',
+    DateTime? baptismDate,
+    String maritalStatus = '',
+    String ministry = '',
+    String churchPosition = '',
   }) async {
     var photoUrl = member.photoUrl;
     var storagePath = member.storagePath;
@@ -115,6 +159,16 @@ class MemberRepository {
       'storagePath': storagePath,
       'createdBy': member.createdBy,
       'createdAt': member.createdAt != null ? Timestamp.fromDate(member.createdAt!) : FieldValue.serverTimestamp(),
+      'phone': phone,
+      'address': address,
+      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
+      'admissionForm': admissionForm,
+      'originChurch': originChurch,
+      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'maritalStatus': maritalStatus,
+      'ministry': ministry,
+      'churchPosition': churchPosition,
+      'linkedUid': member.linkedUid,
     };
 
     final canonicalId = _canonicalId(cpf: normalizedCpf, email: normalizedEmail) ?? member.id;
@@ -134,7 +188,10 @@ class MemberRepository {
   /// usuário já tem CPF, migra o documento pro id canônico (CPF), preservando
   /// o que já existia ali (SetOptions.merge) — é o "mesclar dados" pedido:
   /// o aniversariante cadastrado manualmente vira o mesmo registro do usuário
-  /// aprovado, sem duplicar.
+  /// aprovado, sem duplicar. `membershipDate` nunca é incluído aqui de
+  /// propósito — é exclusividade do usuário autorizado (Secretaria) editando
+  /// diretamente o registro em Rol de Membros, e o merge preserva o que já
+  /// estiver lá.
   Future<void> upsertFromUser(AppUser user) async {
     if (user.birthMonth < 1 || user.birthMonth > 12 || user.birthDay < 1 || user.birthDay > 31) {
       return;
@@ -154,6 +211,15 @@ class MemberRepository {
       'birthMonth': user.birthMonth,
       'createdBy': user.uid,
       'createdAt': FieldValue.serverTimestamp(),
+      'linkedUid': user.uid,
+      'phone': user.phone,
+      'address': user.address,
+      'admissionForm': user.admissionForm,
+      'originChurch': user.originChurch,
+      'baptismDate': user.baptismDate != null ? Timestamp.fromDate(user.baptismDate!) : null,
+      'maritalStatus': user.maritalStatus,
+      'ministry': user.ministry,
+      'churchPosition': user.churchPosition,
       if (user.photoUrl.isNotEmpty) 'photoUrl': user.photoUrl,
     };
 
@@ -210,4 +276,13 @@ final memberRepositoryProvider = Provider<MemberRepository>((ref) {
 
 final membersProvider = FutureProvider.autoDispose<List<Member>>((ref) {
   return ref.watch(memberRepositoryProvider).getAll();
+});
+
+/// Membro vinculado ao usuário logado (por `linkedUid`) — alimenta o % de
+/// cadastro e "Membro SIB Val há..." na tela Mais. `null` quando o usuário
+/// ainda não tem registro em `members` (ex.: cadastro pendente de aprovação).
+final myMemberProvider = FutureProvider.autoDispose((ref) async {
+  final uid = ref.watch(currentUidProvider);
+  if (uid == null) return null;
+  return ref.watch(memberRepositoryProvider).getByLinkedUid(uid);
 });

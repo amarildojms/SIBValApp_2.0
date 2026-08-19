@@ -50,13 +50,16 @@ abstract final class NotificationType {
   static const eventReminder = 'event_reminder';
   static const postLike = 'post_like';
   static const postComment = 'post_comment';
+  static const prayerRequest = 'prayer_request';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem
 /// `targetUid` igual ao uid logado (ex.: curtida/comentário na homenagem de
-/// aniversário de alguém).
+/// aniversário de alguém). [NotificationAudience.intercessao] (19/08/2026) é
+/// admin ou quem tem o papel Intercessão — novo pedido de oração recebido.
 abstract final class NotificationAudience {
   static const all = 'all';
   static const admin = 'admin';
   static const user = 'user';
+  static const intercessao = 'intercessao';
 }

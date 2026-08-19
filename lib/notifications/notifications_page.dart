@@ -11,6 +11,7 @@ import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
 import '../home/post_comments_page.dart';
 import '../models/notification.dart';
+import '../prayer/prayer_page.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -119,6 +120,8 @@ class NotificationsPage extends ConsumerWidget {
             MaterialPageRoute(builder: (_) => PostCommentsPage(postId: notification.targetId)),
           );
         }
+      case NotificationType.prayerRequest:
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage()));
     }
   }
 }

@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../widgets/google_logo.dart';
 import 'complete_google_profile_page.dart';
@@ -37,7 +38,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   DateTime? _birthdate;
-  DateTime? _membershipDate;
   DateTime? _baptismDate;
   String? _admissionForm;
   String? _maritalStatus;
@@ -46,9 +46,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   bool _obscureConfirmPassword = true;
   bool _acceptedPrivacyPolicy = false;
   bool _loading = false;
-
-  static const _admissionFormOptions = ['Batismo', 'Transferência', 'Aclamação', 'Reconciliação'];
-  static const _maritalStatusOptions = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'];
 
   @override
   void dispose() {
@@ -159,7 +156,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
-        membershipDate: _membershipDate,
         admissionForm: _admissionForm ?? '',
         originChurch: _originChurchController.text.trim(),
         baptismDate: _baptismDate,
@@ -345,24 +341,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: () => _pickDate(_membershipDate, (date) => setState(() => _membershipDate = date)),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Data de Membresia',
-                    suffixIcon: Icon(Icons.calendar_today_outlined),
-                  ),
-                  child: Text(
-                    _membershipDate != null ? DateFormat('dd/MM/yyyy').format(_membershipDate!) : '',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _admissionForm,
                 decoration: const InputDecoration(labelText: 'Forma de Adesão'),
                 items: [
-                  for (final option in _admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                  for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
                 ],
                 onChanged: (value) => setState(() => _admissionForm = value),
               ),
@@ -390,7 +373,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 initialValue: _maritalStatus,
                 decoration: const InputDecoration(labelText: 'Estado civil'),
                 items: [
-                  for (final option in _maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                  for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
                 ],
                 onChanged: (value) => setState(() => _maritalStatus = value),
               ),

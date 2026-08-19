@@ -159,7 +159,10 @@ class _UserCard extends ConsumerWidget {
                 children: [
                   TextButton(
                     onPressed: () => ref.read(userRepositoryProvider).setUserStatus(user.uid, UserStatus.rejected).then(
-                          (_) => ref.invalidate(allUsersProvider),
+                          (_) {
+                            ref.invalidate(allUsersProvider);
+                            ref.invalidate(pendingUserCountProvider);
+                          },
                         ),
                     child: const Text('Rejeitar'),
                   ),
@@ -167,7 +170,10 @@ class _UserCard extends ConsumerWidget {
                   ElevatedButton(
                     onPressed: () {
                       ref.read(userRepositoryProvider).setUserStatus(user.uid, UserStatus.approved).then(
-                            (_) => ref.invalidate(allUsersProvider),
+                            (_) {
+                              ref.invalidate(allUsersProvider);
+                              ref.invalidate(pendingUserCountProvider);
+                            },
                           );
                       // Espelha ManageUsersViewModel.approve(): mescla com o
                       // aniversariante pré-cadastrado (por CPF, ver
@@ -228,7 +234,10 @@ class _UserCard extends ConsumerWidget {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ref.read(userRepositoryProvider).deleteUserProfile(user.uid).then((_) => ref.invalidate(allUsersProvider));
+              ref.read(userRepositoryProvider).deleteUserProfile(user.uid).then((_) {
+                ref.invalidate(allUsersProvider);
+                ref.invalidate(pendingUserCountProvider);
+              });
             },
             child: const Text('Excluir'),
           ),

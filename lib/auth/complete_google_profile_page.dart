@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import 'privacy_policy_page.dart';
 
@@ -44,16 +45,12 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   final _ministryController = TextEditingController();
   final _churchPositionController = TextEditingController();
   DateTime? _birthdate;
-  DateTime? _membershipDate;
   DateTime? _baptismDate;
   String? _admissionForm;
   String? _maritalStatus;
   File? _pickedPhoto;
   bool _acceptedPrivacyPolicy = false;
   bool _loading = false;
-
-  static const _admissionFormOptions = ['Batismo', 'Transferência', 'Aclamação', 'Reconciliação'];
-  static const _maritalStatusOptions = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'];
 
   @override
   void dispose() {
@@ -91,8 +88,8 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     }
   }
 
-  /// Usado por Data de Membresia e Data de Batismo — ambas opcionais, sem a
-  /// restrição de idade mínima do date picker de nascimento.
+  /// Usado pela Data de Batismo — opcional, sem a restrição de idade mínima
+  /// do date picker de nascimento.
   Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -132,7 +129,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
-        membershipDate: _membershipDate,
         admissionForm: _admissionForm ?? '',
         originChurch: _originChurchController.text.trim(),
         baptismDate: _baptismDate,
@@ -272,24 +268,13 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _loading ? null : () => _pickDate(_membershipDate, (date) => setState(() => _membershipDate = date)),
-                child: InputDecorator(
-                  decoration: _decoration('Data de Membresia', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
-                  child: Text(
-                    _membershipDate != null ? DateFormat('dd/MM/yyyy').format(_membershipDate!) : '',
-                    style: _fieldStyle,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _admissionForm,
                 style: _fieldStyle,
                 dropdownColor: SibValColors.navyBlueLight,
                 decoration: _decoration('Forma de Adesão'),
                 items: [
-                  for (final option in _admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                  for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
                 ],
                 onChanged: _loading ? null : (value) => setState(() => _admissionForm = value),
               ),
@@ -318,7 +303,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 dropdownColor: SibValColors.navyBlueLight,
                 decoration: _decoration('Estado civil'),
                 items: [
-                  for (final option in _maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                  for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
                 ],
                 onChanged: _loading ? null : (value) => setState(() => _maritalStatus = value),
               ),

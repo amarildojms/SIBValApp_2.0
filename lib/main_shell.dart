@@ -10,7 +10,9 @@ import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
+import 'data/member_repository.dart';
 import 'data/post_repository.dart' show currentUidProvider;
+import 'data/prayer_repository.dart';
 import 'data/user_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
@@ -150,10 +152,13 @@ class _MaisPage extends ConsumerWidget {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final profile = profileAsync.asData?.value;
     final isAdmin = profile?.isAdmin ?? false;
-    final canManageBirthdays = profile?.canManageBirthdays ?? false;
     final canManageEventos = profile?.canManageEventos ?? false;
+    final canViewPrayerRequests = profile?.canViewPrayerRequests ?? false;
     final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
+    final pendingPrayerCountAsync =
+        canViewPrayerRequests ? ref.watch(pendingPrayerCountProvider) : const AsyncValue.data(0);
+    final pendingPrayerCount = pendingPrayerCountAsync.asData?.value ?? 0;
 
     final tiles = [
       // Tier 1 — disponível para todos, sem login.
@@ -182,6 +187,7 @@ class _MaisPage extends ConsumerWidget {
       _MoreTile(
         imageAsset: 'assets/icons/ic_prayer.png',
         label: 'Pedido de Oração',
+        badgeCount: pendingPrayerCount,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage())),
       ),
       _MoreTile(
@@ -194,20 +200,23 @@ class _MaisPage extends ConsumerWidget {
         label: 'Tema',
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ThemeSettingsPage())),
       ),
-      // Tier 2 — só pra quem está autenticado.
+      // Tier 2 — só pra quem está autenticado. Rol de Membros passa a ser
+      // visível a todo autenticado (19/08/2026) — só edição/exclusão/inserção
+      // e a seção de pendentes ficam restritas a canManageBirthdays, dentro
+      // da própria tela.
       if (uid != null)
         _MoreTile(
           icon: Icons.cake_outlined,
           label: 'Aniversariantes',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
         ),
-      // Tier 3 — admin / secretaria / eventos.
-      if (canManageBirthdays)
+      if (uid != null)
         _MoreTile(
           icon: Icons.people_outline,
           label: 'Rol de Membros',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MembersPage())),
         ),
+      // Tier 3 — admin / secretaria / eventos.
       if (isAdmin)
         _MoreTile(
           icon: Icons.admin_panel_settings_outlined,
@@ -283,14 +292,22 @@ class _MaisPage extends ConsumerWidget {
 }
 
 /// Substitui o título fixo "Mais": vira o link para editar o perfil (troca de
-/// foto e outros dados), igual pedido pelo usuário.
-class _MoreHeader extends StatelessWidget {
+/// foto e outros dados), igual pedido pelo usuário. Também mostra o % de
+/// cadastro preenchido e o tempo de membresia (19/08/2026), este último
+/// vindo do `Member` vinculado (`myMemberProvider`) — só a Secretaria edita
+/// `membershipDate`, então não existe em `CurrentUserProfile`.
+class _MoreHeader extends ConsumerWidget {
   const _MoreHeader({required this.profile});
 
   final CurrentUserProfile profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final memberAsync = ref.watch(myMemberProvider);
+    final membershipDate = memberAsync.asData?.value?.membershipDate;
+    final completionPercent = profile.completionPercent(hasMembershipDate: membershipDate != null);
+    final membershipLabel = _membershipDurationLabel(membershipDate);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: InkWell(
@@ -321,6 +338,19 @@ class _MoreHeader extends StatelessWidget {
                       'Editar perfil',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Cadastro $completionPercent% completo',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    if (membershipLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          membershipLabel,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -331,6 +361,24 @@ class _MoreHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Membro SIB Val há X ano(s) e Y mês(es)" — omite a parte zerada (só anos
+/// se months == 0, só meses se years == 0). `null` quando ainda não há data
+/// de membresia registrada.
+String? _membershipDurationLabel(DateTime? membershipDate) {
+  if (membershipDate == null) return null;
+  final now = DateTime.now();
+  var totalMonths = (now.year - membershipDate.year) * 12 + (now.month - membershipDate.month);
+  if (now.day < membershipDate.day) totalMonths--;
+  if (totalMonths < 0) return null;
+  final years = totalMonths ~/ 12;
+  final months = totalMonths % 12;
+  final yearsLabel = years == 1 ? '1 ano' : '$years anos';
+  final monthsLabel = months == 1 ? '1 mês' : '$months meses';
+  if (years == 0) return 'Membro SIB Val há $monthsLabel';
+  if (months == 0) return 'Membro SIB Val há $yearsLabel';
+  return 'Membro SIB Val há $yearsLabel e $monthsLabel';
 }
 
 /// Tile em grade (ícone em cima, rótulo embaixo) — espelha o
