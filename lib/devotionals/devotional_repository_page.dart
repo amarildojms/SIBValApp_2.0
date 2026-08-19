@@ -30,7 +30,10 @@ class DevotionalRepositoryPage extends ConsumerWidget {
         ),
         child: const Icon(Icons.add),
       ),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Repositório de Devocionais'),
@@ -98,6 +101,7 @@ class DevotionalRepositoryPage extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

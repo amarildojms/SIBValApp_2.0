@@ -100,7 +100,10 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: ListView(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const ScreenTitle('Pedido de Oração'),
@@ -160,6 +163,7 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
           else
             _PrayerList(onDelete: _delete),
         ],
+        ),
       ),
     );
   }

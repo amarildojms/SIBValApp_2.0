@@ -33,7 +33,10 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         children: [
           const ScreenTitle('Gerenciar Usuários'),
           Padding(
@@ -68,6 +71,7 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

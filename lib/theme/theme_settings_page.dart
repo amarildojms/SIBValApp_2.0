@@ -16,7 +16,10 @@ class ThemeSettingsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: ListView(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: ListView(
         children: [
           const ScreenTitle('Tema'),
           _ThemeOption(
@@ -36,6 +39,7 @@ class ThemeSettingsPage extends ConsumerWidget {
             groupValue: currentMode,
           ),
         ],
+        ),
       ),
     );
   }

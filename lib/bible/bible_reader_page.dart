@@ -112,7 +112,10 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
           IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),
         ],
       ),
-      body: _loadingFontSize
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: _loadingFontSize
           ? const Center(child: CircularProgressIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,6 +153,7 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
                 ),
               ],
             ),
+        ),
     );
   }
 }

@@ -64,7 +64,10 @@ class _HymnDetailPageState extends ConsumerState<HymnDetailPage> {
           IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),
         ],
       ),
-      body: _loadingFontSize
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: _loadingFontSize
           ? const Center(child: CircularProgressIndicator())
           : hymnAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -90,6 +93,7 @@ class _HymnDetailPageState extends ConsumerState<HymnDetailPage> {
                 );
               },
             ),
+        ),
     );
   }
 }

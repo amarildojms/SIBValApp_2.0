@@ -38,7 +38,10 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
         onPressed: () => _showAddDialog(context),
         child: const Icon(Icons.add),
       ),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         children: [
           const ScreenTitle('Remetentes de E-mail de Eventos'),
           Padding(
@@ -78,6 +81,7 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

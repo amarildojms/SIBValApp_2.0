@@ -75,7 +75,10 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
     final devotional = _devotional;
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: _loading
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: _loading
           ? const Center(child: CircularProgressIndicator())
           : devotional == null
               ? Center(child: Text('Devocional não encontrada.', style: TextStyle(color: context.textSecondary)))
@@ -130,6 +133,7 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
                     ),
                   ],
                 ),
+        ),
     );
   }
 }

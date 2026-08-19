@@ -64,7 +64,10 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
     if (uid == null) {
       return Scaffold(
         appBar: const SibValAppBar(isHome: false),
-        body: Column(
+        body: SafeArea(
+          bottom: true,
+          top: false,
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const ScreenTitle('Aniversariantes'),
@@ -93,6 +96,7 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
               ),
             ),
           ],
+          ),
         ),
       );
     }
@@ -103,7 +107,10 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Aniversariantes'),
@@ -178,6 +185,7 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

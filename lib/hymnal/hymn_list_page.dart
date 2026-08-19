@@ -20,7 +20,10 @@ class HymnListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ScreenTitle(hymnal.displayTitle),
@@ -49,6 +52,7 @@ class HymnListPage extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -30,7 +30,10 @@ class PartnersPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: ListView(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const ScreenTitle('Vínculos Institucionais'),
@@ -49,6 +52,7 @@ class PartnersPage extends StatelessWidget {
               ),
             ),
         ],
+        ),
       ),
     );
   }

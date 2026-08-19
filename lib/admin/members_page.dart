@@ -42,7 +42,10 @@ class _MembersPageState extends ConsumerState<MembersPage> {
         onPressed: () => showDialog<void>(context: context, builder: (_) => const _MemberDialog(existing: null)),
         child: const Icon(Icons.add),
       ),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         children: [
           const ScreenTitle('Membros'),
           Padding(
@@ -90,6 +93,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

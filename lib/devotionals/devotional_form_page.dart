@@ -127,7 +127,10 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: _loading
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
@@ -196,6 +199,7 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
                 ],
               ),
             ),
+        ),
     );
   }
 }

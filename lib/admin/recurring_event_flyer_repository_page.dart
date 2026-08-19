@@ -32,7 +32,10 @@ class RecurringEventFlyerRepositoryPage extends ConsumerWidget {
         ),
         child: const Icon(Icons.add),
       ),
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Repositório de Flyers'),
@@ -75,6 +78,7 @@ class RecurringEventFlyerRepositoryPage extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -237,7 +241,7 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 20,
       ),
       child: SingleChildScrollView(
         child: Column(

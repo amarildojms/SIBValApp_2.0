@@ -22,7 +22,10 @@ class AlbumListPage extends ConsumerWidget {
     if (uid == null) {
       return Scaffold(
         appBar: const SibValAppBar(isHome: false),
-        body: Column(
+        body: SafeArea(
+          bottom: true,
+          top: false,
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const ScreenTitle('Galeria'),
@@ -51,6 +54,7 @@ class AlbumListPage extends ConsumerWidget {
               ),
             ),
           ],
+          ),
         ),
       );
     }
@@ -67,7 +71,10 @@ class AlbumListPage extends ConsumerWidget {
               child: const Icon(Icons.add),
             )
           : null,
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Galeria'),
@@ -110,6 +117,7 @@ class AlbumListPage extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -19,7 +19,10 @@ class BibleBookListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: booksAsync.when(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: booksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
             Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
@@ -41,6 +44,7 @@ class BibleBookListPage extends ConsumerWidget {
             ],
           );
         },
+        ),
       ),
     );
   }

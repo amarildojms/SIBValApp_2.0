@@ -34,7 +34,10 @@ class AlbumPhotosPage extends ConsumerWidget {
               child: const Icon(Icons.add_a_photo_outlined),
             )
           : null,
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ScreenTitle(albumName),
@@ -93,6 +96,7 @@ class AlbumPhotosPage extends ConsumerWidget {
           ),
           ),
         ],
+        ),
       ),
     );
   }
