@@ -211,36 +211,64 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
         children: [
           const ScreenTitle('Pedido de Oração'),
           TextField(
-            controller: _textController,
-            maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Seu pedido de oração'),
-          ),
-          const SizedBox(height: 8),
-          CheckboxListTile(
-            value: _isAnonymous,
-            onChanged: (value) => setState(() => _isAnonymous = value ?? false),
-            title: Text('Enviar de forma anônima', style: TextStyle(color: context.textPrimary)),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-          ),
-          TextField(
             controller: _nameController,
             enabled: !_isAnonymous,
-            decoration: InputDecoration(labelText: 'Nome', errorText: _nameError),
+            decoration: InputDecoration(
+              labelText: 'Nome',
+              errorText: _nameError,
+              border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              filled: true,
+              fillColor: Theme.of(context).cardColor,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           TextField(
             controller: _phoneController,
             enabled: !_isAnonymous,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
+            decoration: InputDecoration(
+              labelText: 'Telefone (opcional)',
+              border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              filled: true,
+              fillColor: Theme.of(context).cardColor,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           TextField(
             controller: _emailController,
             enabled: !_isAnonymous,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'E-mail (opcional)'),
+            decoration: InputDecoration(
+              labelText: 'E-mail (opcional)',
+              border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              filled: true,
+              fillColor: Theme.of(context).cardColor,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Theme.of(context).colorScheme.outline),
+              color: Theme.of(context).cardColor,
+            ),
+            child: CheckboxListTile(
+              value: _isAnonymous,
+              onChanged: (value) => setState(() => _isAnonymous = value ?? false),
+              title: Text('Enviar de forma anônima', style: TextStyle(color: context.textPrimary)),
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _textController,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Seu pedido de oração',
+              border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              filled: true,
+              fillColor: Theme.of(context).cardColor,
+            ),
           ),
           const SizedBox(height: 16),
           ElevatedButton(

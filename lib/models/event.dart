@@ -119,3 +119,7 @@ abstract final class EventCategory {
 /// aparelho — mesma correção aplicada em EventDetailFragment.kt/EventAdapter.kt
 /// (o Brasil não tem horário de verão desde 2019, então UTC-3 fixo é seguro).
 DateTime toSaoPauloTime(DateTime utc) => utc.toUtc().add(const Duration(hours: -3));
+
+/// "Agora", em America/Sao_Paulo — usado para comparar com `toSaoPauloTime`
+/// ao decidir se um evento é hoje/amanhã/já passou.
+DateTime toSaoPauloTimeNow() => toSaoPauloTime(DateTime.now().toUtc());
