@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 // Paleta reaproveitada de app/src/main/res/values/colors.xml do app Android original.
 class SibValColors {
-  static const navyBlue = Color(0xFF112D39);
-  static const navyBlueLight = Color(0xFF1C4A5E);
+  static const navyBlue = Color(0xFF1B275B);
+  static const navyBlueLight = Color(0xFF2E5E8A);
   static const navyBlueDark = Color(0xFF0A1D24);
-  static const goldAccent = Color(0xFFC9A24B);
+  static const goldAccent = Color(0xFFC58C38);
 }
 
 /// Os dois temas (claro/escuro) — espelha o suporte a tema do app nativo, que
