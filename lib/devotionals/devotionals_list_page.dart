@@ -28,6 +28,7 @@ class DevotionalsListPage extends ConsumerWidget {
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: canManageDevotionals
           ? FloatingActionButton(
+              heroTag: 'devotionals_list_fab',
               backgroundColor: SibValColors.goldAccent,
               tooltip: 'Repositório de devocionais',
               onPressed: () => Navigator.of(context).push(

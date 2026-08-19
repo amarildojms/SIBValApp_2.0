@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/prayer_repository.dart';
+import '../data/settings_repository.dart';
 import '../data/user_repository.dart';
 import '../models/prayer_request.dart';
 import '../theme/app_theme.dart';
@@ -11,8 +13,10 @@ import 'archived_prayer_page.dart';
 
 /// Espelha PrayerFragment.kt/PrayerViewModel.kt: formulário de envio (anônimo
 /// ou identificado) sempre visível, lista só pra quem tem permissão
-/// (admin/intercessão). Telefone do responsável (envio via WhatsApp) fica de
-/// fora desta passada — o item aqui é arquivar/excluir via toque longo.
+/// (admin/intercessão). Encaminhar ao responsável (`sendToResponsible`) abre o
+/// WhatsApp com a mensagem formatada e arquiva o pedido como efeito colateral,
+/// igual ao nativo; o telefone do responsável é editável só por admin
+/// (`showResponsiblePhoneDialog`), via `SettingsRepository.setPrayerResponsiblePhone`.
 class PrayerPage extends ConsumerStatefulWidget {
   const PrayerPage({super.key});
 
@@ -97,6 +101,99 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
     ref.invalidate(prayerRequestsProvider);
   }
 
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _sendToResponsible(PrayerRequest request) async {
+    String responsiblePhone = '';
+    try {
+      responsiblePhone = await ref.read(prayerResponsiblePhoneProvider.future);
+    } catch (_) {
+      responsiblePhone = '';
+    }
+    if (responsiblePhone.trim().isEmpty) {
+      if (mounted) _showMessage('Configure o número do responsável antes de encaminhar pedidos.');
+      return;
+    }
+
+    final digits = responsiblePhone.replaceAll(RegExp(r'\D'), '');
+    final fullNumber = digits.startsWith('55') ? digits : '55$digits';
+
+    final isAnonymous = request.isAnonymous || request.authorName.isEmpty;
+    final dateLabel = request.createdAt != null
+        ? DateFormat('dd/MM/yyyy HH:mm', 'pt_BR').format(request.createdAt!)
+        : '';
+
+    final buffer = StringBuffer('Pedido de oração\n\n')
+      ..write('Nome: ${isAnonymous ? 'Anônimo' : request.authorName}');
+    if (!isAnonymous) {
+      if (request.authorPhone.isNotEmpty) buffer.write('\nTelefone: ${request.authorPhone}');
+      if (request.authorEmail.isNotEmpty) buffer.write('\nE-mail: ${request.authorEmail}');
+    }
+    if (dateLabel.isNotEmpty) buffer.write('\nData: $dateLabel');
+    buffer.write('\n\nMensagem:\n${request.text}');
+
+    final uri = Uri.https('wa.me', '/$fullNumber', {'text': buffer.toString()});
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    await _archive(request.id);
+  }
+
+  Future<void> _editResponsiblePhone() async {
+    String currentPhone = '';
+    try {
+      currentPhone = await ref.read(prayerResponsiblePhoneProvider.future);
+    } catch (_) {
+      currentPhone = '';
+    }
+    if (!mounted) return;
+
+    final controller = TextEditingController(text: currentPhone);
+    final phone = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Número do responsável'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Informe o número de WhatsApp (com DDD) que receberá os pedidos de oração encaminhados.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(hintText: 'Ex: 11912345678'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              FocusScope.of(dialogContext).unfocus();
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              FocusScope.of(dialogContext).unfocus();
+              Navigator.of(dialogContext).pop(controller.text.trim());
+            },
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (phone == null) return;
+
+    await ref.read(settingsRepositoryProvider).setPrayerResponsiblePhone(phone);
+    ref.invalidate(prayerResponsiblePhoneProvider);
+    if (mounted) _showMessage('Número atualizado com sucesso.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(currentUserProfileProvider);
@@ -167,16 +264,26 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
               ),
             )
           else ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () =>
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArchivedPrayerPage())),
-                icon: const Icon(Icons.archive_outlined, size: 18),
-                label: const Text('Pedidos arquivados'),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (profile?.isAdmin ?? false)
+                  IconButton(
+                    tooltip: 'Número do responsável',
+                    onPressed: _editResponsiblePhone,
+                    icon: const Icon(Icons.settings_outlined),
+                  )
+                else
+                  const SizedBox.shrink(),
+                TextButton.icon(
+                  onPressed: () =>
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArchivedPrayerPage())),
+                  icon: const Icon(Icons.archive_outlined, size: 18),
+                  label: const Text('Pedidos arquivados'),
+                ),
+              ],
             ),
-            _PrayerList(onArchive: _archive, onDelete: _delete),
+            _PrayerList(onArchive: _archive, onDelete: _delete, onSend: _sendToResponsible),
           ],
         ],
         ),
@@ -186,10 +293,11 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
 }
 
 class _PrayerList extends ConsumerWidget {
-  const _PrayerList({required this.onArchive, required this.onDelete});
+  const _PrayerList({required this.onArchive, required this.onDelete, required this.onSend});
 
   final void Function(String id) onArchive;
   final void Function(String id) onDelete;
+  final void Function(PrayerRequest request) onSend;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
 
@@ -216,10 +324,19 @@ class _PrayerList extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   title: Text(request.isAnonymous || request.authorName.isEmpty ? 'Anônimo' : request.authorName),
-                  subtitle: Text(request.text),
-                  trailing: request.createdAt != null
-                      ? Text(_dateFormat.format(request.createdAt!), style: const TextStyle(fontSize: 11))
-                      : null,
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(request.text),
+                      if (request.createdAt != null)
+                        Text(_dateFormat.format(request.createdAt!), style: const TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'Encaminhar ao responsável',
+                    icon: const Icon(Icons.send_outlined),
+                    onPressed: () => onSend(request),
+                  ),
                   onLongPress: () => _showActions(context, request.id),
                 ),
               ),

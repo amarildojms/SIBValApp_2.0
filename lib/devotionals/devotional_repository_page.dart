@@ -25,6 +25,7 @@ class DevotionalRepositoryPage extends ConsumerWidget {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'devotional_repository_fab',
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const DevotionalFormPage()),
         ),

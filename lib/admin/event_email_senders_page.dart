@@ -36,6 +36,7 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'event_email_senders_fab',
         onPressed: () => _showAddDialog(context),
         child: const Icon(Icons.add),
       ),

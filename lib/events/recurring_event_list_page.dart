@@ -26,6 +26,7 @@ class RecurringEventListPage extends ConsumerWidget {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'recurring_event_list_fab',
         onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecurringEventFormPage()));
           ref.invalidate(recurringEventsProvider);

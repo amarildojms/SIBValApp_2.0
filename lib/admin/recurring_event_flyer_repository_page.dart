@@ -25,6 +25,7 @@ class RecurringEventFlyerRepositoryPage extends ConsumerWidget {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'recurring_event_flyer_repository_fab',
         onPressed: () => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,

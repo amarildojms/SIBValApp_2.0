@@ -30,6 +30,7 @@ class AlbumPhotosPage extends ConsumerWidget {
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: canManageGallery
           ? FloatingActionButton(
+              heroTag: 'album_photos_fab',
               onPressed: () => _upload(context, ref),
               child: const Icon(Icons.add_a_photo_outlined),
             )

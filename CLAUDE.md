@@ -82,17 +82,19 @@ esta lista já foi corrigida uma vez por estar desatualizada (o commit
 constava aqui antes). Itens já confirmados como completos e removidos desta
 lista: CRUD de eventos recorrentes, formulário de evento + pendentes +
 filtro, admin de devocionais, busca/favoritos da Bíblia, cadastro
-(`register_page.dart`), e agora também o arquivamento de pedidos de oração.
+(`register_page.dart`), o arquivamento de pedidos de oração, o fluxo de
+completar perfil ao entrar com Google
+(`lib/auth/complete_google_profile_page.dart`, ligado em `login_page.dart` e
+`register_page.dart` via `additionalUserInfo?.isNewUser`), e agora também o
+envio do pedido de oração ao responsável via WhatsApp
+(`PrayerPage._sendToResponsible`, botão de envio por item da lista +
+arquivamento automático como efeito colateral) e a tela de ajuste do telefone
+do responsável (`PrayerPage._editResponsiblePhone`, engrenagem visível só
+para admin; `SettingsRepository.getPrayerResponsiblePhone`/
+`setPrayerResponsiblePhone` em `lib/data/settings_repository.dart`).
 
-Ainda falta:
-- Fluxo de completar perfil ao entrar com Google
-  (`CompleteGoogleProfileActivity`) — hoje `lib/auth/` não tem equivalente.
-- Envio do pedido de oração ao responsável via WhatsApp + tela de ajuste do
-  telefone do responsável (`PrayerFragment.sendToResponsible`,
-  `SettingsRepository.getPrayerResponsiblePhone`) — o arquivamento manual
-  (arquivar/excluir por toque longo + tela "Pedidos arquivados") já foi
-  implementado em `lib/prayer/`, mas o disparo automático de arquivamento via
-  envio ao responsável, que existe no nativo, ainda não tem equivalente aqui.
+Não há mais itens pendentes conhecidos nesta lista — reconfirmar via diff
+antes de assumir que a migração está 100% completa (ver seção abaixo).
 
 ## Como responder "o que falta migrar"
 

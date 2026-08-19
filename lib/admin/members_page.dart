@@ -39,6 +39,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'members_fab',
         onPressed: () => showDialog<void>(context: context, builder: (_) => const _MemberDialog(existing: null)),
         child: const Icon(Icons.add),
       ),

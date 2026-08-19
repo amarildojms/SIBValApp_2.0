@@ -37,6 +37,7 @@ class EventsPage extends ConsumerWidget {
         appBar: const SibValAppBar(isHome: false),
         floatingActionButton: canManageEventos
             ? FloatingActionButton(
+                heroTag: 'events_fab',
                 onPressed: () => _onAddEvent(context, tab),
                 child: const Icon(Icons.add),
               )

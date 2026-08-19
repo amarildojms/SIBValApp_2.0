@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/google_logo.dart';
+import 'complete_google_profile_page.dart';
 import 'register_page.dart';
 
 /// Resultado de [resolveApprovalState] — espelha o `AuthUiState` do app Android
@@ -122,6 +123,18 @@ class _LoginPageState extends State<LoginPage> {
       final uid = credential.user?.uid;
       if (uid == null) {
         _showMessage('Falha ao autenticar com Google.');
+        return;
+      }
+
+      if (credential.additionalUserInfo?.isNewUser ?? false) {
+        if (!mounted) return;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CompleteGoogleProfilePage(
+            uid: uid,
+            name: credential.user?.displayName ?? '',
+            email: credential.user?.email ?? '',
+          ),
+        ));
         return;
       }
 

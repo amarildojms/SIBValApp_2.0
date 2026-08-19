@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/google_logo.dart';
+import 'complete_google_profile_page.dart';
 import 'login_page.dart' show ApprovalResult, resolveApprovalState;
 
 /// Espelha RegisterActivity/RegisterViewModel.kt do app nativo: cadastro fica
@@ -139,6 +140,18 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       final uid = credential.user?.uid;
       if (uid == null) {
         _showMessage('Falha ao autenticar com Google.');
+        return;
+      }
+
+      if (credential.additionalUserInfo?.isNewUser ?? false) {
+        if (!mounted) return;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CompleteGoogleProfilePage(
+            uid: uid,
+            name: credential.user?.displayName ?? '',
+            email: credential.user?.email ?? '',
+          ),
+        ));
         return;
       }
 

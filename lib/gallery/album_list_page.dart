@@ -67,6 +67,7 @@ class AlbumListPage extends ConsumerWidget {
       appBar: const SibValAppBar(isHome: false),
       floatingActionButton: canManageGallery
           ? FloatingActionButton(
+              heroTag: 'album_list_fab',
               onPressed: () => _showCreateAlbumDialog(context, ref),
               child: const Icon(Icons.add),
             )
