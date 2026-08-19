@@ -7,10 +7,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
+import '../data/user_repository.dart';
 import '../models/event.dart';
 import '../theme/app_theme.dart';
 import '../util/weekday_format.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'event_form_page.dart';
 
 const _appShareLink = 'https://sibval-app-project.web.app/eventos';
 
@@ -64,24 +66,36 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
     SharePlus.instance.share(ShareParams(text: text));
   }
 
+  Future<void> _edit(Event event) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventFormPage(eventId: event.id)));
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final event = _event;
     final uid = ref.watch(currentUidProvider);
+    final profileAsync = ref.watch(currentUserProfileProvider);
+    final canManageEventos = profileAsync.asData?.value?.canManageEventos ?? false;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: _loading
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: _loading
           ? const Center(child: CircularProgressIndicator())
           : event == null
               ? Center(child: Text('Evento não encontrado.', style: TextStyle(color: context.textSecondary)))
-              : _buildContent(context, event, uid),
+              : _buildContent(context, event, uid, canManageEventos),
+        ),
     );
   }
 
-  Widget _buildContent(BuildContext context, Event event, String? uid) {
+  Widget _buildContent(BuildContext context, Event event, String? uid, bool canManageEventos) {
     final localDate = toSaoPauloTime(event.dateTimeUtc);
     final liked = uid != null && event.likedBy.contains(uid);
+    final canEdit = canManageEventos && event.source != EventSource.recurring;
 
     return SingleChildScrollView(
       child: Column(
@@ -104,21 +118,36 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                     Expanded(
                       child: Text(
                         event.title,
-                        style: TextStyle(color: context.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: context.textPrimary, fontSize: 19, fontWeight: FontWeight.bold),
                       ),
                     ),
+                    if (canEdit)
+                      IconButton(
+                        onPressed: () => _edit(event),
+                        icon: Icon(Icons.edit_outlined, color: context.textSecondary),
+                      ),
                     IconButton(
                       onPressed: () => _share(event, localDate),
                       icon: Icon(Icons.share_outlined, color: context.textSecondary),
                     ),
-                    IconButton(
-                      onPressed: uid == null ? null : _toggleLike,
-                      icon: Icon(
-                        liked ? Icons.favorite : Icons.favorite_border,
-                        color: liked ? Colors.redAccent : context.textSecondary,
+                    InkWell(
+                      onTap: uid == null ? null : _toggleLike,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              liked ? Icons.favorite : Icons.favorite_border,
+                              color: liked ? Colors.redAccent : context.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary)),
+                          ],
+                        ),
                       ),
                     ),
-                    Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary)),
                   ],
                 ),
                 if (event.description.isNotEmpty) ...[
