@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/member_repository.dart';
@@ -10,6 +9,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../util/church_membership_options.dart';
+import '../util/photo_picker.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Tela de edição de perfil aberta a partir do menu "Mais". Além de foto e
@@ -51,14 +51,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
-      setState(() => _pickedPhoto = File(picked.path));
+    final photo = await pickAndCropProfilePhoto();
+    if (photo != null) {
+      setState(() => _pickedPhoto = photo);
     }
   }
 

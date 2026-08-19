@@ -5,13 +5,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
+import '../util/photo_picker.dart';
 import '../widgets/google_logo.dart';
 import 'complete_google_profile_page.dart';
 import 'login_page.dart' show ApprovalResult, resolveApprovalState;
@@ -63,14 +63,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
-      setState(() => _pickedPhoto = File(picked.path));
+    final photo = await pickAndCropProfilePhoto();
+    if (photo != null) {
+      setState(() => _pickedPhoto = photo);
     }
   }
 

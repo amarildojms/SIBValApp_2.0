@@ -4,13 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
+import '../util/photo_picker.dart';
 import 'privacy_policy_page.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/ui/auth/CompleteGoogleProfileActivity.kt
@@ -64,14 +64,9 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
-      setState(() => _pickedPhoto = File(picked.path));
+    final photo = await pickAndCropProfilePhoto();
+    if (photo != null) {
+      setState(() => _pickedPhoto = photo);
     }
   }
 

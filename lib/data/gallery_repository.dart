@@ -59,6 +59,12 @@ class GalleryRepository {
     await _albums.doc(albumId).delete();
   }
 
+  /// Não mexe na capa do álbum aqui de propósito — quando várias fotos sobem
+  /// de uma vez (`AlbumPhotosPage._upload`, seleção múltipla), cada upload
+  /// roda em paralelo; se cada um tentasse gravar `coverUrl` por conta
+  /// própria, viraria uma corrida e a capa acabava em uma foto aleatória do
+  /// lote, não necessariamente a última. Quem chama decide a capa via
+  /// `setAlbumCover`, uma vez só, depois que todos os uploads terminarem.
   Future<GalleryImage> uploadImage({
     required File file,
     required String albumId,
@@ -80,10 +86,6 @@ class GalleryRepository {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    try {
-      await _albums.doc(albumId).update({'coverUrl': downloadUrl});
-    } catch (_) {}
-
     return GalleryImage(
       id: doc.id,
       albumId: albumId,
@@ -95,6 +97,15 @@ class GalleryRepository {
     );
   }
 
+  Future<void> setAlbumCover(String albumId, String coverUrl) async {
+    try {
+      await _albums.doc(albumId).update({'coverUrl': coverUrl});
+    } catch (_) {}
+  }
+
+  /// Se a foto excluída era a capa do álbum, recalcula pra foto mais recente
+  /// que sobrar (ou limpa, se o álbum ficou vazio) — sem isso a capa ficava
+  /// "quebrada" (apontando pra uma imagem que não existe mais no Storage).
   Future<void> deleteImage(GalleryImage image) async {
     if (image.storagePath.isNotEmpty) {
       try {
@@ -102,6 +113,15 @@ class GalleryRepository {
       } catch (_) {}
     }
     await _images.doc(image.id).delete();
+
+    try {
+      final albumSnapshot = await _albums.doc(image.albumId).get();
+      if (albumSnapshot.data()?['coverUrl'] != image.downloadUrl) return;
+      final remaining =
+          await _images.where('albumId', isEqualTo: image.albumId).orderBy('createdAt', descending: true).limit(1).get();
+      final newCover = remaining.docs.isEmpty ? '' : (remaining.docs.first.data()['downloadUrl'] as String? ?? '');
+      await _albums.doc(image.albumId).update({'coverUrl': newCover});
+    } catch (_) {}
   }
 }
 

@@ -103,28 +103,77 @@ class AlbumPhotosPage extends ConsumerWidget {
   }
 
   Future<void> _upload(BuildContext context, WidgetRef ref) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
+    final picked = await ImagePicker().pickMultiImage(
       maxWidth: 1280,
       maxHeight: 1280,
       imageQuality: 82,
     );
-    if (picked == null) return;
+    if (picked.isEmpty) return;
 
     final uid = ref.read(currentUidProvider) ?? '';
     final profile = ref.read(currentUserProfileProvider).asData?.value;
-    try {
-      await ref.read(galleryRepositoryProvider).uploadImage(
-            file: File(picked.path),
-            albumId: albumId,
-            uploaderUid: uid,
-            uploaderName: profile?.name ?? '',
+    final repo = ref.read(galleryRepositoryProvider);
+    final total = picked.length;
+    var done = 0;
+    var failures = 0;
+
+    if (!context.mounted) return;
+    late StateSetter dialogSetState;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          dialogSetState = setState;
+          return AlertDialog(
+            content: Row(
+              children: [
+                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: 16),
+                Expanded(child: Text('Enviando foto $done de $total...')),
+              ],
+            ),
           );
-      ref.invalidate(albumImagesProvider(albumId));
-      ref.invalidate(albumsProvider);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao subir foto: $e')));
+        },
+      ),
+    );
+
+    // Indexado (não uma lista que cada upload dá `.add`) pra preservar a
+    // ordem de seleção do usuário mesmo rodando em paralelo — é dela que
+    // tiramos a foto que vira capa (a última da seleção), não a que
+    // terminar de subir por último.
+    final uploaded = List<GalleryImage?>.filled(picked.length, null);
+    await Future.wait(picked.indexed.map((entry) async {
+      final (index, xfile) = entry;
+      try {
+        uploaded[index] = await repo.uploadImage(
+          file: File(xfile.path),
+          albumId: albumId,
+          uploaderUid: uid,
+          uploaderName: profile?.name ?? '',
+        );
+      } catch (_) {
+        failures++;
+      } finally {
+        done++;
+        dialogSetState(() {});
+      }
+    }));
+
+    final lastUploaded = uploaded.lastWhere((image) => image != null, orElse: () => null);
+    if (lastUploaded != null) {
+      await repo.setAlbumCover(albumId, lastUploaded.downloadUrl);
+    }
+
+    ref.invalidate(albumImagesProvider(albumId));
+    ref.invalidate(albumsProvider);
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      if (failures > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$failures de $total fotos falharam ao subir.')),
+        );
       }
     }
   }

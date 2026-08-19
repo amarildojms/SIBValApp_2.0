@@ -15,4 +15,8 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <!-- Requerida pelo image_cropper (lib uCrop, ver AndroidManifest.xml):
+         o app nunca declarou um tema AppCompat antes, e a UCropActivity
+         precisa de um pra abrir. -->
+    <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar" />
 </resources>

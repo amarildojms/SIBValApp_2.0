@@ -401,9 +401,9 @@ class _CompletionBadge extends StatelessWidget {
   }
 }
 
-/// "Membro SIB Val há X ano(s) e Y mês(es)" — omite a parte zerada (só anos
-/// se months == 0, só meses se years == 0). `null` quando ainda não há data
-/// de membresia registrada.
+/// "Membro há X ano(s) e Y mês(es)" — omite a parte zerada (só anos se
+/// months == 0, só meses se years == 0). `null` quando ainda não há data de
+/// membresia registrada.
 String? _membershipDurationLabel(DateTime? membershipDate) {
   if (membershipDate == null) return null;
   final now = DateTime.now();
@@ -414,9 +414,9 @@ String? _membershipDurationLabel(DateTime? membershipDate) {
   final months = totalMonths % 12;
   final yearsLabel = years == 1 ? '1 ano' : '$years anos';
   final monthsLabel = months == 1 ? '1 mês' : '$months meses';
-  if (years == 0) return 'Membro SIB Val há $monthsLabel';
-  if (months == 0) return 'Membro SIB Val há $yearsLabel';
-  return 'Membro SIB Val há $yearsLabel e $monthsLabel';
+  if (years == 0) return 'Membro há $monthsLabel';
+  if (months == 0) return 'Membro há $yearsLabel';
+  return 'Membro há $yearsLabel e $monthsLabel';
 }
 
 /// Tile em grade (ícone em cima, rótulo embaixo) — espelha o
