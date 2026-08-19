@@ -26,6 +26,7 @@ class CurrentUserProfile {
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
   bool get canManageEventos => isAdmin || roles.contains('eventos');
   bool get canManageGallery => isAdmin || roles.contains('midia');
+  bool get canManageDevotionals => isAdmin || roles.contains('secretaria');
 
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.

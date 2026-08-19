@@ -4,12 +4,15 @@ import 'package:intl/intl.dart';
 
 import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
+import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'devotional_detail_page.dart';
+import 'devotional_repository_page.dart';
 
 /// Espelha DevotionalListFragment.kt: lista de devocionais publicados, não lidos
-/// em destaque (negrito/branco), lidos em cinza.
+/// em destaque (negrito/branco), lidos em cinza. O FAB de editar (dourado, só
+/// pra admin/Secretaria) abre o repositório de gerenciamento.
 class DevotionalsListPage extends ConsumerWidget {
   const DevotionalsListPage({super.key});
 
@@ -19,9 +22,20 @@ class DevotionalsListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final devotionalsAsync = ref.watch(devotionalsProvider);
     final uid = ref.watch(currentUidProvider);
+    final canManageDevotionals = ref.watch(currentUserProfileProvider).asData?.value?.canManageDevotionals ?? false;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
+      floatingActionButton: canManageDevotionals
+          ? FloatingActionButton(
+              backgroundColor: SibValColors.goldAccent,
+              tooltip: 'Repositório de devocionais',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DevotionalRepositoryPage()),
+              ),
+              child: const Icon(Icons.edit, color: SibValColors.navyBlueDark),
+            )
+          : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
