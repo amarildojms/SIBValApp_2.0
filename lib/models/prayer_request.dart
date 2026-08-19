@@ -8,6 +8,8 @@ class PrayerRequest {
   final String authorEmail;
   final bool isAnonymous;
   final String text;
+  final bool isArchived;
+  final DateTime? archivedAt;
   final DateTime? createdAt;
 
   const PrayerRequest({
@@ -17,6 +19,8 @@ class PrayerRequest {
     required this.authorEmail,
     required this.isAnonymous,
     required this.text,
+    this.isArchived = false,
+    this.archivedAt,
     required this.createdAt,
   });
 
@@ -29,6 +33,8 @@ class PrayerRequest {
       authorEmail: data['authorEmail'] as String? ?? '',
       isAnonymous: data['isAnonymous'] as bool? ?? false,
       text: data['text'] as String? ?? '',
+      isArchived: data['isArchived'] as bool? ?? false,
+      archivedAt: (data['archivedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }

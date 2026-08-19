@@ -73,27 +73,26 @@ padrão, a menos que o usuário peça algo diferente.
 - `506d3a7` Rebatizado para SIBVal Connect; refinamento de notificações,
   busca e ícones nativos
 
-## O que falta migrar (última verificação: 18/08/2026)
+## O que falta migrar (última verificação: 19/08/2026)
 
 Comparar `SIBValApp2/app/src/main/java/com/sibval/app/ui/<feature>/` com
 `lib/<feature>/` para reconfirmar antes de assumir que algo ainda falta —
-esta lista pode estar desatualizada:
+esta lista já foi corrigida uma vez por estar desatualizada (o commit
+`8b2eb87` e outros do dia 18/08 já tinham resolvido a maior parte do que
+constava aqui antes). Itens já confirmados como completos e removidos desta
+lista: CRUD de eventos recorrentes, formulário de evento + pendentes +
+filtro, admin de devocionais, busca/favoritos da Bíblia, cadastro
+(`register_page.dart`), e agora também o arquivamento de pedidos de oração.
 
-- CRUD completo de eventos recorrentes no admin, além dos flyers
-  (`RecurringEventListFragment`, `RecurringEventFormFragment`,
-  `RecurringEventAdapter`).
-- Formulário de evento + aprovação de pendentes + filtro avançado
-  (`EventFormFragment`, `EventPendingListFragment`,
-  `EventFilterBottomSheet`) — parte disso já veio no commit `8b2eb87`, vale
-  reconferir o que ainda resta.
-- Admin de devocionais (`DevotionalFormFragment`,
-  `DevotionalRepositoryFragment`) — hoje o Flutter só tem listagem/detalhe de
-  leitura.
-- Favoritos e busca na Bíblia (`BibleFavoritesFragment`,
-  `BibleSearchFragment`).
-- Pedidos de oração arquivados (`ArchivedPrayerFragment`).
-- Fluxos de registro / completar perfil Google (`RegisterActivity`,
-  `CompleteGoogleProfileActivity`) — hoje `lib/auth/` só tem `login_page.dart`.
+Ainda falta:
+- Fluxo de completar perfil ao entrar com Google
+  (`CompleteGoogleProfileActivity`) — hoje `lib/auth/` não tem equivalente.
+- Envio do pedido de oração ao responsável via WhatsApp + tela de ajuste do
+  telefone do responsável (`PrayerFragment.sendToResponsible`,
+  `SettingsRepository.getPrayerResponsiblePhone`) — o arquivamento manual
+  (arquivar/excluir por toque longo + tela "Pedidos arquivados") já foi
+  implementado em `lib/prayer/`, mas o disparo automático de arquivamento via
+  envio ao responsável, que existe no nativo, ainda não tem equivalente aqui.
 
 ## Como responder "o que falta migrar"
 

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/prayer_request.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/PrayerRepository.kt.
-/// Arquivados e telefone do responsável ficam para depois.
+/// Telefone do responsável (envio via WhatsApp) fica para depois.
 class PrayerRepository {
   PrayerRepository(this._firestore);
 
@@ -36,6 +36,22 @@ class PrayerRepository {
     return snapshot.docs.map(PrayerRequest.fromFirestore).toList();
   }
 
+  Future<List<PrayerRequest>> getArchived({int limit = 200}) async {
+    final snapshot = await _requests
+        .where('isArchived', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snapshot.docs.map(PrayerRequest.fromFirestore).toList();
+  }
+
+  Future<void> archive(String id) {
+    return _requests.doc(id).update({
+      'isArchived': true,
+      'archivedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> delete(String id) {
     return _requests.doc(id).delete();
   }
@@ -47,4 +63,8 @@ final prayerRepositoryProvider = Provider<PrayerRepository>((ref) {
 
 final prayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
   return ref.watch(prayerRepositoryProvider).getAll();
+});
+
+final archivedPrayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
+  return ref.watch(prayerRepositoryProvider).getArchived();
 });

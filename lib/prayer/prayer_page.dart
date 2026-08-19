@@ -7,11 +7,12 @@ import '../data/user_repository.dart';
 import '../models/prayer_request.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'archived_prayer_page.dart';
 
 /// Espelha PrayerFragment.kt/PrayerViewModel.kt: formulário de envio (anônimo
 /// ou identificado) sempre visível, lista só pra quem tem permissão
-/// (admin/intercessão). Arquivados e telefone do responsável ficam de fora
-/// desta passada.
+/// (admin/intercessão). Telefone do responsável (envio via WhatsApp) fica de
+/// fora desta passada — o item aqui é arquivar/excluir via toque longo.
 class PrayerPage extends ConsumerStatefulWidget {
   const PrayerPage({super.key});
 
@@ -84,6 +85,11 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _archive(String id) async {
+    await ref.read(prayerRepositoryProvider).archive(id);
+    ref.invalidate(prayerRequestsProvider);
   }
 
   Future<void> _delete(String id) async {
@@ -160,8 +166,18 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
                 ),
               ),
             )
-          else
-            _PrayerList(onDelete: _delete),
+          else ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArchivedPrayerPage())),
+                icon: const Icon(Icons.archive_outlined, size: 18),
+                label: const Text('Pedidos arquivados'),
+              ),
+            ),
+            _PrayerList(onArchive: _archive, onDelete: _delete),
+          ],
         ],
         ),
       ),
@@ -170,8 +186,9 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
 }
 
 class _PrayerList extends ConsumerWidget {
-  const _PrayerList({required this.onDelete});
+  const _PrayerList({required this.onArchive, required this.onDelete});
 
+  final void Function(String id) onArchive;
   final void Function(String id) onDelete;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
@@ -203,7 +220,7 @@ class _PrayerList extends ConsumerWidget {
                   trailing: request.createdAt != null
                       ? Text(_dateFormat.format(request.createdAt!), style: const TextStyle(fontSize: 11))
                       : null,
-                  onLongPress: () => _confirmDelete(context, request.id),
+                  onLongPress: () => _showActions(context, request.id),
                 ),
               ),
           ],
@@ -212,23 +229,50 @@ class _PrayerList extends ConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, String id) {
-    showDialog<void>(
+  Future<void> _showActions(BuildContext context, String id) async {
+    final choice = await showDialog<_PrayerAction>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir pedido'),
-        content: const Text('Tem certeza que deseja excluir este pedido de oração?'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Pedido de oração'),
+        content: const Text('O que deseja fazer com este pedido?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              onDelete(id);
-            },
+            onPressed: () => Navigator.of(dialogContext).pop(_PrayerAction.archive),
+            child: const Text('Arquivar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_PrayerAction.delete),
             child: const Text('Excluir'),
           ),
         ],
       ),
     );
+    switch (choice) {
+      case _PrayerAction.archive:
+        onArchive(id);
+      case _PrayerAction.delete:
+        await _confirmDelete(context, id);
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, String id) async {
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir pedido'),
+        content: const Text('Tem certeza que deseja excluir este pedido de oração? Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmed == true) onDelete(id);
   }
 }
+
+enum _PrayerAction { archive, delete }
