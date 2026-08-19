@@ -201,6 +201,7 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showBirthdayRing = hasBirthday && !isSelected;
     return Padding(
       padding: const EdgeInsets.all(2),
       child: Material(
@@ -209,23 +210,20 @@ class _DayCell extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '$day',
-                  style: TextStyle(
-                    color: isSelected ? Theme.of(context).colorScheme.onPrimary : context.textPrimary,
-                    fontWeight: hasBirthday ? FontWeight.bold : FontWeight.normal,
-                  ),
+          child: Container(
+            decoration: showBirthdayRing
+                ? BoxDecoration(shape: BoxShape.circle, border: Border.all(color: SibValColors.goldAccent, width: 2))
+                : null,
+            child: Center(
+              child: Text(
+                '$day',
+                style: TextStyle(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onPrimary
+                      : (hasBirthday ? SibValColors.goldAccent : context.textPrimary),
+                  fontWeight: hasBirthday ? FontWeight.bold : FontWeight.normal,
                 ),
-                if (hasBirthday && !isSelected)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(Icons.circle, size: 4, color: Colors.amber),
-                  ),
-              ],
+              ),
             ),
           ),
         ),

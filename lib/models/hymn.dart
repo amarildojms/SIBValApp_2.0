@@ -4,8 +4,19 @@ class Hymn {
   final String number;
   final String title;
   final String lyrics;
+  final bool isFavorite;
 
-  const Hymn({required this.id, required this.number, required this.title, this.lyrics = ''});
+  const Hymn({
+    required this.id,
+    required this.number,
+    required this.title,
+    this.lyrics = '',
+    this.isFavorite = false,
+  });
+
+  Hymn copyWith({bool? isFavorite}) {
+    return Hymn(id: id, number: number, title: title, lyrics: lyrics, isFavorite: isFavorite ?? this.isFavorite);
+  }
 }
 
 /// Espelha o enum Hymnal.kt: ambos os hinários usam o mesmo schema OpenLP

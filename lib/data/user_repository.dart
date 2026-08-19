@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_user.dart';
@@ -58,11 +61,50 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
 /// pode chegar nessas ações (a tela que as usa só aparece pra admin no
 /// menu Mais).
 class UserRepository {
-  UserRepository(this._firestore);
+  UserRepository(this._firestore, this._storage);
 
   final FirebaseFirestore _firestore;
+  final FirebaseStorage _storage;
 
   CollectionReference<Map<String, dynamic>> get _users => _firestore.collection('users');
+
+  /// Espelha RegisterViewModel.kt: cria o doc em `users/{uid}` com status
+  /// pendente de aprovação — precisa de um admin em Gerenciar Usuários pra
+  /// liberar o acesso.
+  Future<void> createUserProfile({
+    required String uid,
+    required String name,
+    required String email,
+    required DateTime birthdate,
+  }) {
+    return _users.doc(uid).set({
+      'name': name,
+      'email': email,
+      'birthdate': Timestamp.fromDate(birthdate),
+      'birthMonth': birthdate.month,
+      'birthDay': birthdate.day,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': UserStatus.pending,
+      'isAdmin': false,
+      'isBlocked': false,
+      'roles': <String>[],
+    });
+  }
+
+  /// Mesmo caminho de storage do app nativo (`users/{uid}.jpg`) — é o que a
+  /// Cloud Function de sincronização de foto espera encontrar.
+  Future<String> uploadProfilePhoto(String uid, File photoFile) async {
+    final storagePath = 'users/$uid.jpg';
+    final ref = _storage.ref(storagePath);
+    await ref.putFile(photoFile);
+    final photoUrl = await ref.getDownloadURL();
+    await _users.doc(uid).update({'photoUrl': photoUrl, 'photoStoragePath': storagePath});
+    return photoUrl;
+  }
+
+  Future<void> updateName(String uid, String name) {
+    return _users.doc(uid).update({'name': name});
+  }
 
   Future<List<AppUser>> getAllUsers() async {
     final snapshot = await _users.orderBy('name').get();
@@ -92,7 +134,7 @@ class UserRepository {
 }
 
 final userRepositoryProvider = Provider<UserRepository>((ref) {
-  return UserRepository(FirebaseFirestore.instance);
+  return UserRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
 });
 
 /// Pendentes primeiro, depois por nome — mesma ordenação de ManageUsersViewModel.kt.

@@ -25,6 +25,10 @@ class PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (post.postType == PostType.birthday) {
+      return _buildBirthdayCard(context);
+    }
+
     final cardColor = Theme.of(context).cardColor;
     return Card(
       margin: const EdgeInsets.all(8),
@@ -72,27 +76,80 @@ class PostCard extends StatelessWidget {
                 ),
               ),
             ),
+          _buildLikeCommentBar(context),
+        ],
+      ),
+    );
+  }
+
+  /// Post automático de aniversário: card menor, com a miniatura da foto à
+  /// esquerda e a mensagem de felicitações ao lado, em vez do layout grande
+  /// de post comum (sem imagem 16:9).
+  Widget _buildBirthdayCard(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                IconButton(
-                  onPressed: onLikeTap,
-                  icon: Icon(
-                    liked ? Icons.favorite : Icons.favorite_border,
-                    color: liked ? Colors.redAccent : context.textSecondary,
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  backgroundImage: post.imageUrl.isNotEmpty ? NetworkImage(post.imageUrl) : null,
+                  child: post.imageUrl.isEmpty
+                      ? Icon(Icons.cake_outlined, color: context.textSecondary)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(post.text, style: TextStyle(color: context.textPrimary)),
+                      if (post.createdAt != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _dateFormat.format(post.createdAt!),
+                          style: TextStyle(color: context.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                Text('${post.likedBy.length}', style: TextStyle(color: context.textPrimary)),
-                const SizedBox(width: 16),
-                IconButton(
-                  onPressed: onCommentTap,
-                  icon: Icon(Icons.chat_bubble_outline, color: context.textSecondary),
-                ),
-                Text('${post.commentCount}', style: TextStyle(color: context.textPrimary)),
               ],
             ),
           ),
+          _buildLikeCommentBar(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLikeCommentBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onLikeTap,
+            icon: Icon(
+              liked ? Icons.favorite : Icons.favorite_border,
+              color: liked ? Colors.redAccent : context.textSecondary,
+            ),
+          ),
+          Text('${post.likedBy.length}', style: TextStyle(color: context.textPrimary)),
+          const SizedBox(width: 16),
+          IconButton(
+            onPressed: onCommentTap,
+            icon: Icon(Icons.chat_bubble_outline, color: context.textSecondary),
+          ),
+          Text('${post.commentCount}', style: TextStyle(color: context.textPrimary)),
         ],
       ),
     );

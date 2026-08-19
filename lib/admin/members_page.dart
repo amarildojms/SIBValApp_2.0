@@ -46,8 +46,9 @@ class _MembersPageState extends ConsumerState<MembersPage> {
         bottom: true,
         top: false,
         child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ScreenTitle('Membros'),
+          const ScreenTitle('Rol de Membros'),
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(

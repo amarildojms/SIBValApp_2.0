@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/bible_favorites_repository.dart';
 import '../data/bible_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
@@ -15,7 +17,8 @@ const _fontSizeStep = 2.0;
 
 /// Espelha BibleReaderFragment.kt/BibleReaderViewModel.kt: número do versículo
 /// em sobrescrito/dourado, navegação Anterior/Próximo cruzando limites de
-/// livro, fonte ajustável e persistida. Favoritos/busca ficam para depois.
+/// livro, fonte ajustável e persistida, e favoritar versículo (toque no texto
+/// seleciona, toque na estrela do cabeçalho confirma o favorito).
 class BibleReaderPage extends ConsumerStatefulWidget {
   const BibleReaderPage({super.key, required this.bookId, required this.bookName, required this.chapter});
 
@@ -33,6 +36,8 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
   late int _chapter;
   double _fontSize = _defaultFontSize;
   bool _loadingFontSize = true;
+  final _selectedVerses = <int>{};
+  var _favoriteVerses = <int>{};
 
   @override
   void initState() {
@@ -41,6 +46,7 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     _bookName = widget.bookName;
     _chapter = widget.chapter;
     _loadFontSize();
+    _loadFavorites();
   }
 
   Future<void> _loadFontSize() async {
@@ -53,6 +59,18 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     }
   }
 
+  Future<void> _loadFavorites() async {
+    final all = await ref.read(bibleFavoritesRepositoryProvider).getAll();
+    final prefix = '$_bookId:$_chapter:';
+    final favorites = all.where((key) => key.startsWith(prefix)).map((key) => int.parse(key.split(':')[2])).toSet();
+    if (mounted) {
+      setState(() {
+        _favoriteVerses = favorites;
+        _selectedVerses.clear();
+      });
+    }
+  }
+
   Future<void> _changeFontSize(double delta) async {
     final newSize = (_fontSize + delta).clamp(_minFontSize, _maxFontSize);
     setState(() => _fontSize = newSize);
@@ -60,9 +78,33 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     await prefs.setDouble(_fontSizeKey, newSize);
   }
 
+  Future<void> _toggleVerseTap(int verseNumber) async {
+    if (_favoriteVerses.contains(verseNumber)) {
+      await ref.read(bibleFavoritesRepositoryProvider).toggle(_bookId, _chapter, verseNumber);
+      setState(() => _favoriteVerses.remove(verseNumber));
+      return;
+    }
+    setState(() {
+      if (!_selectedVerses.remove(verseNumber)) _selectedVerses.add(verseNumber);
+    });
+  }
+
+  Future<void> _commitFavorites() async {
+    if (_selectedVerses.isEmpty) return;
+    final repository = ref.read(bibleFavoritesRepositoryProvider);
+    for (final verseNumber in _selectedVerses) {
+      await repository.toggle(_bookId, _chapter, verseNumber);
+    }
+    setState(() {
+      _favoriteVerses.addAll(_selectedVerses);
+      _selectedVerses.clear();
+    });
+  }
+
   Future<void> _goToPrevious() async {
     if (_chapter > 1) {
       setState(() => _chapter -= 1);
+      _loadFavorites();
       return;
     }
     if (_bookId > BibleRepository.firstBookId) {
@@ -75,12 +117,14 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
         _bookName = name;
         _chapter = count;
       });
+      _loadFavorites();
     }
   }
 
   Future<void> _goToNext(int currentChapterCount) async {
     if (_chapter < currentChapterCount) {
       setState(() => _chapter += 1);
+      _loadFavorites();
       return;
     }
     if (_bookId < BibleRepository.lastBookId) {
@@ -92,6 +136,7 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
         _bookName = name;
         _chapter = 1;
       });
+      _loadFavorites();
     }
   }
 
@@ -105,13 +150,7 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     final hasNext = !(_bookId == BibleRepository.lastBookId && chapterCount != null && _chapter == chapterCount);
 
     return Scaffold(
-      appBar: SibValAppBar(
-        isHome: false,
-        actions: [
-          IconButton(onPressed: () => _changeFontSize(-_fontSizeStep), icon: const Icon(Icons.text_decrease)),
-          IconButton(onPressed: () => _changeFontSize(_fontSizeStep), icon: const Icon(Icons.text_increase)),
-        ],
-      ),
+      appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
         bottom: true,
         top: false,
@@ -120,7 +159,12 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ScreenTitle('$_bookName $_chapter'),
+                _ReaderHeader(
+                  title: '$_bookName $_chapter',
+                  onFavoriteTap: _commitFavorites,
+                  onDecreaseFont: () => _changeFontSize(-_fontSizeStep),
+                  onIncreaseFont: () => _changeFontSize(_fontSizeStep),
+                ),
                 Expanded(
                   child: versesAsync.when(
                     loading: () => const Center(child: CircularProgressIndicator()),
@@ -129,7 +173,13 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
                     data: (verses) => SingleChildScrollView(
                       key: ValueKey('$_bookId-$_chapter'),
                       padding: const EdgeInsets.all(20),
-                      child: _VersesText(verses: verses, fontSize: _fontSize),
+                      child: _VersesText(
+                        verses: verses,
+                        fontSize: _fontSize,
+                        selectedVerses: _selectedVerses,
+                        favoriteVerses: _favoriteVerses,
+                        onVerseTap: _toggleVerseTap,
+                      ),
                     ),
                   ),
                 ),
@@ -158,26 +208,118 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
   }
 }
 
-class _VersesText extends StatelessWidget {
-  const _VersesText({required this.verses, required this.fontSize});
+/// Barra fixa com o título (livro/capítulo) e, ao lado, favoritar + zoom —
+/// espelha o `readerHeader` do fragment_bible_reader.xml nativo.
+class _ReaderHeader extends StatelessWidget {
+  const _ReaderHeader({
+    required this.title,
+    required this.onFavoriteTap,
+    required this.onDecreaseFont,
+    required this.onIncreaseFont,
+  });
 
-  final List<BibleVerse> verses;
-  final double fontSize;
+  final String title;
+  final VoidCallback onFavoriteTap;
+  final VoidCallback onDecreaseFont;
+  final VoidCallback onIncreaseFont;
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Theme.of(context).colorScheme.surface,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Favoritar selecionados',
+            onPressed: onFavoriteTap,
+            icon: Icon(Icons.star_outline, color: context.textPrimary),
+          ),
+          IconButton(onPressed: onDecreaseFont, icon: const Icon(Icons.text_decrease)),
+          IconButton(onPressed: onIncreaseFont, icon: const Icon(Icons.text_increase)),
+        ],
+      ),
+    );
+  }
+}
+
+class _VersesText extends StatefulWidget {
+  const _VersesText({
+    required this.verses,
+    required this.fontSize,
+    required this.selectedVerses,
+    required this.favoriteVerses,
+    required this.onVerseTap,
+  });
+
+  final List<BibleVerse> verses;
+  final double fontSize;
+  final Set<int> selectedVerses;
+  final Set<int> favoriteVerses;
+  final ValueChanged<int> onVerseTap;
+
+  @override
+  State<_VersesText> createState() => _VersesTextState();
+}
+
+class _VersesTextState extends State<_VersesText> {
+  final _recognizers = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+
     return Text.rich(
       TextSpan(
         children: [
-          for (final verse in verses) ...[
+          for (final verse in widget.verses) ...[
             TextSpan(
               text: '${verse.number} ',
-              style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: fontSize * 0.65),
+              style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: widget.fontSize * 0.65),
+              recognizer: _recognizerFor(verse.number),
             ),
-            TextSpan(text: '${verse.text} ', style: TextStyle(color: context.textPrimary, fontSize: fontSize, height: 1.5)),
+            TextSpan(
+              text: '${verse.text} ',
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: widget.fontSize,
+                height: 1.5,
+                backgroundColor: widget.favoriteVerses.contains(verse.number)
+                    ? SibValColors.goldAccent.withValues(alpha: 0.25)
+                    : widget.selectedVerses.contains(verse.number)
+                        ? Colors.blue.withValues(alpha: 0.25)
+                        : null,
+              ),
+              recognizer: _recognizerFor(verse.number),
+            ),
           ],
         ],
       ),
     );
+  }
+
+  TapGestureRecognizer _recognizerFor(int verseNumber) {
+    final recognizer = TapGestureRecognizer()..onTap = () => widget.onVerseTap(verseNumber);
+    _recognizers.add(recognizer);
+    return recognizer;
   }
 }

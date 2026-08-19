@@ -73,6 +73,7 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Comentários'),
           Expanded(

@@ -6,6 +6,7 @@ import 'admin/event_email_senders_page.dart';
 import 'admin/manage_users_page.dart';
 import 'admin/members_page.dart';
 import 'admin/recurring_event_flyer_repository_page.dart';
+import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
@@ -60,13 +61,38 @@ class _MainShellState extends State<MainShell> {
           onDestinationSelected: (index) => setState(() => _index = index),
           backgroundColor: SibValColors.navyBlue,
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.menu_book_outlined), label: 'Devocionais'),
+            NavigationDestination(icon: _DevotionalsIcon(), label: 'Devocionais'),
             NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
             NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
             NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
             NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Bíblia aberta com um coração por cima, já que o Material não tem um ícone
+/// pronto pra "devocional" — combina os dois ícones existentes numa Stack.
+class _DevotionalsIcon extends StatelessWidget {
+  const _DevotionalsIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 26,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          const Icon(Icons.menu_book_outlined, size: 24),
+          Positioned(
+            top: -6,
+            child: Icon(Icons.favorite, size: 12, color: SibValColors.goldAccent),
+          ),
+        ],
       ),
     );
   }
@@ -111,6 +137,7 @@ class _MaisPage extends ConsumerWidget {
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
 
     final tiles = [
+      // Tier 1 — disponível para todos, sem login.
       _MoreTile(
         icon: Icons.photo_library_outlined,
         label: 'Galeria',
@@ -129,16 +156,10 @@ class _MaisPage extends ConsumerWidget {
       ),
       _MoreTile(
         icon: Icons.library_music_outlined,
-        label: 'Hinário Cristão',
+        label: 'HCC',
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
       ),
-      if (uid != null)
-        _MoreTile(
-          icon: Icons.cake_outlined,
-          label: 'Aniversariantes',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
-        ),
       _MoreTile(
         icon: Icons.favorite_outline,
         label: 'Pedido de Oração',
@@ -154,10 +175,18 @@ class _MaisPage extends ConsumerWidget {
         label: 'Tema',
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ThemeSettingsPage())),
       ),
+      // Tier 2 — só pra quem está autenticado.
+      if (uid != null)
+        _MoreTile(
+          icon: Icons.cake_outlined,
+          label: 'Aniversariantes',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
+        ),
+      // Tier 3 — admin / secretaria / eventos.
       if (canManageBirthdays)
         _MoreTile(
           icon: Icons.people_outline,
-          label: 'Membros',
+          label: 'Rol de Membros',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MembersPage())),
         ),
       if (isAdmin)
@@ -177,23 +206,28 @@ class _MaisPage extends ConsumerWidget {
       if (canManageEventos)
         _MoreTile(
           icon: Icons.email_outlined,
-          label: 'Remetentes de E-mail de Eventos',
+          label: 'E-mails de eventos',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventEmailSendersPage())),
         ),
-      const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto', enabled: false),
+      // Tier 4 — recursos ainda não implementados.
+      const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto (Em breve)', enabled: false),
     ];
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: ListView(
         children: [
-          const ScreenTitle('Mais'),
-          if (uid != null && profile != null) _MoreHeader(profile: profile),
+          if (uid != null && profile != null)
+            _MoreHeader(profile: profile)
+          else
+            const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            mainAxisSpacing: 0,
+            crossAxisSpacing: 0,
             childAspectRatio: 0.85,
             children: tiles,
           ),
@@ -229,6 +263,8 @@ class _MaisPage extends ConsumerWidget {
   }
 }
 
+/// Substitui o título fixo "Mais": vira o link para editar o perfil (troca de
+/// foto e outros dados), igual pedido pelo usuário.
 class _MoreHeader extends StatelessWidget {
   const _MoreHeader({required this.profile});
 
@@ -236,26 +272,43 @@ class _MoreHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: SibValColors.navyBlueLight, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: Colors.white24,
-            backgroundImage: profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null,
-            child: profile.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfilePage())),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: SibValColors.navyBlueLight, borderRadius: BorderRadius.circular(12)),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.white24,
+                backgroundImage: profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null,
+                child: profile.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.shortName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Editar perfil',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white70),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              profile.shortName,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -279,7 +332,7 @@ class _MoreTile extends StatelessWidget {
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -287,7 +340,7 @@ class _MoreTile extends StatelessWidget {
               label: Text('$badgeCount'),
               isLabelVisible: badgeCount > 0,
               child: CircleAvatar(
-                radius: 24,
+                radius: 22,
                 backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Icon(icon, color: color),
               ),

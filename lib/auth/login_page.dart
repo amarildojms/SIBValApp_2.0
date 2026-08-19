@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../theme/app_theme.dart';
+import 'register_page.dart';
 
 /// Resultado de [resolveApprovalState] — espelha o `AuthUiState` do app Android
 /// original (ui/auth/AuthUiState.kt): depois de autenticar, ainda é preciso
@@ -52,6 +52,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -164,6 +165,40 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _forgotPassword() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Recuperar senha'),
+        content: TextField(
+          controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'E-mail'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(emailController.text.trim()),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (email == null) return;
+    if (email.isEmpty || !email.contains('@')) {
+      _showMessage('E-mail inválido.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _showMessage('E-mail de recuperação enviado.');
+    } on FirebaseAuthException catch (_) {
+      _showMessage('Falha ao enviar e-mail de recuperação.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,14 +210,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '2ª Igreja Batista\nem Valparaíso',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: context.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
+                Image.asset('assets/images/logo.png', height: 120),
                 const SizedBox(height: 40),
                 TextField(
                   controller: _emailController,
@@ -192,10 +220,23 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Senha'),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _loading ? null : _forgotPassword,
+                    child: const Text('Esqueci minha senha'),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -210,6 +251,13 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterPage())),
+                  child: const Text('Cadastre-se'),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(

@@ -37,6 +37,7 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
         bottom: true,
         top: false,
         child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Gerenciar Usuários'),
           Padding(

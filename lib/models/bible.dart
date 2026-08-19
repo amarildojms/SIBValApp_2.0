@@ -13,3 +13,23 @@ class BibleVerse {
 
   const BibleVerse({required this.number, required this.text});
 }
+
+/// Uma referência de versículo (livro + capítulo + número) com o texto —
+/// usada tanto na busca quanto na lista de favoritos.
+class BibleVerseRef {
+  final int bookId;
+  final String bookName;
+  final int chapter;
+  final int verse;
+  final String text;
+
+  const BibleVerseRef({
+    required this.bookId,
+    required this.bookName,
+    required this.chapter,
+    required this.verse,
+    required this.text,
+  });
+
+  String get reference => '$bookName $chapter:$verse';
+}

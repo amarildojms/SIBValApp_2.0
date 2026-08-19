@@ -42,6 +42,7 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
         bottom: true,
         top: false,
         child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ScreenTitle('Remetentes de E-mail de Eventos'),
           Padding(
