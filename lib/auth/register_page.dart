@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -9,9 +10,11 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/cpf_phone_input.dart';
 import '../widgets/google_logo.dart';
 import 'complete_google_profile_page.dart';
 import 'login_page.dart' show ApprovalResult, resolveApprovalState;
+import 'privacy_policy_page.dart';
 
 /// Espelha RegisterActivity/RegisterViewModel.kt do app nativo: cadastro fica
 /// pendente de aprovação de um admin (ver ManageUsersPage) até poder entrar.
@@ -24,19 +27,39 @@ class RegisterPage extends ConsumerStatefulWidget {
 
 class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _nameController = TextEditingController();
+  final _cpfController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _originChurchController = TextEditingController();
+  final _ministryController = TextEditingController();
+  final _churchPositionController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   DateTime? _birthdate;
+  DateTime? _membershipDate;
+  DateTime? _baptismDate;
+  String? _admissionForm;
+  String? _maritalStatus;
   File? _pickedPhoto;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _acceptedPrivacyPolicy = false;
   bool _loading = false;
+
+  static const _admissionFormOptions = ['Batismo', 'Transferência', 'Aclamação', 'Reconciliação'];
+  static const _maritalStatusOptions = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'];
 
   @override
   void dispose() {
     _nameController.dispose();
+    _cpfController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _originChurchController.dispose();
+    _ministryController.dispose();
+    _churchPositionController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -67,8 +90,22 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
   }
 
+  /// Usado por Data de Membresia e Data de Batismo — ambas opcionais, sem a
+  /// restrição de idade mínima do date picker de nascimento.
+  Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(now.year - 110),
+      lastDate: now,
+    );
+    if (picked != null) onPicked(picked);
+  }
+
   Future<void> _register() async {
     final name = _nameController.text.trim();
+    final cpf = _cpfController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
@@ -76,6 +113,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     if (name.isEmpty) {
       _showMessage('Informe seu nome.');
+      return;
+    }
+    if (!CpfValidator.isValid(cpf)) {
+      _showMessage('Informe um CPF válido.');
       return;
     }
     if (birthdate == null) {
@@ -94,6 +135,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       _showMessage('As senhas não coincidem.');
       return;
     }
+    if (!_acceptedPrivacyPolicy) {
+      _showMessage('É preciso aceitar a Política de Privacidade para se cadastrar.');
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -106,7 +151,23 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       }
 
       final repository = ref.read(userRepositoryProvider);
-      await repository.createUserProfile(uid: uid, name: name, email: email, birthdate: birthdate);
+      await repository.createUserProfile(
+        uid: uid,
+        name: name,
+        email: email,
+        birthdate: birthdate,
+        cpf: cpf,
+        phone: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
+        membershipDate: _membershipDate,
+        admissionForm: _admissionForm ?? '',
+        originChurch: _originChurchController.text.trim(),
+        baptismDate: _baptismDate,
+        maritalStatus: _maritalStatus ?? '',
+        ministry: _ministryController.text.trim(),
+        churchPosition: _churchPositionController.text.trim(),
+        privacyPolicyAccepted: _acceptedPrivacyPolicy,
+      );
       final photo = _pickedPhoto;
       if (photo != null) {
         await repository.uploadProfilePhoto(uid, photo);
@@ -229,17 +290,29 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 ),
               ),
               const SizedBox(height: 8),
+              Text(
+                '* Campos obrigatórios',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Nome'),
+                decoration: const InputDecoration(labelText: 'Nome completo *'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _cpfController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [CpfInputFormatter()],
+                decoration: const InputDecoration(labelText: 'CPF *'),
               ),
               const SizedBox(height: 16),
               InkWell(
                 onTap: _pickBirthdate,
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Data de nascimento',
+                    labelText: 'Data de nascimento *',
                     suffixIcon: Icon(Icons.calendar_today_outlined),
                   ),
                   child: Text(
@@ -251,9 +324,89 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'E-mail'),
+                decoration: const InputDecoration(labelText: 'E-mail *'),
               ),
               const SizedBox(height: 16),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [PhoneInputFormatter()],
+                decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _addressController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Dados eclesiásticos (opcional)',
+                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () => _pickDate(_membershipDate, (date) => setState(() => _membershipDate = date)),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data de Membresia',
+                    suffixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  child: Text(
+                    _membershipDate != null ? DateFormat('dd/MM/yyyy').format(_membershipDate!) : '',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _admissionForm,
+                decoration: const InputDecoration(labelText: 'Forma de Adesão'),
+                items: [
+                  for (final option in _admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                ],
+                onChanged: (value) => setState(() => _admissionForm = value),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _originChurchController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Igreja de origem'),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () => _pickDate(_baptismDate, (date) => setState(() => _baptismDate = date)),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data de Batismo',
+                    suffixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  child: Text(
+                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _maritalStatus,
+                decoration: const InputDecoration(labelText: 'Estado civil'),
+                items: [
+                  for (final option in _maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                ],
+                onChanged: (value) => setState(() => _maritalStatus = value),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ministryController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Ministério'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _churchPositionController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Cargo/Função'),
+              ),
+              const SizedBox(height: 24),
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
@@ -277,9 +430,49 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _acceptedPrivacyPolicy,
+                    onChanged: (value) => setState(() => _acceptedPrivacyPolicy = value ?? false),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: RichText(
+                        text: TextSpan(
+                          style: TextStyle(color: context.textSecondary, fontSize: 14),
+                          children: [
+                            const TextSpan(
+                              text: 'Li e concordo com a ',
+                            ),
+                            TextSpan(
+                              text: 'Política de Privacidade',
+                              style: const TextStyle(
+                                color: SibValColors.goldAccent,
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.underline,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+                                    ),
+                            ),
+                            const TextSpan(
+                              text: ' e autorizo o tratamento dos meus dados pessoais conforme descrito.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _loading ? null : _register,
+                onPressed: (_loading || !_acceptedPrivacyPolicy) ? null : _register,
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('Cadastrar'),

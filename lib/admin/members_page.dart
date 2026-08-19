@@ -9,6 +9,7 @@ import '../data/member_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/member.dart';
 import '../theme/app_theme.dart';
+import '../util/cpf_phone_input.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Espelha MembersFragment.kt/MembersViewModel.kt: lista de membros (alimenta
@@ -133,6 +134,11 @@ class _MemberDialog extends ConsumerStatefulWidget {
 class _MemberDialogState extends ConsumerState<_MemberDialog> {
   late final _nameController = TextEditingController(text: widget.existing?.name ?? '');
   late final _emailController = TextEditingController(text: widget.existing?.email ?? '');
+  late final _cpfController = TextEditingController(
+    text: CpfInputFormatter()
+        .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: widget.existing?.cpf ?? ''))
+        .text,
+  );
   late final _dateController = TextEditingController(
     text: widget.existing != null
         ? '${widget.existing!.birthDay.toString().padLeft(2, '0')}/${widget.existing!.birthMonth.toString().padLeft(2, '0')}'
@@ -145,6 +151,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _cpfController.dispose();
     _dateController.dispose();
     super.dispose();
   }
@@ -172,6 +179,13 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
       );
       return;
     }
+    final cpf = _cpfController.text;
+    if (cpf.trim().isNotEmpty && !CpfValidator.isValid(cpf)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('CPF inválido — deixe em branco se não souber, ou corrija.')),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     final repo = ref.read(memberRepositoryProvider);
@@ -181,6 +195,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
         await repo.create(
           name: name,
           email: _emailController.text,
+          cpf: cpf,
           birthDay: day,
           birthMonth: month,
           photoFile: _pickedPhoto,
@@ -191,6 +206,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           member: widget.existing!,
           name: name,
           email: _emailController.text,
+          cpf: cpf,
           birthDay: day,
           birthMonth: month,
           photoFile: _pickedPhoto,
@@ -237,6 +253,17 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               controller: _emailController,
               decoration: const InputDecoration(labelText: 'E-mail (opcional)'),
               keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _cpfController,
+              decoration: const InputDecoration(
+                labelText: 'CPF (opcional)',
+                helperText: 'Se souber, evita duplicar quando essa pessoa criar conta no app',
+                helperMaxLines: 2,
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [CpfInputFormatter()],
             ),
             const SizedBox(height: 8),
             TextField(

@@ -70,19 +70,47 @@ class UserRepository {
 
   /// Espelha RegisterViewModel.kt: cria o doc em `users/{uid}` com status
   /// pendente de aprovação — precisa de um admin em Gerenciar Usuários pra
-  /// liberar o acesso.
+  /// liberar o acesso. Os campos complementares (cpf em diante) foram
+  /// incrementados além do que existe hoje no app nativo, a pedido do
+  /// usuário, para suportar um cadastro de membresia mais completo. CPF é
+  /// obrigatório nas duas telas que chamam este método (cadastro por e-mail
+  /// e completar perfil via Google) — os demais ficam opcionais aqui, quem
+  /// exige o que é cada tela.
   Future<void> createUserProfile({
     required String uid,
     required String name,
     required String email,
     required DateTime birthdate,
+    required String cpf,
+    String phone = '',
+    String address = '',
+    DateTime? membershipDate,
+    String admissionForm = '',
+    String originChurch = '',
+    DateTime? baptismDate,
+    String maritalStatus = '',
+    String ministry = '',
+    String churchPosition = '',
+    bool privacyPolicyAccepted = false,
   }) {
+    final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
     return _users.doc(uid).set({
       'name': name,
       'email': email,
       'birthdate': Timestamp.fromDate(birthdate),
       'birthMonth': birthdate.month,
       'birthDay': birthdate.day,
+      'cpf': normalizedCpf,
+      'phone': phone,
+      'address': address,
+      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
+      'admissionForm': admissionForm,
+      'originChurch': originChurch,
+      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'maritalStatus': maritalStatus,
+      'ministry': ministry,
+      'churchPosition': churchPosition,
+      if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'status': UserStatus.pending,
       'isAdmin': false,

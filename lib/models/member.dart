@@ -5,6 +5,7 @@ class Member {
   final String id;
   final String name;
   final String email;
+  final String cpf;
   final int birthDay;
   final int birthMonth;
   final String photoUrl;
@@ -16,6 +17,7 @@ class Member {
     required this.id,
     required this.name,
     required this.email,
+    required this.cpf,
     required this.birthDay,
     required this.birthMonth,
     required this.photoUrl,
@@ -30,6 +32,7 @@ class Member {
       id: doc.id,
       name: data['name'] as String? ?? '',
       email: data['email'] as String? ?? '',
+      cpf: data['cpf'] as String? ?? '',
       birthDay: (data['birthDay'] as num?)?.toInt() ?? 0,
       birthMonth: (data['birthMonth'] as num?)?.toInt() ?? 0,
       photoUrl: data['photoUrl'] as String? ?? '',

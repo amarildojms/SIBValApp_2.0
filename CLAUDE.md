@@ -96,6 +96,78 @@ para admin; `SettingsRepository.getPrayerResponsiblePhone`/
 Não há mais itens pendentes conhecidos nesta lista — reconfirmar via diff
 antes de assumir que a migração está 100% completa (ver seção abaixo).
 
+**Divergência intencional do nativo (19/08/2026):** `register_page.dart` foi
+incrementado com campos que **não existem** no `RegisterActivity.kt` nativo —
+CPF (com dígitos verificadores), telefone, endereço, data de membresia, forma
+de adesão, igreja de origem, data de batismo, estado civil, ministério e
+cargo/função, todos persistidos em `users/{uid}` via
+`UserRepository.createUserProfile` (`lib/data/user_repository.dart`). Nome
+completo, CPF, e-mail e data de nascimento são obrigatórios (marcados com `*`
+no formulário); os demais são opcionais. Também foi adicionado o checkbox
+obrigatório de consentimento com a Política de Privacidade
+(`lib/auth/privacy_policy_page.dart`, conteúdo placeholder — texto jurídico
+definitivo ainda não fornecido), que só habilita o botão "Cadastrar" quando
+marcado. `CompleteGoogleProfilePage` (fluxo de completar perfil via Google)
+ganhou paridade completa com `register_page.dart` em 19/08/2026 — mesmos
+campos (CPF obrigatório incluso), mesmo checkbox de privacidade, com o visual
+escuro (`SibValColors.navyBlue` + texto branco) que a tela já tinha antes. Os
+formatadores de CPF/telefone e o validador de dígitos verificadores foram
+extraídos para `lib/util/cpf_phone_input.dart` (`CpfInputFormatter`,
+`PhoneInputFormatter`, `CpfValidator`) justamente para serem compartilhados
+pelas duas telas em vez de duplicados.
+
+**CPF como identificador único, mas sem virar o ID do documento:** o
+documento em `users/{uid}` continua chaveado pelo UID do Firebase Auth — NÃO
+pelo CPF — porque `firestore.rules` (no repo `SIBValApp2`) usa
+`request.auth.uid == userId` para todo o modelo de permissão (o próprio doc do
+usuário, `isAdmin()`, `hasRole()`, que por sua vez gateiam galeria, membros,
+pedidos de oração, eventos, devocionais, configurações...) e há Cloud
+Functions reais em produção (`functions/index.js`: `onUserCreated`,
+`onUserApproved`, `onUserPhotoUpdated`) amarradas ao path `users/{uid}`.
+Trocar a chave para CPF sem reescrever regras e functions travaria login,
+aprovação e toda checagem de permissão para quem se cadastra pelo Flutter.
+Confirmado com o usuário em 19/08/2026 — decisão: manter `users/{uid}`.
+
+Por causa disso, **não é possível bloquear CPF duplicado no próprio
+cadastro**: a regra `allow list: if isAdmin();` em `users` impede que um
+usuário recém-registrado (não-admin) faça uma consulta por CPF para checar se
+já existe. O alerta de CPF duplicado só é viável no lado do admin, que já tem
+`list` liberado — implementado em `manage_users_page.dart`
+(`_findDuplicateCpfs`), mostrando um aviso no card do usuário pendente antes
+da aprovação. Se o usuário quiser bloqueio de fato no cadastro, é necessário
+alterar `firestore.rules`/`functions/index.js` no repo nativo (opção que ele
+recusou nesta rodada).
+
+**`members` (aniversariantes) usa CPF como chave de verdade (19/08/2026):**
+diferente de `users`, a collection `members` não tem regra amarrada a
+`request.auth.uid` — é só `isSecretaria()` — então aqui o CPF virou
+literalmente o ID do documento (preferencial; cai pro e-mail normalizado, e
+por fim id autogerado, pra membro sem nenhum dos dois — mesma cascata de
+fallback de antes, só que com CPF na frente). Isso já existia como conceito
+no nativo: `MemberRepository.kt` sempre indexou por e-mail justamente pra
+Cloud Function `onUserPhotoUpdated` achar o membro certo.
+
+O pedido do usuário — "aniversariante cadastrado manualmente, depois cria
+conta no app, os dados devem ser mesclados" — **já existia no nativo** e
+ainda não tinha sido portado pro Flutter: `ManageUsersViewModel.approve()`
+chama `MemberRepository.upsertFromUser(user)` ao aprovar um cadastro,
+criando/atualizando (`SetOptions(merge: true)`) a entrada de aniversariante
+correspondente. Portado em `member_repository.dart`
+(`MemberRepository.upsertFromUser`) e ligado no botão "Aprovar" de
+`manage_users_page.dart` — casa primeiro por CPF, cai pro e-mail se o membro
+pré-cadastrado ainda não tinha CPF, e migra o documento pro id canônico (CPF)
+quando acha um registro "antigo" indexado por e-mail, preservando o que já
+tinha lá (foto, storagePath) via merge.
+
+A sincronização contínua de foto (`onUserPhotoUpdated`, em
+`SIBValApp2/functions/index.js`) também foi atualizada pra casar por CPF
+primeiro, com fallback pro e-mail — função `findMemberRefForUser`, extraída
+pra ser reaproveitável. **Só editei o código-fonte da function — não fiz
+`firebase deploy`, isso fica manual, por conta do usuário**, com o aval dele
+dado explicitamente antes de eu tocar nesse arquivo (mesma cautela do caso
+`users`, mas aqui ele topou porque não há trava de segurança por uid em
+`members`).
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

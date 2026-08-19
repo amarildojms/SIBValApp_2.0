@@ -7,6 +7,10 @@ class AppUser {
   final String uid;
   final String name;
   final String email;
+  final String cpf;
+  final int birthDay;
+  final int birthMonth;
+  final String photoUrl;
   final String status;
   final bool isAdmin;
   final bool isBlocked;
@@ -16,6 +20,10 @@ class AppUser {
     required this.uid,
     required this.name,
     required this.email,
+    required this.cpf,
+    required this.birthDay,
+    required this.birthMonth,
+    required this.photoUrl,
     required this.status,
     required this.isAdmin,
     required this.isBlocked,
@@ -28,6 +36,10 @@ class AppUser {
       uid: doc.id,
       name: data['name'] as String? ?? '',
       email: data['email'] as String? ?? '',
+      cpf: data['cpf'] as String? ?? '',
+      birthDay: (data['birthDay'] as num?)?.toInt() ?? 0,
+      birthMonth: (data['birthMonth'] as num?)?.toInt() ?? 0,
+      photoUrl: data['photoUrl'] as String? ?? '',
       status: data['status'] as String? ?? UserStatus.approved,
       isAdmin: data['isAdmin'] as bool? ?? false,
       isBlocked: data['isBlocked'] as bool? ?? false,
@@ -40,6 +52,10 @@ class AppUser {
       uid: uid,
       name: name,
       email: email,
+      cpf: cpf,
+      birthDay: birthDay,
+      birthMonth: birthMonth,
+      photoUrl: photoUrl,
       status: status ?? this.status,
       isAdmin: isAdmin,
       isBlocked: isBlocked ?? this.isBlocked,

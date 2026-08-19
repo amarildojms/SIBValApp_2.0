@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/member_repository.dart';
 import '../data/user_repository.dart';
 import '../models/app_user.dart';
 import '../theme/app_theme.dart';
@@ -63,10 +64,17 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
                 if (filtered.isEmpty) {
                   return Center(child: Text('Nenhum usuário encontrado.', style: TextStyle(color: context.textSecondary)));
                 }
+                final duplicateCpfs = _findDuplicateCpfs(users);
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: filtered.length,
-                  itemBuilder: (context, index) => _UserCard(user: filtered[index]),
+                  itemBuilder: (context, index) {
+                    final user = filtered[index];
+                    return _UserCard(
+                      user: user,
+                      hasDuplicateCpf: user.cpf.isNotEmpty && duplicateCpfs.contains(user.cpf),
+                    );
+                  },
                 );
               },
             ),
@@ -78,10 +86,26 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
   }
 }
 
+/// CPFs (não vazios) usados por mais de um perfil — não dá pra bloquear isso
+/// no cadastro em si (regra `allow list: if isAdmin()` impede o
+/// autocadastrante de consultar outros perfis), então o alerta aparece aqui,
+/// onde o admin já tem a lista completa carregada, como checagem antes de
+/// aprovar.
+Set<String> _findDuplicateCpfs(List<AppUser> users) {
+  final seen = <String>{};
+  final duplicates = <String>{};
+  for (final user in users) {
+    if (user.cpf.isEmpty) continue;
+    if (!seen.add(user.cpf)) duplicates.add(user.cpf);
+  }
+  return duplicates;
+}
+
 class _UserCard extends ConsumerWidget {
-  const _UserCard({required this.user});
+  const _UserCard({required this.user, required this.hasDuplicateCpf});
 
   final AppUser user;
+  final bool hasDuplicateCpf;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -113,6 +137,21 @@ class _UserCard extends ConsumerWidget {
                 _StatusChip(status: user.status),
               ],
             ),
+            if (hasDuplicateCpf) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.redAccent),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'CPF já cadastrado em outro perfil — confira antes de aprovar.',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             if (isPending)
               Row(
@@ -126,9 +165,16 @@ class _UserCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: () => ref.read(userRepositoryProvider).setUserStatus(user.uid, UserStatus.approved).then(
-                          (_) => ref.invalidate(allUsersProvider),
-                        ),
+                    onPressed: () {
+                      ref.read(userRepositoryProvider).setUserStatus(user.uid, UserStatus.approved).then(
+                            (_) => ref.invalidate(allUsersProvider),
+                          );
+                      // Espelha ManageUsersViewModel.approve(): mescla com o
+                      // aniversariante pré-cadastrado (por CPF, ver
+                      // MemberRepository.upsertFromUser), sem bloquear a
+                      // aprovação em si se isso falhar.
+                      ref.read(memberRepositoryProvider).upsertFromUser(user).catchError((_) {});
+                    },
                     child: const Text('Aprovar'),
                   ),
                 ],

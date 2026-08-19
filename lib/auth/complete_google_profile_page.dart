@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,12 +9,17 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/cpf_phone_input.dart';
+import 'privacy_policy_page.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/ui/auth/CompleteGoogleProfileActivity.kt
 /// (+ CompleteGoogleProfileViewModel.kt): tela mostrada quando um login/cadastro
-/// com Google é de uma conta nova (`isNewUser`) — falta coletar data de
-/// nascimento (obrigatória) e foto (opcional) antes de criar `users/{uid}`
-/// como pendente de aprovação, igual ao cadastro por e-mail.
+/// com Google é de uma conta nova (`isNewUser`) — falta coletar os mesmos dados
+/// complementares do cadastro por e-mail (`register_page.dart`, incremento sem
+/// equivalente no nativo) antes de criar `users/{uid}` como pendente de
+/// aprovação: CPF (obrigatório), data de nascimento (obrigatória), foto e
+/// demais dados eclesiásticos (opcionais), além do consentimento com a
+/// Política de Privacidade.
 class CompleteGoogleProfilePage extends ConsumerStatefulWidget {
   const CompleteGoogleProfilePage({
     super.key,
@@ -31,9 +37,34 @@ class CompleteGoogleProfilePage extends ConsumerStatefulWidget {
 }
 
 class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfilePage> {
+  final _cpfController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _originChurchController = TextEditingController();
+  final _ministryController = TextEditingController();
+  final _churchPositionController = TextEditingController();
   DateTime? _birthdate;
+  DateTime? _membershipDate;
+  DateTime? _baptismDate;
+  String? _admissionForm;
+  String? _maritalStatus;
   File? _pickedPhoto;
+  bool _acceptedPrivacyPolicy = false;
   bool _loading = false;
+
+  static const _admissionFormOptions = ['Batismo', 'Transferência', 'Aclamação', 'Reconciliação'];
+  static const _maritalStatusOptions = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'];
+
+  @override
+  void dispose() {
+    _cpfController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _originChurchController.dispose();
+    _ministryController.dispose();
+    _churchPositionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickPhoto() async {
     final picked = await ImagePicker().pickImage(
@@ -60,10 +91,33 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     }
   }
 
+  /// Usado por Data de Membresia e Data de Batismo — ambas opcionais, sem a
+  /// restrição de idade mínima do date picker de nascimento.
+  Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(now.year - 110),
+      lastDate: now,
+    );
+    if (picked != null) onPicked(picked);
+  }
+
   Future<void> _finish() async {
+    final cpf = _cpfController.text.trim();
     final birthdate = _birthdate;
+
+    if (!CpfValidator.isValid(cpf)) {
+      _showMessage('Informe um CPF válido.');
+      return;
+    }
     if (birthdate == null) {
       _showMessage('Selecione sua data de nascimento.');
+      return;
+    }
+    if (!_acceptedPrivacyPolicy) {
+      _showMessage('É preciso aceitar a Política de Privacidade para continuar.');
       return;
     }
 
@@ -75,6 +129,17 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         name: widget.name,
         email: widget.email,
         birthdate: birthdate,
+        cpf: cpf,
+        phone: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
+        membershipDate: _membershipDate,
+        admissionForm: _admissionForm ?? '',
+        originChurch: _originChurchController.text.trim(),
+        baptismDate: _baptismDate,
+        maritalStatus: _maritalStatus ?? '',
+        ministry: _ministryController.text.trim(),
+        churchPosition: _churchPositionController.text.trim(),
+        privacyPolicyAccepted: _acceptedPrivacyPolicy,
       );
       final photo = _pickedPhoto;
       if (photo != null) {
@@ -120,13 +185,16 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   }
 
   static const _fieldStyle = TextStyle(color: Colors.white);
-  static const _fieldDecoration = InputDecoration(
-    labelText: 'Data de nascimento',
-    labelStyle: TextStyle(color: Colors.white70),
-    suffixIcon: Icon(Icons.calendar_today_outlined, color: Colors.white70),
-    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)),
-    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: SibValColors.goldAccent)),
-  );
+
+  InputDecoration _decoration(String label, {Widget? suffixIcon}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      suffixIcon: suffixIcon,
+      enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)),
+      focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: SibValColors.goldAccent)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +213,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
               ),
               const SizedBox(height: 8),
               const Text(
-                'Só falta a sua data de nascimento para participar dos aniversariantes da igreja.',
+                'Faltam alguns dados para participar da igreja pelo app. Campos com * são obrigatórios.',
                 style: TextStyle(color: Colors.white70),
               ),
               const SizedBox(height: 24),
@@ -165,23 +233,159 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 ),
               ),
               const SizedBox(height: 8),
+              TextField(
+                controller: _cpfController,
+                style: _fieldStyle,
+                keyboardType: TextInputType.number,
+                inputFormatters: [CpfInputFormatter()],
+                decoration: _decoration('CPF *'),
+              ),
+              const SizedBox(height: 16),
               InkWell(
                 onTap: _loading ? null : _pickBirthdate,
                 child: InputDecorator(
-                  decoration: _fieldDecoration,
+                  decoration: _decoration('Data de nascimento *', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
                   child: Text(
                     _birthdate != null ? DateFormat('dd/MM/yyyy').format(_birthdate!) : '',
                     style: _fieldStyle,
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _phoneController,
+                style: _fieldStyle,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [PhoneInputFormatter()],
+                decoration: _decoration('Telefone (opcional)'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _addressController,
+                style: _fieldStyle,
+                textCapitalization: TextCapitalization.words,
+                decoration: _decoration('Endereço (opcional)'),
+              ),
               const SizedBox(height: 24),
+              const Text(
+                'Dados eclesiásticos (opcional)',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _loading ? null : () => _pickDate(_membershipDate, (date) => setState(() => _membershipDate = date)),
+                child: InputDecorator(
+                  decoration: _decoration('Data de Membresia', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
+                  child: Text(
+                    _membershipDate != null ? DateFormat('dd/MM/yyyy').format(_membershipDate!) : '',
+                    style: _fieldStyle,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _admissionForm,
+                style: _fieldStyle,
+                dropdownColor: SibValColors.navyBlueLight,
+                decoration: _decoration('Forma de Adesão'),
+                items: [
+                  for (final option in _admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                ],
+                onChanged: _loading ? null : (value) => setState(() => _admissionForm = value),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _originChurchController,
+                style: _fieldStyle,
+                textCapitalization: TextCapitalization.words,
+                decoration: _decoration('Igreja de origem'),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _loading ? null : () => _pickDate(_baptismDate, (date) => setState(() => _baptismDate = date)),
+                child: InputDecorator(
+                  decoration: _decoration('Data de Batismo', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
+                  child: Text(
+                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
+                    style: _fieldStyle,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _maritalStatus,
+                style: _fieldStyle,
+                dropdownColor: SibValColors.navyBlueLight,
+                decoration: _decoration('Estado civil'),
+                items: [
+                  for (final option in _maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                ],
+                onChanged: _loading ? null : (value) => setState(() => _maritalStatus = value),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ministryController,
+                style: _fieldStyle,
+                textCapitalization: TextCapitalization.words,
+                decoration: _decoration('Ministério'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _churchPositionController,
+                style: _fieldStyle,
+                textCapitalization: TextCapitalization.words,
+                decoration: _decoration('Cargo/Função'),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _acceptedPrivacyPolicy,
+                    fillColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected) ? SibValColors.goldAccent : Colors.transparent,
+                    ),
+                    checkColor: SibValColors.navyBlueDark,
+                    side: const BorderSide(color: Colors.white70),
+                    onChanged: _loading ? null : (value) => setState(() => _acceptedPrivacyPolicy = value ?? false),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                          children: [
+                            const TextSpan(text: 'Li e concordo com a '),
+                            TextSpan(
+                              text: 'Política de Privacidade',
+                              style: const TextStyle(
+                                color: SibValColors.goldAccent,
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.underline,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+                                    ),
+                            ),
+                            const TextSpan(
+                              text: ' e autorizo o tratamento dos meus dados pessoais conforme descrito.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: SibValColors.goldAccent,
                   foregroundColor: SibValColors.navyBlueDark,
                 ),
-                onPressed: _loading ? null : _finish,
+                onPressed: (_loading || !_acceptedPrivacyPolicy) ? null : _finish,
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('Concluir'),
