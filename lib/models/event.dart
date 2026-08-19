@@ -9,12 +9,15 @@ class Event {
   final String location;
   final int dateTimeMillis;
   final String flyerUrl;
+  final String flyerStoragePath;
   final String category;
   final bool requiresRegistration;
   final String registrationLink;
   final List<String> likedBy;
   final String status;
   final String source;
+  final String createdBy;
+  final DateTime? createdAt;
 
   const Event({
     required this.id,
@@ -23,15 +26,49 @@ class Event {
     required this.location,
     required this.dateTimeMillis,
     required this.flyerUrl,
+    required this.flyerStoragePath,
     required this.category,
     required this.requiresRegistration,
     required this.registrationLink,
     required this.likedBy,
     required this.status,
     required this.source,
+    required this.createdBy,
+    required this.createdAt,
   });
 
   DateTime get dateTimeUtc => DateTime.fromMillisecondsSinceEpoch(dateTimeMillis, isUtc: true);
+
+  Event copyWith({
+    String? title,
+    String? description,
+    String? location,
+    int? dateTimeMillis,
+    String? flyerUrl,
+    String? flyerStoragePath,
+    String? category,
+    bool? requiresRegistration,
+    String? registrationLink,
+    String? status,
+  }) {
+    return Event(
+      id: id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      location: location ?? this.location,
+      dateTimeMillis: dateTimeMillis ?? this.dateTimeMillis,
+      flyerUrl: flyerUrl ?? this.flyerUrl,
+      flyerStoragePath: flyerStoragePath ?? this.flyerStoragePath,
+      category: category ?? this.category,
+      requiresRegistration: requiresRegistration ?? this.requiresRegistration,
+      registrationLink: registrationLink ?? this.registrationLink,
+      likedBy: likedBy,
+      status: status ?? this.status,
+      source: source,
+      createdBy: createdBy,
+      createdAt: createdAt,
+    );
+  }
 
   factory Event.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -42,12 +79,15 @@ class Event {
       location: data['location'] as String? ?? '',
       dateTimeMillis: (data['dateTimeMillis'] as num?)?.toInt() ?? 0,
       flyerUrl: data['flyerUrl'] as String? ?? '',
+      flyerStoragePath: data['flyerStoragePath'] as String? ?? '',
       category: data['category'] as String? ?? '',
       requiresRegistration: data['requiresRegistration'] as bool? ?? false,
       registrationLink: data['registrationLink'] as String? ?? '',
       likedBy: List<String>.from(data['likedBy'] as List? ?? const []),
       status: data['status'] as String? ?? EventStatus.published,
       source: data['source'] as String? ?? EventSource.manual,
+      createdBy: data['createdBy'] as String? ?? '',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }
 }
@@ -62,6 +102,17 @@ abstract final class EventSource {
   static const manual = 'manual';
   static const email = 'email';
   static const recurring = 'recurring';
+}
+
+/// Espelha app/src/main/java/com/sibval/app/data/model/Event.kt (EventCategory).
+abstract final class EventCategory {
+  static const cultos = 'cultos';
+  static const acampamento = 'acampamento';
+  static const pgm = 'pgm';
+  static const congresso = 'congresso';
+  static const cursoWorkshop = 'curso_workshop';
+
+  static const all = [cultos, acampamento, pgm, congresso, cursoWorkshop];
 }
 
 /// Sempre exibe o horário em America/Sao_Paulo, independente do fuso do
