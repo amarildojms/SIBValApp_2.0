@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="SIB Val App 2.0"
+        android:label="SIBVal Connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

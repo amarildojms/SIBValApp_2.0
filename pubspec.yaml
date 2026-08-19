@@ -59,6 +59,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Gera os ícones de launcher (mipmap ic_launcher) a partir do emblema
+# cruz+peixe sobre fundo azul-marinho da marca — rodar com
+# `dart run flutter_launcher_icons` sempre que os arquivos em
+# assets/icon_source mudarem.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon_source/legacy.png"
+  adaptive_icon_background: "#1B275B"
+  adaptive_icon_foreground: "assets/icon_source/foreground.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -76,6 +88,11 @@ flutter:
     - assets/hymnals/cc.sqlite
     - assets/hymnals/hcc.sqlite
     - assets/images/logo.png
+    - assets/images/icon_sibval.png
+    - assets/icons/ic_devocional.png
+    - assets/icons/ic_prayer.png
+    - assets/icons/ic_cc.png
+    - assets/icons/ic_hcc.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

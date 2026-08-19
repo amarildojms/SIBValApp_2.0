@@ -183,6 +183,9 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                            ),
                             onPressed: _saving ? null : _save,
                             child: _saving
                                 ? const SizedBox(

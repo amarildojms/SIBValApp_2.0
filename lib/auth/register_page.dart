@@ -3,11 +3,14 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/google_logo.dart';
+import 'login_page.dart' show ApprovalResult, resolveApprovalState;
 
 /// Espelha RegisterActivity/RegisterViewModel.kt do app nativo: cadastro fica
 /// pendente de aprovação de um admin (ver ManageUsersPage) até poder entrar.
@@ -119,6 +122,51 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
   }
 
+  /// Mesmo fluxo de _loginWithGoogle em login_page.dart — "Entrar com Google"
+  /// tem o mesmo efeito em qualquer uma das duas telas.
+  Future<void> _registerWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        _showMessage('Falha ao autenticar com Google.');
+        return;
+      }
+
+      final googleCredential = GoogleAuthProvider.credential(idToken: idToken);
+      final credential = await FirebaseAuth.instance.signInWithCredential(googleCredential);
+      final uid = credential.user?.uid;
+      if (uid == null) {
+        _showMessage('Falha ao autenticar com Google.');
+        return;
+      }
+
+      final approval = await resolveApprovalState(uid);
+      if (!mounted) return;
+      switch (approval) {
+        case ApprovalResult.approved:
+          Navigator.of(context).pop();
+        case ApprovalResult.pendingApproval:
+          _showMessage('Seu cadastro ainda está aguardando aprovação.');
+        case ApprovalResult.rejected:
+          _showMessage('Seu cadastro foi rejeitado.');
+        case ApprovalResult.blocked:
+          _showMessage('Sua conta está bloqueada.');
+        case ApprovalResult.accountDeleted:
+          _showMessage('Cadastro não encontrado — complete seu perfil no app atual antes de testar aqui.');
+      }
+    } on GoogleSignInException catch (e) {
+      if (e.code != GoogleSignInExceptionCode.canceled) {
+        _showMessage('Falha ao autenticar com Google.');
+      }
+    } on FirebaseAuthException catch (_) {
+      _showMessage('Falha ao autenticar com Google.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   String _messageForAuthError(String code) {
     switch (code) {
       case 'invalid-email':
@@ -222,6 +270,23 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('Cadastrar'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('ou', style: TextStyle(color: context.textSecondary)),
+                  ),
+                  Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _registerWithGoogle,
+                icon: const GoogleLogo(),
+                label: const Text('Entrar com Google'),
               ),
             ],
           ),

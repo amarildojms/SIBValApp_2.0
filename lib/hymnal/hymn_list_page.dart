@@ -24,6 +24,8 @@ class _HymnListPageState extends ConsumerState<HymnListPage> {
   String _query = '';
   bool _favoritesOnly = false;
   Set<String> _favoriteKeys = {};
+  List<Hymn>? _searchResults;
+  int _searchToken = 0;
 
   @override
   void initState() {
@@ -40,6 +42,21 @@ class _HymnListPageState extends ConsumerState<HymnListPage> {
   Future<void> _loadFavorites() async {
     final keys = await ref.read(hymnFavoritesRepositoryProvider).getAll();
     if (mounted) setState(() => _favoriteKeys = keys);
+  }
+
+  /// Busca por número, título ou trecho da letra direto no banco (a letra não
+  /// vem na lista carregada de início, só no detalhe do hino).
+  Future<void> _search(String query) async {
+    final trimmed = query.trim();
+    setState(() => _query = query);
+    if (trimmed.isEmpty) {
+      setState(() => _searchResults = null);
+      return;
+    }
+    final token = ++_searchToken;
+    final results = await ref.read(hymnalRepositoryProvider(widget.hymnal)).searchSongs(trimmed);
+    if (!mounted || token != _searchToken) return;
+    setState(() => _searchResults = results);
   }
 
   Future<void> _toggleFavorite(Hymn hymn) async {
@@ -66,9 +83,9 @@ class _HymnListPageState extends ConsumerState<HymnListPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
+              onChanged: _search,
               decoration: InputDecoration(
-                hintText: 'Buscar por número ou título...',
+                hintText: 'Buscar por número, título ou letra...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _query.isEmpty
                     ? null
@@ -76,7 +93,7 @@ class _HymnListPageState extends ConsumerState<HymnListPage> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() => _query = '');
+                          _search('');
                         },
                       ),
               ),
@@ -97,12 +114,11 @@ class _HymnListPageState extends ConsumerState<HymnListPage> {
               error: (error, _) =>
                   Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
               data: (songs) {
-                final query = _query.trim().toLowerCase();
-                var filtered = query.isEmpty
-                    ? songs
-                    : songs
-                        .where((h) => h.title.toLowerCase().contains(query) || h.number.contains(query))
-                        .toList();
+                final hasQuery = _query.trim().isNotEmpty;
+                if (hasQuery && _searchResults == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                var filtered = hasQuery ? _searchResults! : songs;
                 if (_favoritesOnly) {
                   filtered = filtered.where(_isFavorite).toList();
                 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../events/event_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../models/post.dart';
 
@@ -43,7 +44,7 @@ class PostCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    post.authorName.isNotEmpty ? post.authorName : 'SIB Val App',
+                    post.authorName.isNotEmpty ? post.authorName : 'SIBVal Connect',
                     style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -61,18 +62,25 @@ class PostCard extends StatelessWidget {
               child: Text(post.text, style: TextStyle(color: context.textPrimary)),
             ),
           if (post.imageUrl.isNotEmpty)
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Container(
-                color: cardColor,
-                child: Image.network(
-                  post.imageUrl,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(child: CircularProgressIndicator());
-                  },
-                  errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+            GestureDetector(
+              onTap: post.postType == PostType.event && post.targetId.isNotEmpty
+                  ? () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => EventDetailPage(eventId: post.targetId)),
+                      )
+                  : null,
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  color: cardColor,
+                  child: Image.network(
+                    post.imageUrl,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                    errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

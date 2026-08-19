@@ -60,12 +60,17 @@ class _MainShellState extends State<MainShell> {
           selectedIndex: _index,
           onDestinationSelected: (index) => setState(() => _index = index),
           backgroundColor: SibValColors.navyBlue,
-          destinations: const [
-            NavigationDestination(icon: _DevotionalsIcon(), label: 'Devocionais'),
-            NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
-            NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-            NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
-            NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+          destinations: [
+            NavigationDestination(
+              icon: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
+              selectedIcon:
+                  const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: SibValColors.navyBlueDark),
+              label: 'Devocionais',
+            ),
+            const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
+            const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
+            const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
+            const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
           ],
         ),
       ),
@@ -73,25 +78,39 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// Bíblia aberta com um coração por cima, já que o Material não tem um ícone
-/// pronto pra "devocional" — combina os dois ícones existentes numa Stack.
-class _DevotionalsIcon extends StatelessWidget {
-  const _DevotionalsIcon();
+/// O PNG do ícone de Devocionais (copiado do app nativo) tem linhas mais finas
+/// que os ícones vetoriais do Material (Início, Contribua) no mesmo tamanho —
+/// empilha cópias levemente deslocadas da mesma imagem pra "engordar" o traço
+/// visualmente, sem precisar editar o arquivo de imagem.
+class _BoldAssetIcon extends StatelessWidget {
+  const _BoldAssetIcon(this.asset, {required this.size, required this.color});
+
+  final String asset;
+  final double size;
+  final Color color;
+
+  static const _offsets = [
+    Offset.zero,
+    Offset(-0.8, 0),
+    Offset(0.8, 0),
+    Offset(0, -0.8),
+    Offset(0, 0.8),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 26,
-      height: 24,
+      width: size,
+      height: size,
       child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
         children: [
-          const Icon(Icons.menu_book_outlined, size: 24),
-          Positioned(
-            top: -6,
-            child: Icon(Icons.favorite, size: 12, color: SibValColors.goldAccent),
-          ),
+          for (final offset in _offsets)
+            Positioned.fill(
+              child: Transform.translate(
+                offset: offset,
+                child: Image.asset(asset, color: color, colorBlendMode: BlendMode.srcIn),
+              ),
+            ),
         ],
       ),
     );
@@ -139,7 +158,7 @@ class _MaisPage extends ConsumerWidget {
     final tiles = [
       // Tier 1 — disponível para todos, sem login.
       _MoreTile(
-        icon: Icons.photo_library_outlined,
+        icon: Icons.photo_camera_outlined,
         label: 'Galeria',
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlbumListPage())),
       ),
@@ -149,19 +168,19 @@ class _MaisPage extends ConsumerWidget {
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibleBookListPage())),
       ),
       _MoreTile(
-        icon: Icons.library_music_outlined,
+        imageAsset: 'assets/icons/ic_cc.png',
         label: 'Cantor Cristão',
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao))),
       ),
       _MoreTile(
-        icon: Icons.library_music_outlined,
+        imageAsset: 'assets/icons/ic_hcc.png',
         label: 'HCC',
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
       ),
       _MoreTile(
-        icon: Icons.favorite_outline,
+        imageAsset: 'assets/icons/ic_prayer.png',
         label: 'Pedido de Oração',
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage())),
       ),
@@ -210,7 +229,7 @@ class _MaisPage extends ConsumerWidget {
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventEmailSendersPage())),
         ),
       // Tier 4 — recursos ainda não implementados.
-      const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto (Em breve)', enabled: false),
+      const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto', enabled: false, comingSoon: true),
     ];
 
     return Scaffold(
@@ -225,10 +244,10 @@ class _MaisPage extends ConsumerWidget {
             crossAxisCount: 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            mainAxisSpacing: 0,
-            crossAxisSpacing: 0,
-            childAspectRatio: 0.85,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            mainAxisSpacing: 20,
+            crossAxisSpacing: 8,
+            childAspectRatio: 0.95,
             children: tiles,
           ),
           Divider(color: Theme.of(context).colorScheme.outlineVariant),
@@ -317,13 +336,26 @@ class _MoreHeader extends StatelessWidget {
 /// Tile em grade (ícone em cima, rótulo embaixo) — espelha o
 /// GridLayoutManager(3) do MoreFragment.kt nativo, estilo "app de banco".
 class _MoreTile extends StatelessWidget {
-  const _MoreTile({required this.icon, required this.label, this.onTap, this.badgeCount = 0, this.enabled = true});
+  const _MoreTile({
+    this.icon,
+    this.imageAsset,
+    required this.label,
+    this.onTap,
+    this.badgeCount = 0,
+    this.enabled = true,
+    this.comingSoon = false,
+  }) : assert(icon != null || imageAsset != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final String? imageAsset;
   final String label;
   final VoidCallback? onTap;
   final int badgeCount;
   final bool enabled;
+
+  /// Quando true, mostra "(Em breve)" numa linha separada abaixo do rótulo,
+  /// em vez de embutido no texto do rótulo (evita quebra estranha no meio).
+  final bool comingSoon;
 
   @override
   Widget build(BuildContext context) {
@@ -342,17 +374,25 @@ class _MoreTile extends StatelessWidget {
               child: CircleAvatar(
                 radius: 22,
                 backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Icon(icon, color: color),
+                child: imageAsset != null
+                    ? Image.asset(imageAsset!, width: 22, height: 22, color: color, colorBlendMode: BlendMode.srcIn)
+                    : Icon(icon, color: color),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
             Text(
               label,
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: 11),
+              style: TextStyle(color: color, fontSize: 11, height: 1.0),
             ),
+            if (comingSoon)
+              Text(
+                '(Em breve)',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: color, fontSize: 10, fontStyle: FontStyle.italic, height: 1.0),
+              ),
           ],
         ),
       ),

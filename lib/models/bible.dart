@@ -33,3 +33,19 @@ class BibleVerseRef {
 
   String get reference => '$bookName $chapter:$verse';
 }
+
+/// Espelha BibleSearchScope.kt (sealed class) — aqui como enum + bookId
+/// opcional pra evitar a cerimônia de sealed class no Dart.
+enum BibleSearchScopeKind { allBible, oldTestament, newTestament, specificBook }
+
+class BibleSearchScope {
+  const BibleSearchScope._(this.kind, this.bookId);
+
+  const BibleSearchScope.allBible() : this._(BibleSearchScopeKind.allBible, null);
+  const BibleSearchScope.oldTestament() : this._(BibleSearchScopeKind.oldTestament, null);
+  const BibleSearchScope.newTestament() : this._(BibleSearchScopeKind.newTestament, null);
+  const BibleSearchScope.specificBook(int bookId) : this._(BibleSearchScopeKind.specificBook, bookId);
+
+  final BibleSearchScopeKind kind;
+  final int? bookId;
+}

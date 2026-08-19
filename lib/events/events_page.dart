@@ -34,20 +34,7 @@ class EventsPage extends ConsumerWidget {
       length: 2,
       initialIndex: tab == EventsTab.pontual ? 0 : 1,
       child: Scaffold(
-        appBar: SibValAppBar(
-          isHome: false,
-          bottom: TabBar(
-            onTap: (index) => ref.read(eventsTabProvider.notifier).state =
-                index == 0 ? EventsTab.pontual : EventsTab.recorrente,
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 12),
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-            tabs: const [
-              Tab(text: 'EVENTOS'),
-              Tab(text: 'PROGRAMAÇÃO SEMANAL'),
-            ],
-          ),
-        ),
+        appBar: const SibValAppBar(isHome: false),
         floatingActionButton: canManageEventos
             ? FloatingActionButton(
                 onPressed: () => _onAddEvent(context, tab),
@@ -55,7 +42,20 @@ class EventsPage extends ConsumerWidget {
               )
             : null,
         body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const ScreenTitle('Confira nossas programações'),
+            TabBar(
+              onTap: (index) => ref.read(eventsTabProvider.notifier).state =
+                  index == 0 ? EventsTab.pontual : EventsTab.recorrente,
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              unselectedLabelStyle: const TextStyle(fontSize: 12),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+              tabs: const [
+                Tab(text: 'EVENTOS'),
+                Tab(text: 'PROGRAMAÇÃO SEMANAL'),
+              ],
+            ),
             if (canManageEventos && pendingCount > 0)
               Material(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,

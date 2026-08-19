@@ -35,15 +35,29 @@ class BibleRepository {
     return rows.map((row) => BibleVerse(number: row['verse'] as int, text: row['text'] as String)).toList();
   }
 
-  /// Busca por trecho do texto em toda a bíblia — espelha
-  /// BibleRepository.kt#search (sem escopo de livro atual por ora).
-  Future<List<BibleVerseRef>> search(String query) async {
+  /// Busca por trecho do texto, dentro do escopo escolhido — espelha
+  /// BibleRepository.kt#search (Toda a Bíblia / Antigo / Novo Testamento /
+  /// livro específico).
+  Future<List<BibleVerseRef>> search(String query, {BibleSearchScope scope = const BibleSearchScope.allBible()}) async {
     final db = await BibleDatabase.instance();
+    final where = StringBuffer('verse.text LIKE ?');
+    final args = <Object?>['%$query%'];
+    switch (scope.kind) {
+      case BibleSearchScopeKind.allBible:
+        break;
+      case BibleSearchScopeKind.oldTestament:
+        where.write(' AND book.testament_reference_id = (SELECT testament_reference_id FROM book WHERE id = $firstBookId)');
+      case BibleSearchScopeKind.newTestament:
+        where.write(' AND book.testament_reference_id != (SELECT testament_reference_id FROM book WHERE id = $firstBookId)');
+      case BibleSearchScopeKind.specificBook:
+        where.write(' AND book.id = ?');
+        args.add(scope.bookId);
+    }
     final rows = await db.rawQuery(
       'SELECT book.id as bookId, book.name as bookName, verse.chapter as chapter, verse.verse as verseNumber, '
       'verse.text as text FROM verse JOIN book ON book.id = verse.book_id '
-      'WHERE verse.text LIKE ? ORDER BY book.id, verse.chapter, verse.verse LIMIT 200',
-      ['%$query%'],
+      'WHERE $where ORDER BY book.id, verse.chapter, verse.verse LIMIT 200',
+      args,
     );
     return rows
         .map((row) => BibleVerseRef(

@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../theme/app_theme.dart';
+import '../widgets/google_logo.dart';
 import 'register_page.dart';
 
 /// Resultado de [resolveApprovalState] — espelha o `AuthUiState` do app Android
@@ -199,10 +201,22 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  static const _fieldStyle = TextStyle(color: Colors.white);
+  static InputDecoration _fieldDecoration(String label, {Widget? suffixIcon}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      suffixIcon: suffixIcon,
+      enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)),
+      focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: SibValColors.goldAccent)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const BackButton()),
+      backgroundColor: SibValColors.navyBlue,
+      appBar: AppBar(backgroundColor: SibValColors.navyBlue, foregroundColor: Colors.white, leading: const BackButton()),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -210,21 +224,26 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset('assets/images/logo.png', height: 120),
+                Image.asset('assets/images/icon_sibval.png', height: 120),
                 const SizedBox(height: 40),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'E-mail'),
+                  style: _fieldStyle,
+                  decoration: _fieldDecoration('E-mail'),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
+                  style: _fieldStyle,
+                  decoration: _fieldDecoration(
+                    'Senha',
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        color: Colors.white70,
+                      ),
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
@@ -232,6 +251,7 @@ class _LoginPageState extends State<LoginPage> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
+                    style: TextButton.styleFrom(foregroundColor: Colors.white70),
                     onPressed: _loading ? null : _forgotPassword,
                     child: const Text('Esqueci minha senha'),
                   ),
@@ -252,6 +272,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
                 TextButton(
+                  style: TextButton.styleFrom(foregroundColor: SibValColors.goldAccent),
                   onPressed: _loading
                       ? null
                       : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterPage())),
@@ -260,9 +281,14 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: SibValColors.navyBlueDark,
+                    ),
                     onPressed: _loading ? null : _loginWithGoogle,
-                    child: const Text('Entrar com Google'),
+                    icon: const GoogleLogo(),
+                    label: const Text('Entrar com Google'),
                   ),
                 ),
               ],

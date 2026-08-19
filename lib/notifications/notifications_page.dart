@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../admin/manage_users_page.dart';
 import '../birthdays/birthdays_page.dart';
 import '../data/notification_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
+import '../events/event_pending_list_page.dart';
 import '../home/post_comments_page.dart';
 import '../models/notification.dart';
 import '../theme/app_theme.dart';
@@ -14,9 +16,7 @@ import '../widgets/sibval_app_bar.dart';
 
 /// Espelha NotificationsFragment.kt/NotificationsViewModel.kt: lista de
 /// notificações (lidas em cinza, não lidas em destaque), tocar marca como
-/// lida e navega pro destino. Tipos administrativos (aprovação de usuário,
-/// evento pendente) ainda não têm tela no Flutter — tocar neles só marca
-/// como lida, sem navegar, até a fase do Painel Admin.
+/// lida e navega pro destino correspondente ao tipo.
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
 
@@ -102,6 +102,10 @@ class NotificationsPage extends ConsumerWidget {
         }
       case NotificationType.birthday:
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage()));
+      case NotificationType.userApproval:
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersPage()));
+      case NotificationType.eventPending:
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventPendingListPage()));
       case NotificationType.eventReminder:
         if (notification.targetId.isNotEmpty) {
           Navigator.of(context).push(

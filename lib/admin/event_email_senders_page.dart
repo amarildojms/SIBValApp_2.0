@@ -21,6 +21,7 @@ class EventEmailSendersPage extends ConsumerStatefulWidget {
 class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
   final _searchController = TextEditingController();
   String _query = '';
+  final _selected = <String>{};
 
   @override
   void dispose() {
@@ -53,6 +54,25 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
               onChanged: (value) => setState(() => _query = value),
             ),
           ),
+          if (_selected.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_selected.length} selecionado(s)',
+                      style: TextStyle(color: context.textSecondary, fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Excluir selecionados',
+                    onPressed: () => _confirmAndDeleteSelected(context),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: emailsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -69,12 +89,17 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final email = filtered[index];
-                    return ListTile(
+                    return CheckboxListTile(
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _selected.contains(email),
+                      onChanged: (checked) => setState(() {
+                        if (checked ?? false) {
+                          _selected.add(email);
+                        } else {
+                          _selected.remove(email);
+                        }
+                      }),
                       title: Text(email, style: TextStyle(color: context.textPrimary)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => _removeEmail(emails, email),
-                      ),
                     );
                   },
                 );
@@ -87,10 +112,30 @@ class _EventEmailSendersPageState extends ConsumerState<EventEmailSendersPage> {
     );
   }
 
-  Future<void> _removeEmail(List<String> current, String email) async {
-    final updated = current.where((e) => e != email).toList();
+  Future<void> _confirmAndDeleteSelected(BuildContext context) async {
+    final count = _selected.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir e-mails?'),
+        content: Text(
+          count == 1
+              ? 'Tem certeza que deseja excluir o e-mail selecionado?'
+              : 'Tem certeza que deseja excluir os $count e-mails selecionados?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final current = await ref.read(eventEmailSendersProvider.future);
+    final updated = current.where((e) => !_selected.contains(e)).toList();
     await ref.read(settingsRepositoryProvider).setEventEmailSenders(updated);
     ref.invalidate(eventEmailSendersProvider);
+    setState(() => _selected.clear());
   }
 
   void _showAddDialog(BuildContext context) {

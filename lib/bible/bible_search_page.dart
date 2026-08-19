@@ -7,7 +7,8 @@ import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'bible_reader_page.dart';
 
-/// Espelha BibleSearchFragment.kt: busca por trecho de texto em toda a bíblia.
+/// Espelha BibleSearchFragment.kt: busca por trecho de texto com escopo
+/// (Toda a Bíblia / Antigo Testamento / Novo Testamento / livro específico).
 class BibleSearchPage extends ConsumerStatefulWidget {
   const BibleSearchPage({super.key});
 
@@ -19,11 +20,31 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
   final _queryController = TextEditingController();
   List<BibleVerseRef>? _results;
   bool _loading = false;
+  BibleSearchScopeKind _scopeKind = BibleSearchScopeKind.allBible;
+  int? _selectedBookId;
 
   @override
   void dispose() {
     _queryController.dispose();
     super.dispose();
+  }
+
+  BibleSearchScope get _scope {
+    switch (_scopeKind) {
+      case BibleSearchScopeKind.allBible:
+        return const BibleSearchScope.allBible();
+      case BibleSearchScopeKind.oldTestament:
+        return const BibleSearchScope.oldTestament();
+      case BibleSearchScopeKind.newTestament:
+        return const BibleSearchScope.newTestament();
+      case BibleSearchScopeKind.specificBook:
+        return BibleSearchScope.specificBook(_selectedBookId ?? BibleRepository.firstBookId);
+    }
+  }
+
+  void _setScope(BibleSearchScopeKind kind) {
+    setState(() => _scopeKind = kind);
+    if (_queryController.text.trim().isNotEmpty) _search(_queryController.text);
   }
 
   Future<void> _search(String query) async {
@@ -33,7 +54,7 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
       return;
     }
     setState(() => _loading = true);
-    final results = await ref.read(bibleRepositoryProvider).search(trimmed);
+    final results = await ref.read(bibleRepositoryProvider).search(trimmed, scope: _scope);
     if (!mounted) return;
     setState(() {
       _results = results;
@@ -43,6 +64,8 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final booksAsync = ref.watch(bibleBooksProvider);
+
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -71,6 +94,58 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('Toda a Bíblia'),
+                    selected: _scopeKind == BibleSearchScopeKind.allBible,
+                    onSelected: (_) => _setScope(BibleSearchScopeKind.allBible),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Antigo Testamento'),
+                    selected: _scopeKind == BibleSearchScopeKind.oldTestament,
+                    onSelected: (_) => _setScope(BibleSearchScopeKind.oldTestament),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Novo Testamento'),
+                    selected: _scopeKind == BibleSearchScopeKind.newTestament,
+                    onSelected: (_) => _setScope(BibleSearchScopeKind.newTestament),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Livro específico'),
+                    selected: _scopeKind == BibleSearchScopeKind.specificBook,
+                    onSelected: (_) => _setScope(BibleSearchScopeKind.specificBook),
+                  ),
+                ],
+              ),
+            ),
+            if (_scopeKind == BibleSearchScopeKind.specificBook)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: booksAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                  data: (books) => DropdownButtonFormField<int>(
+                    initialValue: _selectedBookId ?? books.first.id,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Livro'),
+                    items: [
+                      for (final book in books) DropdownMenuItem(value: book.id, child: Text(book.name)),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedBookId = value);
+                      if (_queryController.text.trim().isNotEmpty) _search(_queryController.text);
+                    },
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             Expanded(
               child: _loading

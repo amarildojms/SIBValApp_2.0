@@ -20,6 +20,21 @@ class HymnalRepository {
     return rows.map((row) => _toHymn(row)).toList();
   }
 
+  /// Busca por número, título ou trecho da letra — mesma ideia de
+  /// HymnalRepository.kt#searchSongs, mas direto nas colunas `song_number`/
+  /// `title`/`lyrics` (sem depender de colunas de busca pré-computadas).
+  Future<List<Hymn>> searchSongs(String query) async {
+    final db = await HymnalDatabase.instance(hymnal);
+    final like = '%$query%';
+    final rows = await db.rawQuery(
+      'SELECT id, song_number, title FROM songs '
+      'WHERE song_number LIKE ? OR title LIKE ? OR lyrics LIKE ? '
+      'ORDER BY CAST(song_number AS INTEGER)',
+      [like, like, like],
+    );
+    return rows.map(_toHymn).toList();
+  }
+
   Future<Hymn?> getSong(int id) async {
     final db = await HymnalDatabase.instance(hymnal);
     final rows = await db.rawQuery(

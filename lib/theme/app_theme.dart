@@ -115,7 +115,7 @@ class ScreenTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         text,
-        style: const TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold, fontSize: 22),
+        style: const TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold, fontSize: 19),
       ),
     );
   }
