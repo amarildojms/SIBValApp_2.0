@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'admin/event_email_senders_page.dart';
+import 'admin/manage_ministries_page.dart';
 import 'admin/manage_users_page.dart';
 import 'admin/members_page.dart';
 import 'admin/recurring_event_flyer_repository_page.dart';
@@ -22,6 +23,7 @@ import 'gallery/album_list_page.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
 import 'models/hymn.dart';
+import 'notifications/push_notification_service.dart';
 import 'partners/partners_page.dart';
 import 'prayer/prayer_page.dart';
 import 'theme/app_theme.dart';
@@ -62,6 +64,13 @@ class _MainShellState extends State<MainShell> {
         builder: (context, ref, _) {
           final uid = ref.watch(currentUidProvider);
           final profile = ref.watch(currentUserProfileProvider).asData?.value;
+          // Espelha HomeFragment.kt `setUpNotifications()`: pede permissão de
+          // notificação e registra o token FCM assim que há um uid logado. O
+          // próprio serviço deduplica por uid, então chamar em todo build é
+          // seguro.
+          if (uid != null) {
+            ref.read(pushNotificationServiceProvider).requestPermissionAndRegisterToken(uid);
+          }
           // Contas logadas criadas antes dos Termos de Uso/checkbox de
           // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
           // aceitarem — ver `RequiredConsentGatePage`.
@@ -237,6 +246,12 @@ class _MaisPage extends ConsumerWidget {
           label: 'Rol de Membros',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MembersPage())),
         ),
+      if (profile?.canManageBirthdays ?? false)
+        _MoreTile(
+          icon: Icons.groups_outlined,
+          label: 'Ministérios e Cargos',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageMinistriesPage())),
+        ),
       // Tier 3 — admin / secretaria / eventos.
       if (isAdmin)
         _MoreTile(
@@ -325,9 +340,9 @@ class _MoreHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final memberAsync = ref.watch(myMemberProvider);
-    final membershipDate = memberAsync.asData?.value?.membershipDate;
-    final completionPercent = profile.completionPercent(hasMembershipDate: membershipDate != null);
-    final membershipLabel = _membershipDurationLabel(membershipDate);
+    final member = memberAsync.asData?.value;
+    final completionPercent = profile.completionPercent(member: member);
+    final membershipLabel = _membershipDurationLabel(member?.membershipDate);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),

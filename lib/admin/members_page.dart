@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/member_repository.dart';
+import '../data/ministry_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/member.dart';
@@ -30,6 +31,19 @@ class MembersPage extends ConsumerStatefulWidget {
   ConsumerState<MembersPage> createState() => _MembersPageState();
 }
 
+/// Um membro conta como "cadastro incompleto" se faltar qualquer dado da
+/// seção eclesiástica preenchida pela Secretaria — data de membresia, forma
+/// de adesão, igreja de origem, data de batismo ou estado civil. Ministérios
+/// e cargos ficam de fora de propósito (20/08/2026): é legítimo um membro
+/// não participar de nenhum ministério.
+bool _hasIncompleteEcclesiasticalData(Member m) {
+  return m.membershipDate == null ||
+      m.admissionForm.isEmpty ||
+      m.originChurch.isEmpty ||
+      m.baptismDate == null ||
+      m.maritalStatus.isEmpty;
+}
+
 class _MembersPageState extends ConsumerState<MembersPage> {
   final _searchController = TextEditingController();
   String _query = '';
@@ -46,8 +60,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
     final membersAsync = ref.watch(membersProvider);
     final profileAsync = ref.watch(currentUserProfileProvider);
     final canManage = profileAsync.asData?.value?.canManageBirthdays ?? false;
-    final incompleteCount =
-        (membersAsync.asData?.value ?? const <Member>[]).where((m) => m.membershipDate == null).length;
+    final incompleteCount = (membersAsync.asData?.value ?? const <Member>[]).where(_hasIncompleteEcclesiasticalData).length;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -81,7 +94,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
                 isLabelVisible: incompleteCount > 0,
                 alignment: AlignmentDirectional.topEnd,
                 child: FilterChip(
-                  label: const Text('Cadastros incompletos (sem data de membresia)'),
+                  label: const Text('Cadastros incompletos (dados eclesiásticos)'),
                   selected: _onlyIncomplete,
                   onSelected: (value) => setState(() => _onlyIncomplete = value),
                 ),
@@ -103,7 +116,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
                         return matchesName || matchesCpf;
                       }).toList();
                 if (canManage && _onlyIncomplete) {
-                  filtered = filtered.where((m) => m.membershipDate == null).toList();
+                  filtered = filtered.where(_hasIncompleteEcclesiasticalData).toList();
                 }
                 if (filtered.isEmpty) {
                   return Center(child: Text('Nenhum membro encontrado.', style: TextStyle(color: context.textSecondary)));
@@ -124,7 +137,7 @@ class _MembersPageState extends ConsumerState<MembersPage> {
                         member.email.isNotEmpty ? '$dateLabel • ${member.email}' : dateLabel,
                         style: TextStyle(color: context.textSecondary),
                       ),
-                      trailing: canManage && member.membershipDate == null
+                      trailing: canManage && _hasIncompleteEcclesiasticalData(member)
                           ? const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.amber)
                           : null,
                       onTap: canManage
@@ -193,12 +206,14 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
   );
   late final _addressController = TextEditingController(text: widget.existing?.address ?? '');
   late final _originChurchController = TextEditingController(text: widget.existing?.originChurch ?? '');
-  late final _ministryController = TextEditingController(text: widget.existing?.ministry ?? '');
-  late final _churchPositionController = TextEditingController(text: widget.existing?.churchPosition ?? '');
   late DateTime? _membershipDate = widget.existing?.membershipDate;
   late DateTime? _baptismDate = widget.existing?.baptismDate;
   late String? _admissionForm = (widget.existing?.admissionForm ?? '').isNotEmpty ? widget.existing!.admissionForm : null;
   late String? _maritalStatus = (widget.existing?.maritalStatus ?? '').isNotEmpty ? widget.existing!.maritalStatus : null;
+  late final List<_SelectedMinistry> _selectedMinistries = [
+    for (final m in widget.existing?.ministries ?? const <MemberMinistry>[])
+      _SelectedMinistry(ministryId: m.ministryId, ministryName: m.ministryName, cargos: {...m.cargos}),
+  ];
   File? _pickedPhoto;
   bool _saving = false;
 
@@ -211,8 +226,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     _phoneController.dispose();
     _addressController.dispose();
     _originChurchController.dispose();
-    _ministryController.dispose();
-    _churchPositionController.dispose();
     super.dispose();
   }
 
@@ -239,6 +252,24 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     if (picked != null) onPicked(picked);
   }
 
+  Future<void> _pickMinistries() async {
+    final allMinistries = _cachedMinistries;
+    final selectedIds = {for (final m in _selectedMinistries) m.ministryId};
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _MinistryPickerDialog(ministries: allMinistries, initiallySelected: selectedIds),
+    );
+    if (result == null) return;
+    setState(() {
+      _selectedMinistries.removeWhere((m) => !result.contains(m.ministryId));
+      for (final id in result) {
+        if (_selectedMinistries.any((m) => m.ministryId == id)) continue;
+        final ministry = allMinistries.firstWhere((m) => m.id == id);
+        _selectedMinistries.add(_SelectedMinistry(ministryId: ministry.id, ministryName: ministry.name, cargos: {}));
+      }
+    });
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
     final parts = _dateController.text.split('/');
@@ -261,6 +292,10 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     setState(() => _saving = true);
     final repo = ref.read(memberRepositoryProvider);
     final uid = ref.read(currentUidProvider) ?? '';
+    final ministries = [
+      for (final m in _selectedMinistries)
+        MemberMinistry(ministryId: m.ministryId, ministryName: m.ministryName, cargos: m.cargos.toList()),
+    ];
     try {
       if (widget.existing == null) {
         await repo.create(
@@ -278,8 +313,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           originChurch: _originChurchController.text.trim(),
           baptismDate: _baptismDate,
           maritalStatus: _maritalStatus ?? '',
-          ministry: _ministryController.text.trim(),
-          churchPosition: _churchPositionController.text.trim(),
+          ministries: ministries,
         );
       } else {
         await repo.update(
@@ -297,8 +331,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           originChurch: _originChurchController.text.trim(),
           baptismDate: _baptismDate,
           maritalStatus: _maritalStatus ?? '',
-          ministry: _ministryController.text.trim(),
-          churchPosition: _churchPositionController.text.trim(),
+          ministries: ministries,
         );
       }
       ref.invalidate(membersProvider);
@@ -312,8 +345,15 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     }
   }
 
+  /// Snapshot mais recente de `ministriesProvider`, atualizado a cada build
+  /// (que já observa o provider) — usado por `_pickMinistries` pra não
+  /// depender de um `ref.read` que pode não ter os dados carregados ainda.
+  List<Ministry> _cachedMinistries = const [];
+
   @override
   Widget build(BuildContext context) {
+    _cachedMinistries = ref.watch(ministriesProvider).asData?.value ?? _cachedMinistries;
+
     ImageProvider? photoProvider;
     if (_pickedPhoto != null) {
       photoProvider = FileImage(_pickedPhoto!);
@@ -394,11 +434,17 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               items: [
                 for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
               ],
-              onChanged: (value) => setState(() => _admissionForm = value),
+              onChanged: (value) => setState(() {
+                _admissionForm = value;
+                if (value == 'Batismo') {
+                  _originChurchController.text = 'Segunda Igreja Batista em Valparaíso';
+                }
+              }),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _originChurchController,
+              enabled: _admissionForm != 'Batismo',
               decoration: const InputDecoration(labelText: 'Igreja de origem'),
             ),
             const SizedBox(height: 8),
@@ -421,16 +467,21 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               ],
               onChanged: (value) => setState(() => _maritalStatus = value),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _ministryController,
-              decoration: const InputDecoration(labelText: 'Ministério'),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Ministérios e Cargos', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _churchPositionController,
-              decoration: const InputDecoration(labelText: 'Cargo/Função'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _pickMinistries,
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar ministério'),
+              ),
             ),
+            for (final selected in _selectedMinistries) _buildMinistryCard(context, selected),
           ],
         ),
       ),
@@ -441,6 +492,132 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           child: _saving
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Salvar'),
+        ),
+      ],
+    );
+  }
+
+  /// Card de um ministério selecionado: nome + botão remover, e os cargos
+  /// disponíveis naquele ministério (fonte viva: `ministriesProvider`, não
+  /// congelada no momento da seleção) como `FilterChip` — marcar/desmarcar
+  /// alterna se o membro exerce aquele cargo. É a resposta direta ao pedido
+  /// "selecionar ministério → marcar os cargos que exerce".
+  Widget _buildMinistryCard(BuildContext context, _SelectedMinistry selected) {
+    final availableCargos = _cachedMinistries
+        .firstWhere(
+          (m) => m.id == selected.ministryId,
+          orElse: () => Ministry(id: selected.ministryId, name: selected.ministryName, cargos: const []),
+        )
+        .cargos;
+
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selected.ministryName,
+                    style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Remover ministério',
+                  onPressed: () => setState(() => _selectedMinistries.remove(selected)),
+                ),
+              ],
+            ),
+            if (availableCargos.isEmpty)
+              Text('Nenhum cargo cadastrado para este ministério.', style: TextStyle(color: context.textSecondary))
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final cargo in availableCargos)
+                    FilterChip(
+                      label: Text(cargo),
+                      selected: selected.cargos.contains(cargo),
+                      onSelected: (value) => setState(() {
+                        if (value) {
+                          selected.cargos.add(cargo);
+                        } else {
+                          selected.cargos.remove(cargo);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Estado local de um ministério selecionado no `_MemberDialog`, com os
+/// cargos marcados para o membro dentro dele.
+class _SelectedMinistry {
+  _SelectedMinistry({required this.ministryId, required this.ministryName, required this.cargos});
+
+  final String ministryId;
+  final String ministryName;
+  final Set<String> cargos;
+}
+
+/// Diálogo de checklist pra escolher quais ministérios o membro participa
+/// (`_MemberDialog._pickMinistries`) — os cargos de cada um são marcados
+/// depois, inline no formulário (`_buildMinistryCard`).
+class _MinistryPickerDialog extends StatefulWidget {
+  const _MinistryPickerDialog({required this.ministries, required this.initiallySelected});
+
+  final List<Ministry> ministries;
+  final Set<String> initiallySelected;
+
+  @override
+  State<_MinistryPickerDialog> createState() => _MinistryPickerDialogState();
+}
+
+class _MinistryPickerDialogState extends State<_MinistryPickerDialog> {
+  late final _selected = {...widget.initiallySelected};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Selecionar ministérios'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: widget.ministries.isEmpty
+            ? const Text('Nenhum ministério cadastrado ainda.')
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final ministry in widget.ministries)
+                    CheckboxListTile(
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _selected.contains(ministry.id),
+                      title: Text(ministry.name),
+                      onChanged: (checked) => setState(() {
+                        if (checked ?? false) {
+                          _selected.add(ministry.id);
+                        } else {
+                          _selected.remove(ministry.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_selected),
+          child: const Text('Confirmar'),
         ),
       ],
     );

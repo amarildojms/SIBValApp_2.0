@@ -1,5 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Ministério(s) que o membro exerce, com os cargos/funções marcados dentro
+/// de cada um (20/08/2026, substitui os antigos campos livres `ministry`/
+/// `churchPosition`). `ministryName` é denormalizado do `Ministry`
+/// correspondente (`ministry_repository.dart`) só pra exibição sem join;
+/// `ministryId` é o que importa pra filtrar/consultar.
+class MemberMinistry {
+  const MemberMinistry({required this.ministryId, required this.ministryName, required this.cargos});
+
+  final String ministryId;
+  final String ministryName;
+  final List<String> cargos;
+
+  Map<String, dynamic> toMap() => {
+        'ministryId': ministryId,
+        'ministryName': ministryName,
+        'cargos': cargos,
+      };
+
+  factory MemberMinistry.fromMap(Map<String, dynamic> map) {
+    return MemberMinistry(
+      ministryId: map['ministryId'] as String? ?? '',
+      ministryName: map['ministryName'] as String? ?? '',
+      cargos: List<String>.from(map['cargos'] as List? ?? const []),
+    );
+  }
+}
+
 /// Espelha app/src/main/java/com/sibval/app/data/model/Member.kt, ampliado
 /// (19/08/2026) com paridade de campos ao cadastro de usuário — ver
 /// UserRepository.createUserProfile. `membershipDate` só é gravado pelo
@@ -7,6 +34,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// `linkedUid` guarda o uid do usuário Auth dono deste registro, quando
 /// existir (preenchido por `MemberRepository.upsertFromUser`), permitindo
 /// achar "o membro do usuário logado" sem depender de CPF/e-mail.
+///
+/// Toda a seção "Dados eclesiásticos" (admissionForm em diante, incluindo
+/// `ministries`) passou a ser exclusividade da Secretaria em Rol de Membros
+/// (20/08/2026) — não existe mais em `users/{uid}`/`AppUser`.
 class Member {
   final String id;
   final String name;
@@ -25,8 +56,8 @@ class Member {
   final String originChurch;
   final DateTime? baptismDate;
   final String maritalStatus;
-  final String ministry;
-  final String churchPosition;
+  final List<String> ministryIds;
+  final List<MemberMinistry> ministries;
   final String linkedUid;
 
   const Member({
@@ -47,8 +78,8 @@ class Member {
     this.originChurch = '',
     this.baptismDate,
     this.maritalStatus = '',
-    this.ministry = '',
-    this.churchPosition = '',
+    this.ministryIds = const [],
+    this.ministries = const [],
     this.linkedUid = '',
   });
 
@@ -72,8 +103,10 @@ class Member {
       originChurch: data['originChurch'] as String? ?? '',
       baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
       maritalStatus: data['maritalStatus'] as String? ?? '',
-      ministry: data['ministry'] as String? ?? '',
-      churchPosition: data['churchPosition'] as String? ?? '',
+      ministryIds: List<String>.from(data['ministryIds'] as List? ?? const []),
+      ministries: (data['ministries'] as List? ?? const [])
+          .map((m) => MemberMinistry.fromMap(Map<String, dynamic>.from(m as Map)))
+          .toList(),
       linkedUid: data['linkedUid'] as String? ?? '',
     );
   }

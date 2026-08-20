@@ -5,12 +5,15 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_user.dart';
+import '../models/member.dart';
 import 'post_repository.dart' show currentUidProvider;
 
 /// Espelha os checks de permissão de app/src/main/java/com/sibval/app/data/model/User.kt
-/// (isAdmin || roles.contains(...)). Também carrega os dados eclesiásticos
-/// opcionais (paridade com `AppUser`/`Member`, 19/08/2026) usados no % de
-/// cadastro exibido na tela Mais e pré-preenchimento de Editar Perfil.
+/// (isAdmin || roles.contains(...)). A seção "Dados eclesiásticos" (forma de
+/// adesão em diante) não existe mais aqui (20/08/2026) — virou exclusividade
+/// da Secretaria, editada direto no `Member` vinculado (ver
+/// `completionPercent`, que agora recebe esse `Member?` pra calcular o % de
+/// cadastro em vez de campos locais).
 class CurrentUserProfile {
   const CurrentUserProfile({
     required this.name,
@@ -22,12 +25,6 @@ class CurrentUserProfile {
     required this.hasBirthdate,
     this.phone = '',
     this.address = '',
-    this.admissionForm = '',
-    this.originChurch = '',
-    this.baptismDate,
-    this.maritalStatus = '',
-    this.ministry = '',
-    this.churchPosition = '',
     this.communicationsConsent = false,
     this.acceptedPrivacyPolicy = false,
     this.acceptedTermsOfUse = false,
@@ -42,12 +39,6 @@ class CurrentUserProfile {
   final bool hasBirthdate;
   final String phone;
   final String address;
-  final String admissionForm;
-  final String originChurch;
-  final DateTime? baptismDate;
-  final String maritalStatus;
-  final String ministry;
-  final String churchPosition;
 
   /// Checkbox opcional do cadastro (ver `registration_consent_section.dart`)
   /// — usado por `CommunicationsConsentBanner` pra decidir se sugere ativar.
@@ -76,17 +67,22 @@ class CurrentUserProfile {
   }
 
   /// % de cadastro preenchido: 4 campos sempre obrigatórios no registro
-  /// (nome, cpf, data de nascimento, e-mail) + 8 opcionais aqui + a data de
-  /// membresia (vem do `Member` vinculado, ver `myMemberProvider` — passada
-  /// à parte porque não existe mais em `users/{uid}`).
-  int completionPercent({required bool hasMembershipDate}) {
+  /// (nome, cpf, data de nascimento, e-mail) + phone/address aqui + os
+  /// campos da seção "Dados eclesiásticos" (admissionForm, originChurch,
+  /// maritalStatus, baptismDate, ao menos 1 ministério) e a data de
+  /// membresia, todos lidos do `Member` vinculado (ver `myMemberProvider`) —
+  /// só a Secretaria os preenche, então não existem mais em
+  /// `CurrentUserProfile`.
+  int completionPercent({required Member? member}) {
     final requiredFilled = [name, cpf, email].where((v) => v.trim().isNotEmpty).length + (hasBirthdate ? 1 : 0);
-    final optionalFilled = [phone, address, admissionForm, originChurch, maritalStatus, ministry, churchPosition]
+    final optionalFilled = [phone, address].where((v) => v.trim().isNotEmpty).length +
+        [member?.admissionForm ?? '', member?.originChurch ?? '', member?.maritalStatus ?? '']
             .where((v) => v.trim().isNotEmpty)
             .length +
-        (baptismDate != null ? 1 : 0) +
-        (hasMembershipDate ? 1 : 0);
-    const totalFields = 13; // 4 obrigatórios + 8 opcionais + membershipDate
+        (member?.baptismDate != null ? 1 : 0) +
+        (member != null && member.ministries.isNotEmpty ? 1 : 0) +
+        (member?.membershipDate != null ? 1 : 0);
+    const totalFields = 12; // 4 obrigatórios + phone/address(2) + eclesiásticos(3) + baptismDate(1) + ministérios(1) + membershipDate(1)
     return (((requiredFilled + optionalFilled) / totalFields) * 100).round();
   }
 }
@@ -107,12 +103,6 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     hasBirthdate: data['birthdate'] != null,
     phone: data['phone'] as String? ?? '',
     address: data['address'] as String? ?? '',
-    admissionForm: data['admissionForm'] as String? ?? '',
-    originChurch: data['originChurch'] as String? ?? '',
-    baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
-    maritalStatus: data['maritalStatus'] as String? ?? '',
-    ministry: data['ministry'] as String? ?? '',
-    churchPosition: data['churchPosition'] as String? ?? '',
     communicationsConsent: data['communicationsConsent'] as bool? ?? false,
     acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
     acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
@@ -138,9 +128,10 @@ class UserRepository {
   /// usuário, para suportar um cadastro de membresia mais completo. CPF é
   /// obrigatório nas duas telas que chamam este método (cadastro por e-mail
   /// e completar perfil via Google) — os demais ficam opcionais aqui, quem
-  /// exige o que é cada tela. `membershipDate` não é mais coletado aqui
-  /// (19/08/2026) — passa a ser exclusividade do usuário autorizado (papel
-  /// Secretaria) via `MemberRepository`, ver `members_page.dart`.
+  /// exige o que é cada tela. Nem `membershipDate` nem a seção "Dados
+  /// eclesiásticos" são coletados aqui (19/08/2026 e 20/08/2026) — passam a
+  /// ser exclusividade do usuário autorizado (papel Secretaria) via
+  /// `MemberRepository`, ver `members_page.dart`.
   Future<void> createUserProfile({
     required String uid,
     required String name,
@@ -149,12 +140,6 @@ class UserRepository {
     required String cpf,
     String phone = '',
     String address = '',
-    String admissionForm = '',
-    String originChurch = '',
-    DateTime? baptismDate,
-    String maritalStatus = '',
-    String ministry = '',
-    String churchPosition = '',
     bool privacyPolicyAccepted = false,
     bool termsOfUseAccepted = false,
     bool communicationsConsent = false,
@@ -169,12 +154,6 @@ class UserRepository {
       'cpf': normalizedCpf,
       'phone': phone,
       'address': address,
-      'admissionForm': admissionForm,
-      'originChurch': originChurch,
-      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
-      'maritalStatus': maritalStatus,
-      'ministry': ministry,
-      'churchPosition': churchPosition,
       if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
       if (termsOfUseAccepted) 'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
       'communicationsConsent': communicationsConsent,
@@ -187,29 +166,18 @@ class UserRepository {
     });
   }
 
-  /// Usado em `edit_profile_page.dart` — permite ao próprio usuário completar
-  /// os campos opcionais do cadastro (regra atual já permite:
-  /// `auth.uid == userId`). `membershipDate` não entra aqui de propósito.
+  /// Usado em `edit_profile_page.dart` — permite ao próprio usuário editar
+  /// telefone/endereço (regra atual já permite: `auth.uid == userId`). A
+  /// seção "Dados eclesiásticos" não entra mais aqui (20/08/2026) — é
+  /// exclusividade da Secretaria em Rol de Membros.
   Future<void> updateProfileDetails({
     required String uid,
     required String phone,
     required String address,
-    required String admissionForm,
-    required String originChurch,
-    required DateTime? baptismDate,
-    required String maritalStatus,
-    required String ministry,
-    required String churchPosition,
   }) {
     return _users.doc(uid).update({
       'phone': phone,
       'address': address,
-      'admissionForm': admissionForm,
-      'originChurch': originChurch,
-      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
-      'maritalStatus': maritalStatus,
-      'ministry': ministry,
-      'churchPosition': churchPosition,
     });
   }
 
@@ -271,6 +239,13 @@ class UserRepository {
 
   Future<void> deleteUserProfile(String uid) {
     return _users.doc(uid).delete();
+  }
+
+  /// Espelha UserRepository.kt `updateFcmToken` — token salvo em
+  /// `users/{uid}.fcmToken`, consumido pelas Cloud Functions (`functions/index.js`
+  /// no repo nativo) que disparam push via `fcmToken`. Ver `PushNotificationService`.
+  Future<void> updateFcmToken(String uid, String token) {
+    return _users.doc(uid).update({'fcmToken': token});
   }
 }
 

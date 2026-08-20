@@ -3,6 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Espelha app/src/main/java/com/sibval/app/data/model/User.kt — mesma
 /// coleção `users` no Firestore. Nomeado AppUser pra não colidir com a
 /// classe User do firebase_auth, já usada em outros arquivos.
+///
+/// A seção "Dados eclesiásticos" (admissionForm, originChurch, baptismDate,
+/// maritalStatus, ministérios/cargos) não existe mais aqui (20/08/2026) —
+/// virou exclusividade da Secretaria, editada direto em `Member`
+/// (`members_page.dart`), desacoplada do fluxo de aprovação de cadastro.
 class AppUser {
   final String uid;
   final String name;
@@ -17,12 +22,6 @@ class AppUser {
   final List<String> roles;
   final String phone;
   final String address;
-  final String admissionForm;
-  final String originChurch;
-  final DateTime? baptismDate;
-  final String maritalStatus;
-  final String ministry;
-  final String churchPosition;
 
   const AppUser({
     required this.uid,
@@ -38,12 +37,6 @@ class AppUser {
     required this.roles,
     this.phone = '',
     this.address = '',
-    this.admissionForm = '',
-    this.originChurch = '',
-    this.baptismDate,
-    this.maritalStatus = '',
-    this.ministry = '',
-    this.churchPosition = '',
   });
 
   factory AppUser.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -62,12 +55,6 @@ class AppUser {
       roles: List<String>.from(data['roles'] as List? ?? const []),
       phone: data['phone'] as String? ?? '',
       address: data['address'] as String? ?? '',
-      admissionForm: data['admissionForm'] as String? ?? '',
-      originChurch: data['originChurch'] as String? ?? '',
-      baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
-      maritalStatus: data['maritalStatus'] as String? ?? '',
-      ministry: data['ministry'] as String? ?? '',
-      churchPosition: data['churchPosition'] as String? ?? '',
     );
   }
 
@@ -86,12 +73,6 @@ class AppUser {
       roles: roles ?? this.roles,
       phone: phone,
       address: address,
-      admissionForm: admissionForm,
-      originChurch: originChurch,
-      baptismDate: baptismDate,
-      maritalStatus: maritalStatus,
-      ministry: ministry,
-      churchPosition: churchPosition,
     );
   }
 }

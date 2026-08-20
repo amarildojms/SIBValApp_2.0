@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
-import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/photo_picker.dart';
 import '../widgets/google_logo.dart';
@@ -31,15 +30,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  final _originChurchController = TextEditingController();
-  final _ministryController = TextEditingController();
-  final _churchPositionController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   DateTime? _birthdate;
-  DateTime? _baptismDate;
-  String? _admissionForm;
-  String? _maritalStatus;
   File? _pickedPhoto;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -55,9 +48,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _originChurchController.dispose();
-    _ministryController.dispose();
-    _churchPositionController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -81,19 +71,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     if (picked != null) {
       setState(() => _birthdate = picked);
     }
-  }
-
-  /// Usado por Data de Membresia e Data de Batismo — ambas opcionais, sem a
-  /// restrição de idade mínima do date picker de nascimento.
-  Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now,
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-    );
-    if (picked != null) onPicked(picked);
   }
 
   Future<void> _register() async {
@@ -152,12 +129,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
-        admissionForm: _admissionForm ?? '',
-        originChurch: _originChurchController.text.trim(),
-        baptismDate: _baptismDate,
-        maritalStatus: _maritalStatus ?? '',
-        ministry: _ministryController.text.trim(),
-        churchPosition: _churchPositionController.text.trim(),
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
         communicationsConsent: _acceptedCommunications,
@@ -332,60 +303,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 controller: _addressController,
                 textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Dados eclesiásticos (opcional)',
-                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _admissionForm,
-                decoration: const InputDecoration(labelText: 'Forma de Adesão'),
-                items: [
-                  for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
-                ],
-                onChanged: (value) => setState(() => _admissionForm = value),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _originChurchController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Igreja de origem'),
-              ),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => _pickDate(_baptismDate, (date) => setState(() => _baptismDate = date)),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Data de Batismo',
-                    suffixIcon: Icon(Icons.calendar_today_outlined),
-                  ),
-                  child: Text(
-                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _maritalStatus,
-                decoration: const InputDecoration(labelText: 'Estado civil'),
-                items: [
-                  for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
-                ],
-                onChanged: (value) => setState(() => _maritalStatus = value),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _ministryController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Ministério'),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _churchPositionController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Cargo/Função'),
               ),
               const SizedBox(height: 24),
               TextField(

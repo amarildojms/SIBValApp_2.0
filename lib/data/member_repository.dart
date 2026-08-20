@@ -41,14 +41,14 @@ class MemberRepository {
     return Member.fromFirestore(snapshot.docs.first);
   }
 
-  /// Acha o membro do usuário logado. Tenta primeiro por `linkedUid` (rápido,
-  /// já indexado); membros aprovados antes desse campo existir (19/08/2026)
-  /// ainda não o têm, então cai pro CPF/e-mail — mesma busca de
-  /// `upsertFromUser` — e faz o backfill de `linkedUid` no documento achado,
-  /// pra próxima consulta já vir direto por `linkedUid`.
-  Future<Member?> getForCurrentUser({required String uid, required String cpf, required String email}) async {
+  /// Acha o id do documento do membro do usuário logado. Tenta primeiro por
+  /// `linkedUid` (rápido, já indexado); membros aprovados antes desse campo
+  /// existir (19/08/2026) ainda não o têm, então cai pro CPF/e-mail — mesma
+  /// busca de `upsertFromUser` — e faz o backfill de `linkedUid` no
+  /// documento achado, pra próxima consulta já vir direto por `linkedUid`.
+  Future<String?> _findMemberDocId({required String uid, required String cpf, required String email}) async {
     final byLinkedUid = await getByLinkedUid(uid);
-    if (byLinkedUid != null) return byLinkedUid;
+    if (byLinkedUid != null) return byLinkedUid.id;
 
     final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
     final normalizedEmail = email.trim().toLowerCase();
@@ -67,7 +67,21 @@ class MemberRepository {
     // admin (regra de escrita de `members`); para os demais, o `catch` evita
     // que a leitura (permitida a todo autenticado) quebre por causa disso.
     doc.reference.set({'linkedUid': uid}, SetOptions(merge: true)).catchError((_) {});
-    return Member.fromFirestore(doc);
+    return doc.id;
+  }
+
+  /// Observa o membro do usuário logado em tempo real (20/08/2026) — qualquer
+  /// edição feita pela Secretaria em Rol de Membros (inclusive
+  /// ministérios/cargos) chega direto pra quem estiver com "Editar perfil"
+  /// ou a tela Mais abertos, sem precisar reabrir a tela. Resolve o id do
+  /// documento uma vez (`_findMemberDocId`) e depois segue por `snapshots()`.
+  Stream<Member?> watchForCurrentUser({required String uid, required String cpf, required String email}) async* {
+    final docId = await _findMemberDocId(uid: uid, cpf: cpf, email: email);
+    if (docId == null) {
+      yield null;
+      return;
+    }
+    yield* _members.doc(docId).snapshots().map((doc) => doc.exists ? Member.fromFirestore(doc) : null);
   }
 
   Future<Member> create({
@@ -85,8 +99,7 @@ class MemberRepository {
     String originChurch = '',
     DateTime? baptismDate,
     String maritalStatus = '',
-    String ministry = '',
-    String churchPosition = '',
+    List<MemberMinistry> ministries = const [],
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
@@ -101,6 +114,7 @@ class MemberRepository {
       photoUrl = await ref.getDownloadURL();
     }
 
+    final ministryIds = ministries.map((m) => m.ministryId).toList();
     await doc.set({
       'name': name,
       'email': normalizedEmail,
@@ -118,8 +132,8 @@ class MemberRepository {
       'originChurch': originChurch,
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
       'maritalStatus': maritalStatus,
-      'ministry': ministry,
-      'churchPosition': churchPosition,
+      'ministryIds': ministryIds,
+      'ministries': ministries.map((m) => m.toMap()).toList(),
     });
 
     return Member(
@@ -140,8 +154,8 @@ class MemberRepository {
       originChurch: originChurch,
       baptismDate: baptismDate,
       maritalStatus: maritalStatus,
-      ministry: ministry,
-      churchPosition: churchPosition,
+      ministryIds: ministryIds,
+      ministries: ministries,
     );
   }
 
@@ -160,8 +174,7 @@ class MemberRepository {
     String originChurch = '',
     DateTime? baptismDate,
     String maritalStatus = '',
-    String ministry = '',
-    String churchPosition = '',
+    List<MemberMinistry> ministries = const [],
   }) async {
     var photoUrl = member.photoUrl;
     var storagePath = member.storagePath;
@@ -196,8 +209,8 @@ class MemberRepository {
       'originChurch': originChurch,
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
       'maritalStatus': maritalStatus,
-      'ministry': ministry,
-      'churchPosition': churchPosition,
+      'ministryIds': ministries.map((m) => m.ministryId).toList(),
+      'ministries': ministries.map((m) => m.toMap()).toList(),
       'linkedUid': member.linkedUid,
     };
 
@@ -218,10 +231,11 @@ class MemberRepository {
   /// usuário já tem CPF, migra o documento pro id canônico (CPF), preservando
   /// o que já existia ali (SetOptions.merge) — é o "mesclar dados" pedido:
   /// o aniversariante cadastrado manualmente vira o mesmo registro do usuário
-  /// aprovado, sem duplicar. `membershipDate` nunca é incluído aqui de
-  /// propósito — é exclusividade do usuário autorizado (Secretaria) editando
-  /// diretamente o registro em Rol de Membros, e o merge preserva o que já
-  /// estiver lá.
+  /// aprovado, sem duplicar. Nem `membershipDate` nem os campos da seção
+  /// "Dados eclesiásticos" (admissionForm em diante) entram aqui de
+  /// propósito — são exclusividade do usuário autorizado (Secretaria)
+  /// editando diretamente o registro em Rol de Membros (20/08/2026), e o
+  /// merge preserva o que já estiver lá.
   Future<void> upsertFromUser(AppUser user) async {
     if (user.birthMonth < 1 || user.birthMonth > 12 || user.birthDay < 1 || user.birthDay > 31) {
       return;
@@ -244,12 +258,6 @@ class MemberRepository {
       'linkedUid': user.uid,
       'phone': user.phone,
       'address': user.address,
-      'admissionForm': user.admissionForm,
-      'originChurch': user.originChurch,
-      'baptismDate': user.baptismDate != null ? Timestamp.fromDate(user.baptismDate!) : null,
-      'maritalStatus': user.maritalStatus,
-      'ministry': user.ministry,
-      'churchPosition': user.churchPosition,
       if (user.photoUrl.isNotEmpty) 'photoUrl': user.photoUrl,
     };
 
@@ -308,13 +316,23 @@ final membersProvider = FutureProvider.autoDispose<List<Member>>((ref) {
   return ref.watch(memberRepositoryProvider).getAll();
 });
 
-/// Membro vinculado ao usuário logado — alimenta o % de cadastro e "Membro
-/// SIB Val há..." na tela Mais. `null` quando o usuário ainda não tem
-/// registro em `members` (ex.: cadastro pendente de aprovação).
-final myMemberProvider = FutureProvider.autoDispose((ref) async {
+/// Membro vinculado ao usuário logado — alimenta o % de cadastro, "Membro
+/// SIB Val há..." e a seção "Dados eclesiásticos" (somente leitura) da tela
+/// Mais/Editar perfil. `null` quando o usuário ainda não tem registro em
+/// `members` (ex.: cadastro pendente de aprovação). É um `StreamProvider`
+/// (20/08/2026, era `FutureProvider`) pra refletir em tempo real qualquer
+/// edição que a Secretaria fizer em Rol de Membros enquanto a tela estiver
+/// aberta, sem precisar reabrir.
+final myMemberProvider = StreamProvider.autoDispose<Member?>((ref) async* {
   final uid = ref.watch(currentUidProvider);
-  if (uid == null) return null;
+  if (uid == null) {
+    yield null;
+    return;
+  }
   final profile = await ref.watch(currentUserProfileProvider.future);
-  if (profile == null) return null;
-  return ref.watch(memberRepositoryProvider).getForCurrentUser(uid: uid, cpf: profile.cpf, email: profile.email);
+  if (profile == null) {
+    yield null;
+    return;
+  }
+  yield* ref.watch(memberRepositoryProvider).watchForCurrentUser(uid: uid, cpf: profile.cpf, email: profile.email);
 });

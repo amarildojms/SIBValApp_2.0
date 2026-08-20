@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
-import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/photo_picker.dart';
 import 'registration_consent_section.dart';
@@ -17,9 +16,10 @@ import 'registration_consent_section.dart';
 /// com Google é de uma conta nova (`isNewUser`) — falta coletar os mesmos dados
 /// complementares do cadastro por e-mail (`register_page.dart`, incremento sem
 /// equivalente no nativo) antes de criar `users/{uid}` como pendente de
-/// aprovação: CPF (obrigatório), data de nascimento (obrigatória), foto e
-/// demais dados eclesiásticos (opcionais), além do consentimento com a
-/// Política de Privacidade.
+/// aprovação: CPF (obrigatório), data de nascimento (obrigatória), foto,
+/// telefone/endereço (opcionais) e o consentimento com a Política de
+/// Privacidade. A seção "Dados eclesiásticos" não é mais coletada aqui
+/// (20/08/2026) — virou exclusividade da Secretaria em Rol de Membros.
 class CompleteGoogleProfilePage extends ConsumerStatefulWidget {
   const CompleteGoogleProfilePage({
     super.key,
@@ -40,13 +40,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   final _cpfController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  final _originChurchController = TextEditingController();
-  final _ministryController = TextEditingController();
-  final _churchPositionController = TextEditingController();
   DateTime? _birthdate;
-  DateTime? _baptismDate;
-  String? _admissionForm;
-  String? _maritalStatus;
   File? _pickedPhoto;
   bool _acceptedTermsOfUse = false;
   bool _acceptedPrivacyPolicy = false;
@@ -58,9 +52,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     _cpfController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _originChurchController.dispose();
-    _ministryController.dispose();
-    _churchPositionController.dispose();
     super.dispose();
   }
 
@@ -82,19 +73,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     if (picked != null) {
       setState(() => _birthdate = picked);
     }
-  }
-
-  /// Usado pela Data de Batismo — opcional, sem a restrição de idade mínima
-  /// do date picker de nascimento.
-  Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now,
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-    );
-    if (picked != null) onPicked(picked);
   }
 
   Future<void> _finish() async {
@@ -125,12 +103,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
-        admissionForm: _admissionForm ?? '',
-        originChurch: _originChurchController.text.trim(),
-        baptismDate: _baptismDate,
-        maritalStatus: _maritalStatus ?? '',
-        ministry: _ministryController.text.trim(),
-        churchPosition: _churchPositionController.text.trim(),
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
         communicationsConsent: _acceptedCommunications,
@@ -259,65 +231,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 style: _fieldStyle,
                 textCapitalization: TextCapitalization.words,
                 decoration: _decoration('Endereço (opcional)'),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Dados eclesiásticos (opcional)',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _admissionForm,
-                style: _fieldStyle,
-                dropdownColor: SibValColors.navyBlueLight,
-                decoration: _decoration('Forma de Adesão'),
-                items: [
-                  for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
-                ],
-                onChanged: _loading ? null : (value) => setState(() => _admissionForm = value),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _originChurchController,
-                style: _fieldStyle,
-                textCapitalization: TextCapitalization.words,
-                decoration: _decoration('Igreja de origem'),
-              ),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: _loading ? null : () => _pickDate(_baptismDate, (date) => setState(() => _baptismDate = date)),
-                child: InputDecorator(
-                  decoration: _decoration('Data de Batismo', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
-                  child: Text(
-                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
-                    style: _fieldStyle,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _maritalStatus,
-                style: _fieldStyle,
-                dropdownColor: SibValColors.navyBlueLight,
-                decoration: _decoration('Estado civil'),
-                items: [
-                  for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
-                ],
-                onChanged: _loading ? null : (value) => setState(() => _maritalStatus = value),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _ministryController,
-                style: _fieldStyle,
-                textCapitalization: TextCapitalization.words,
-                decoration: _decoration('Ministério'),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _churchPositionController,
-                style: _fieldStyle,
-                textCapitalization: TextCapitalization.words,
-                decoration: _decoration('Cargo/Função'),
               ),
               const SizedBox(height: 24),
               RegistrationConsentSection(

@@ -7,17 +7,17 @@ import 'package:intl/intl.dart';
 import '../data/member_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
+import '../models/member.dart';
 import '../theme/app_theme.dart';
-import '../util/church_membership_options.dart';
 import '../util/photo_picker.dart';
 import '../widgets/sibval_app_bar.dart';
 
-/// Tela de edição de perfil aberta a partir do menu "Mais". Além de foto e
-/// nome, permite completar os campos eclesiásticos opcionais do cadastro
-/// (19/08/2026, paridade com `register_page.dart`) — é assim que o % de
-/// cadastro mostrado na tela Mais sobe. `membershipDate` é só leitura aqui
-/// (vem do `Member` vinculado): só o usuário autorizado (Secretaria) edita,
-/// em Rol de Membros.
+/// Tela de edição de perfil aberta a partir do menu "Mais": foto, nome,
+/// telefone e endereço. A seção "Dados eclesiásticos" (forma de adesão em
+/// diante, incluindo ministérios/cargos) é só leitura aqui, vinda do
+/// `Member` vinculado (`myMemberProvider`) — desde 20/08/2026 é
+/// exclusividade do usuário autorizado (Secretaria), editada em Rol de
+/// Membros, mesmo padrão que já valia só pra `membershipDate`.
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
 
@@ -29,43 +29,72 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  final _originChurchController = TextEditingController();
-  final _ministryController = TextEditingController();
-  final _churchPositionController = TextEditingController();
-  DateTime? _baptismDate;
-  String? _admissionForm;
-  String? _maritalStatus;
   File? _pickedPhoto;
   bool _initialized = false;
   bool _saving = false;
+  bool _dirty = false;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in [_nameController, _phoneController, _addressController]) {
+      controller.addListener(_markDirty);
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _originChurchController.dispose();
-    _ministryController.dispose();
-    _churchPositionController.dispose();
     super.dispose();
+  }
+
+  void _markDirty() {
+    if (_initialized && !_dirty) setState(() => _dirty = true);
   }
 
   Future<void> _pickPhoto() async {
     final photo = await pickAndCropProfilePhoto();
     if (photo != null) {
-      setState(() => _pickedPhoto = photo);
+      setState(() {
+        _pickedPhoto = photo;
+        _dirty = true;
+      });
     }
   }
 
-  Future<void> _pickBaptismDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
+  Future<void> _handlePopAttempt(String? uid) async {
+    if (uid == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final action = await showDialog<_UnsavedChangesAction>(
       context: context,
-      initialDate: _baptismDate ?? now,
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Alterações não salvas'),
+        content: const Text('Você fez alterações no seu perfil. Deseja salvar antes de sair?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_UnsavedChangesAction.discard),
+            child: const Text('Descartar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_UnsavedChangesAction.save),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
     );
-    if (picked != null) setState(() => _baptismDate = picked);
+    if (!mounted) return;
+    switch (action) {
+      case _UnsavedChangesAction.discard:
+        Navigator.of(context).pop();
+      case _UnsavedChangesAction.save:
+        await _save(uid);
+      case null:
+        break;
+    }
   }
 
   Future<void> _save(String uid) async {
@@ -83,18 +112,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         uid: uid,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
-        admissionForm: _admissionForm ?? '',
-        originChurch: _originChurchController.text.trim(),
-        baptismDate: _baptismDate,
-        maritalStatus: _maritalStatus ?? '',
-        ministry: _ministryController.text.trim(),
-        churchPosition: _churchPositionController.text.trim(),
       );
       final photo = _pickedPhoto;
       if (photo != null) {
         await repository.uploadProfilePhoto(uid, photo);
       }
       ref.invalidate(currentUserProfileProvider);
+      _dirty = false;
       if (!mounted) return;
       Navigator.of(context).pop();
     } finally {
@@ -108,160 +132,149 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final profile = profileAsync.asData?.value;
     final memberAsync = ref.watch(myMemberProvider);
-    final membershipDate = memberAsync.asData?.value?.membershipDate;
+    final member = memberAsync.asData?.value;
 
     if (profile != null && !_initialized) {
       _nameController.text = profile.name;
       _phoneController.text = profile.phone;
       _addressController.text = profile.address;
-      _originChurchController.text = profile.originChurch;
-      _ministryController.text = profile.ministry;
-      _churchPositionController.text = profile.churchPosition;
-      _baptismDate = profile.baptismDate;
-      _admissionForm = profile.admissionForm.isNotEmpty ? profile.admissionForm : null;
-      _maritalStatus = profile.maritalStatus.isNotEmpty ? profile.maritalStatus : null;
       _initialized = true;
     }
 
-    return Scaffold(
-      appBar: const SibValAppBar(isHome: false),
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        child: profile == null || uid == null
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const ScreenTitle('Editar perfil'),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: GestureDetector(
-                        onTap: _pickPhoto,
-                        child: Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 48,
-                              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                              backgroundImage: _pickedPhoto != null
-                                  ? FileImage(_pickedPhoto!)
-                                  : (profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null)
-                                      as ImageProvider?,
-                              child: _pickedPhoto == null && profile.photoUrl.isEmpty
-                                  ? Icon(Icons.person, size: 48, color: context.textSecondary)
-                                  : null,
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: CircleAvatar(
-                                radius: 16,
-                                backgroundColor: SibValColors.goldAccent,
-                                child: const Icon(Icons.edit, size: 16, color: SibValColors.navyBlueDark),
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handlePopAttempt(uid);
+      },
+      child: Scaffold(
+        appBar: const SibValAppBar(isHome: false),
+        body: SafeArea(
+          bottom: true,
+          top: false,
+          child: profile == null || uid == null
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const ScreenTitle('Editar perfil'),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: GestureDetector(
+                          onTap: _pickPhoto,
+                          child: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 48,
+                                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                backgroundImage: _pickedPhoto != null
+                                    ? FileImage(_pickedPhoto!)
+                                    : (profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null)
+                                        as ImageProvider?,
+                                child: _pickedPhoto == null && profile.photoUrl.isEmpty
+                                    ? Icon(Icons.person, size: 48, color: context.textSecondary)
+                                    : null,
                               ),
-                            ),
-                          ],
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: SibValColors.goldAccent,
+                                  child: const Icon(Icons.edit, size: 16, color: SibValColors.navyBlueDark),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Nome'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      enabled: false,
-                      controller: TextEditingController(text: profile.email),
-                      decoration: const InputDecoration(labelText: 'E-mail'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _addressController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Dados eclesiásticos (opcional)',
-                      style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Data de Membresia',
-                        helperText: 'Preenchida pela Secretaria em Rol de Membros',
-                        helperMaxLines: 2,
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Nome'),
                       ),
-                      child: Text(membershipDate != null ? DateFormat('dd/MM/yyyy').format(membershipDate) : '—'),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: _admissionForm,
-                      decoration: const InputDecoration(labelText: 'Forma de Adesão'),
-                      items: [
-                        for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
-                      ],
-                      onChanged: (value) => setState(() => _admissionForm = value),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _originChurchController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Igreja de origem'),
-                    ),
-                    const SizedBox(height: 16),
-                    InkWell(
-                      onTap: _pickBaptismDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Data de Batismo',
-                          suffixIcon: Icon(Icons.calendar_today_outlined),
-                        ),
-                        child: Text(_baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : ''),
+                      const SizedBox(height: 16),
+                      TextField(
+                        enabled: false,
+                        controller: TextEditingController(text: profile.email),
+                        decoration: const InputDecoration(labelText: 'E-mail'),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: _maritalStatus,
-                      decoration: const InputDecoration(labelText: 'Estado civil'),
-                      items: [
-                        for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
-                      ],
-                      onChanged: (value) => setState(() => _maritalStatus = value),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _ministryController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Ministério'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _churchPositionController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Cargo/Função'),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _saving ? null : () => _save(uid),
-                      child: _saving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Salvar'),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _addressController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Dados eclesiásticos',
+                        style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Preenchidos pela Secretaria em Rol de Membros.',
+                        style: TextStyle(color: context.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      _ReadOnlyField(label: 'Data de Membresia', value: _formatDate(member?.membershipDate)),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(label: 'Forma de Adesão', value: _orDash(member?.admissionForm)),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(label: 'Igreja de origem', value: _orDash(member?.originChurch)),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(label: 'Data de Batismo', value: _formatDate(member?.baptismDate)),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(label: 'Estado civil', value: _orDash(member?.maritalStatus)),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(label: 'Ministérios e Cargos', value: _ministriesLabel(member?.ministries)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _saving ? null : () => _save(uid),
+                        child: _saving
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('Salvar'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
+
+  static String _orDash(String? value) => (value == null || value.isEmpty) ? '—' : value;
+
+  static String _formatDate(DateTime? date) => date != null ? DateFormat('dd/MM/yyyy').format(date) : '—';
+
+  static String _ministriesLabel(List<MemberMinistry>? ministries) {
+    if (ministries == null || ministries.isEmpty) return '—';
+    return ministries
+        .map((m) => m.cargos.isEmpty ? m.ministryName : '${m.ministryName} (${m.cargos.join(', ')})')
+        .join('\n');
+  }
 }
+
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(labelText: label),
+      child: Text(value),
+    );
+  }
+}
+
+enum _UnsavedChangesAction { save, discard }
