@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'firebase_options.dart';
 import 'main_shell.dart';
+import 'notifications/push_notification_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_preference.dart';
 
@@ -31,6 +32,7 @@ class SibValApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
+      navigatorKey: PushNotificationService.navigatorKey,
       title: 'SIBVal Connect',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,

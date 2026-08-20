@@ -37,7 +37,24 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Ucrop.CropTheme"/>
+
+        <!-- Canal/ícone usados pelo próprio SDK do FCM quando exibe a
+             notificação com o app em segundo plano/finalizado (sem passar
+             por PushNotificationService) — mesmo canal/ícone usados em
+             primeiro plano via flutter_local_notifications. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="default_channel"/>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification"/>
     </application>
+    <!-- Notificações push (FCM) — necessária a partir do Android 13
+         (Tiramisu) para exibir notificação; solicitada em runtime via
+         FirebaseMessaging.instance.requestPermission() em
+         PushNotificationService. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.

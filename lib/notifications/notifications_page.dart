@@ -2,18 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../admin/manage_users_page.dart';
-import '../birthdays/birthdays_page.dart';
 import '../data/notification_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
-import '../devotionals/devotional_detail_page.dart';
-import '../events/event_detail_page.dart';
-import '../events/event_pending_list_page.dart';
-import '../home/post_comments_page.dart';
 import '../models/notification.dart';
-import '../prayer/prayer_page.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'notification_navigation.dart';
 
 /// Espelha NotificationsFragment.kt/NotificationsViewModel.kt: lista de
 /// notificações (lidas em cinza, não lidas em destaque), tocar marca como
@@ -94,34 +88,6 @@ class NotificationsPage extends ConsumerWidget {
       ref.invalidate(notificationsProvider);
     }
     if (!context.mounted) return;
-    switch (notification.type) {
-      case NotificationType.devotional:
-        if (notification.targetId.isNotEmpty) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => DevotionalDetailPage(devotionalId: notification.targetId)),
-          );
-        }
-      case NotificationType.birthday:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage()));
-      case NotificationType.userApproval:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersPage()));
-      case NotificationType.eventPending:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventPendingListPage()));
-      case NotificationType.eventReminder:
-        if (notification.targetId.isNotEmpty) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => EventDetailPage(eventId: notification.targetId)),
-          );
-        }
-      case NotificationType.postLike:
-      case NotificationType.postComment:
-        if (notification.targetId.isNotEmpty) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => PostCommentsPage(postId: notification.targetId)),
-          );
-        }
-      case NotificationType.prayerRequest:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage()));
-    }
+    navigateForNotificationType(context, type: notification.type, targetId: notification.targetId);
   }
 }
