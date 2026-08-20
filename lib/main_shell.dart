@@ -193,12 +193,14 @@ class _MaisPage extends ConsumerWidget {
       ),
       _MoreTile(
         imageAsset: 'assets/icons/ic_cc.png',
+        imageSize: 30,
         label: 'Cantor Cristão',
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao))),
       ),
       _MoreTile(
         imageAsset: 'assets/icons/ic_hcc.png',
+        imageSize: 30,
         label: 'HCC',
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
@@ -444,6 +446,7 @@ class _MoreTile extends StatelessWidget {
   const _MoreTile({
     this.icon,
     this.imageAsset,
+    this.imageSize = 22,
     required this.label,
     this.onTap,
     this.badgeCount = 0,
@@ -453,6 +456,11 @@ class _MoreTile extends StatelessWidget {
 
   final IconData? icon;
   final String? imageAsset;
+
+  /// Tamanho do ícone de imagem dentro do CircleAvatar (22 por padrão) — Cantor
+  /// Cristão e HCC usam 30 (20/08/2026, a pedido do usuário: ficavam pequenos
+  /// perto dos ícones vetoriais dos demais tiles).
+  final double imageSize;
   final String label;
   final VoidCallback? onTap;
   final int badgeCount;
@@ -480,7 +488,7 @@ class _MoreTile extends StatelessWidget {
                 radius: 22,
                 backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: imageAsset != null
-                    ? Image.asset(imageAsset!, width: 22, height: 22, color: color, colorBlendMode: BlendMode.srcIn)
+                    ? Image.asset(imageAsset!, width: imageSize, height: imageSize, color: color, colorBlendMode: BlendMode.srcIn)
                     : Icon(icon, color: color),
               ),
             ),

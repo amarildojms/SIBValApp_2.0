@@ -69,16 +69,19 @@ class EventCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Column(
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     onPressed: onLikeTap,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     icon: Icon(
                       liked ? Icons.favorite : Icons.favorite_border,
                       color: liked ? Colors.redAccent : context.textSecondary,
                     ),
                   ),
+                  const SizedBox(width: 4),
                   Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary, fontSize: 12)),
                 ],
               ),

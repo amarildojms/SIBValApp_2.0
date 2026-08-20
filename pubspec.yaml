@@ -69,14 +69,16 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
 # Gera os ícones de launcher (mipmap ic_launcher) a partir do emblema
-# cruz+peixe sobre fundo azul-marinho da marca — rodar com
-# `dart run flutter_launcher_icons` sempre que os arquivos em
-# assets/icon_source mudarem.
+# cruz+peixe — rodar com `dart run flutter_launcher_icons` sempre que os
+# arquivos em assets/icon_source mudarem. Ícone trocado em 20/08/2026 para a
+# versão com fundo branco (antes era o emblema sobre fundo azul-marinho);
+# adaptive_icon_background acompanha o branco do novo arquivo para não sobrar
+# borda azul no ícone com máscara adaptável (círculo/squircle) do launcher.
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon_source/legacy.png"
-  adaptive_icon_background: "#1B275B"
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icon_source/foreground.png"
 
 # For information on the generic Dart part of this file, see the
@@ -100,6 +102,13 @@ flutter:
     - assets/icons/ic_prayer.png
     - assets/icons/ic_cc.png
     - assets/icons/ic_hcc.png
+    - assets/images/partners/convencao_batista_brasileira.png
+    - assets/images/partners/convencao_batista_planalto_central.png
+    - assets/images/partners/ordem_pastores_batistas.png
+    - assets/images/partners/missoes_nacionais.png
+    - assets/images/partners/missoes_mundiais.png
+    - assets/images/partners/cristolandia.png
+    - assets/images/partners/rede_316.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -13,16 +13,26 @@ import '../widgets/sibval_app_bar.dart';
 import 'image_viewer_page.dart';
 
 /// Espelha GaleriaFragment.kt: grade de fotos do álbum (3 colunas). Subir e
-/// apagar foto é ação de quem tem o cargo Mídia (ou admin).
-class AlbumPhotosPage extends ConsumerWidget {
+/// apagar foto é ação de quem tem o cargo Mídia (ou admin). Seleção múltipla
+/// pra excluir várias fotos de uma vez (20/08/2026) segue o mesmo padrão de
+/// `event_email_senders_page.dart`: toque longo entra em modo seleção, barra
+/// acima da grade mostra a contagem e o botão de excluir.
+class AlbumPhotosPage extends ConsumerStatefulWidget {
   const AlbumPhotosPage({super.key, required this.albumId, required this.albumName});
 
   final String albumId;
   final String albumName;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final imagesAsync = ref.watch(albumImagesProvider(albumId));
+  ConsumerState<AlbumPhotosPage> createState() => _AlbumPhotosPageState();
+}
+
+class _AlbumPhotosPageState extends ConsumerState<AlbumPhotosPage> {
+  final _selected = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final imagesAsync = ref.watch(albumImagesProvider(widget.albumId));
     final profileAsync = ref.watch(currentUserProfileProvider);
     final canManageGallery = profileAsync.asData?.value?.canManageGallery ?? false;
 
@@ -39,64 +49,112 @@ class AlbumPhotosPage extends ConsumerWidget {
         bottom: true,
         top: false,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ScreenTitle(albumName),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => ref.refresh(albumImagesProvider(albumId).future),
-              child: imagesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => ListView(
-            children: [
-              const SizedBox(height: 80),
-              Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-            ],
-          ),
-          data: (images) {
-            if (images.isEmpty) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Text('Nenhuma foto neste álbum ainda.', style: TextStyle(color: context.textSecondary)),
-                  ),
-                ],
-              );
-            }
-            final urls = images.map((i) => i.downloadUrl).toList();
-            return GridView.builder(
-              padding: const EdgeInsets.all(4),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 4,
-              ),
-              itemCount: images.length,
-              itemBuilder: (context, index) {
-                final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
-                final image = images[index];
-                return InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => ImageViewerPage(urls: urls, initialIndex: index)),
-                  ),
-                  onLongPress: canManageGallery ? () => _confirmDelete(context, ref, image) : null,
-                  child: Image.network(
-                    image.downloadUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) => Container(
-                      color: placeholderColor,
-                      child: Icon(Icons.broken_image_outlined, color: context.textSecondary),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ScreenTitle(widget.albumName),
+            if (_selected.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Cancelar seleção',
+                      onPressed: () => setState(_selected.clear),
                     ),
+                    Expanded(
+                      child: Text(
+                        '${_selected.length} selecionada(s)',
+                        style: TextStyle(color: context.textSecondary, fontSize: 12),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Excluir selecionadas',
+                      onPressed: () => _confirmAndDeleteSelected(context, ref),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref.refresh(albumImagesProvider(widget.albumId).future),
+                child: imagesAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => ListView(
+                    children: [
+                      const SizedBox(height: 80),
+                      Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
+                    ],
                   ),
-                );
-              },
-            );
-              },
+                  data: (images) {
+                    if (images.isEmpty) {
+                      return ListView(
+                        children: [
+                          const SizedBox(height: 80),
+                          Center(
+                            child: Text('Nenhuma foto neste álbum ainda.', style: TextStyle(color: context.textSecondary)),
+                          ),
+                        ],
+                      );
+                    }
+                    final urls = images.map((i) => i.downloadUrl).toList();
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(4),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 4,
+                        crossAxisSpacing: 4,
+                      ),
+                      itemCount: images.length,
+                      itemBuilder: (context, index) {
+                        final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
+                        final image = images[index];
+                        final selected = _selected.contains(image.id);
+                        return InkWell(
+                          onTap: () {
+                            if (_selected.isNotEmpty) {
+                              setState(() => selected ? _selected.remove(image.id) : _selected.add(image.id));
+                              return;
+                            }
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => ImageViewerPage(urls: urls, initialIndex: index)),
+                            );
+                          },
+                          onLongPress: canManageGallery ? () => setState(() => _selected.add(image.id)) : null,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(
+                                image.downloadUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stack) => Container(
+                                  color: placeholderColor,
+                                  child: Icon(Icons.broken_image_outlined, color: context.textSecondary),
+                                ),
+                              ),
+                              if (selected)
+                                Container(color: SibValColors.navyBlue.withValues(alpha: 0.45)),
+                              if (canManageGallery && _selected.isNotEmpty)
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: Icon(
+                                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                    color: selected ? SibValColors.goldAccent : Colors.white,
+                                    shadows: const [Shadow(color: Colors.black45, blurRadius: 4)],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
             ),
-          ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -148,7 +206,7 @@ class AlbumPhotosPage extends ConsumerWidget {
       try {
         uploaded[index] = await repo.uploadImage(
           file: File(xfile.path),
-          albumId: albumId,
+          albumId: widget.albumId,
           uploaderUid: uid,
           uploaderName: profile?.name ?? '',
         );
@@ -162,10 +220,10 @@ class AlbumPhotosPage extends ConsumerWidget {
 
     final lastUploaded = uploaded.lastWhere((image) => image != null, orElse: () => null);
     if (lastUploaded != null) {
-      await repo.setAlbumCover(albumId, lastUploaded.downloadUrl);
+      await repo.setAlbumCover(widget.albumId, lastUploaded.downloadUrl);
     }
 
-    ref.invalidate(albumImagesProvider(albumId));
+    ref.invalidate(albumImagesProvider(widget.albumId));
     ref.invalidate(albumsProvider);
 
     if (context.mounted) {
@@ -178,24 +236,39 @@ class AlbumPhotosPage extends ConsumerWidget {
     }
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, GalleryImage image) {
-    showDialog<void>(
+  Future<void> _confirmAndDeleteSelected(BuildContext context, WidgetRef ref) async {
+    final images = ref.read(albumImagesProvider(widget.albumId)).asData?.value ?? const <GalleryImage>[];
+    final toDelete = images.where((image) => _selected.contains(image.id)).toList();
+    final count = toDelete.length;
+    if (count == 0) return;
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir foto'),
-        content: const Text('Tem certeza que deseja excluir esta foto?'),
+        title: const Text('Excluir fotos?'),
+        content: Text(
+          count == 1
+              ? 'Tem certeza que deseja excluir a foto selecionada?'
+              : 'Tem certeza que deseja excluir as $count fotos selecionadas?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              await ref.read(galleryRepositoryProvider).deleteImage(image);
-              ref.invalidate(albumImagesProvider(albumId));
-            },
-            child: const Text('Excluir'),
-          ),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Excluir')),
         ],
       ),
     );
+    if (confirmed != true) return;
+
+    final repo = ref.read(galleryRepositoryProvider);
+    // Sequencial (não Future.wait) de propósito: deleteImage recalcula a
+    // capa do álbum a cada chamada — rodar em paralelo reintroduziria a
+    // mesma corrida de capa que _upload evita ao subir várias fotos juntas.
+    for (final image in toDelete) {
+      await repo.deleteImage(image);
+    }
+
+    ref.invalidate(albumImagesProvider(widget.albumId));
+    ref.invalidate(albumsProvider);
+    if (mounted) setState(_selected.clear);
   }
 }
