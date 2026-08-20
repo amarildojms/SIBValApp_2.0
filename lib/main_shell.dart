@@ -6,8 +6,10 @@ import 'admin/event_email_senders_page.dart';
 import 'admin/manage_users_page.dart';
 import 'admin/members_page.dart';
 import 'admin/recurring_event_flyer_repository_page.dart';
+import 'auth/communications_consent_banner.dart';
 import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
+import 'auth/required_consent_gate_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'data/member_repository.dart';
@@ -56,25 +58,42 @@ class _MainShellState extends State<MainShell> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) setState(() => _index = _homeIndex);
       },
-      child: Scaffold(
-        body: IndexedStack(index: _index, children: _pages),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (index) => setState(() => _index = index),
-          backgroundColor: SibValColors.navyBlue,
-          destinations: [
-            NavigationDestination(
-              icon: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
-              selectedIcon:
-                  const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: SibValColors.navyBlueDark),
-              label: 'Devocionais',
+      child: Consumer(
+        builder: (context, ref, _) {
+          final uid = ref.watch(currentUidProvider);
+          final profile = ref.watch(currentUserProfileProvider).asData?.value;
+          // Contas logadas criadas antes dos Termos de Uso/checkbox de
+          // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
+          // aceitarem — ver `RequiredConsentGatePage`.
+          if (uid != null && profile != null && (!profile.acceptedTermsOfUse || !profile.acceptedPrivacyPolicy)) {
+            return RequiredConsentGatePage(uid: uid, communicationsConsent: profile.communicationsConsent);
+          }
+          return Scaffold(
+            body: Column(
+              children: [
+                const CommunicationsConsentBanner(),
+                Expanded(child: IndexedStack(index: _index, children: _pages)),
+              ],
             ),
-            const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
-            const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-            const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
-            const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
-          ],
-        ),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (index) => setState(() => _index = index),
+              backgroundColor: SibValColors.navyBlue,
+              destinations: [
+                NavigationDestination(
+                  icon: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
+                  selectedIcon: const _BoldAssetIcon('assets/icons/ic_devocional.png',
+                      size: 26, color: SibValColors.navyBlueDark),
+                  label: 'Devocionais',
+                ),
+                const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
+                const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
+                const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
+                const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

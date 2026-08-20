@@ -29,8 +29,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.sibval.sibval_app_2_0"
+        // Mesmo applicationId do app nativo (SIBValApp2) — a reescrita em Flutter substitui
+        // o nativo na mesma ficha da Play Store (mesmo histórico de testes/avaliações/base
+        // instalada), em vez de virar um app novo. Assinado com a mesma chave de upload
+        // (ver releaseKeystoreProperties acima), já cadastrada no Firebase para este pacote.
+        applicationId = "com.sibval.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

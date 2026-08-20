@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -15,7 +14,7 @@ import '../util/photo_picker.dart';
 import '../widgets/google_logo.dart';
 import 'complete_google_profile_page.dart';
 import 'login_page.dart' show ApprovalResult, resolveApprovalState;
-import 'privacy_policy_page.dart';
+import 'registration_consent_section.dart';
 
 /// Espelha RegisterActivity/RegisterViewModel.kt do app nativo: cadastro fica
 /// pendente de aprovação de um admin (ver ManageUsersPage) até poder entrar.
@@ -44,7 +43,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   File? _pickedPhoto;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _acceptedTermsOfUse = false;
   bool _acceptedPrivacyPolicy = false;
+  bool _acceptedCommunications = false;
   bool _loading = false;
 
   @override
@@ -127,8 +128,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       _showMessage('As senhas não coincidem.');
       return;
     }
-    if (!_acceptedPrivacyPolicy) {
-      _showMessage('É preciso aceitar a Política de Privacidade para se cadastrar.');
+    if (!_acceptedTermsOfUse || !_acceptedPrivacyPolicy) {
+      _showMessage('É preciso aceitar os Termos de Uso e a Política de Privacidade para se cadastrar.');
       return;
     }
 
@@ -158,6 +159,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         ministry: _ministryController.text.trim(),
         churchPosition: _churchPositionController.text.trim(),
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
+        termsOfUseAccepted: _acceptedTermsOfUse,
+        communicationsConsent: _acceptedCommunications,
       );
       final photo = _pickedPhoto;
       if (photo != null) {
@@ -408,49 +411,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _acceptedPrivacyPolicy,
-                    onChanged: (value) => setState(() => _acceptedPrivacyPolicy = value ?? false),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(color: context.textSecondary, fontSize: 14),
-                          children: [
-                            const TextSpan(
-                              text: 'Li e concordo com a ',
-                            ),
-                            TextSpan(
-                              text: 'Política de Privacidade',
-                              style: const TextStyle(
-                                color: SibValColors.goldAccent,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
-                                    ),
-                            ),
-                            const TextSpan(
-                              text: ' e autorizo o tratamento dos meus dados pessoais conforme descrito.',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 24),
+              RegistrationConsentSection(
+                acceptedTerms: _acceptedTermsOfUse,
+                acceptedPrivacy: _acceptedPrivacyPolicy,
+                acceptedCommunications: _acceptedCommunications,
+                enabled: !_loading,
+                onTermsChanged: (value) => setState(() => _acceptedTermsOfUse = value),
+                onPrivacyChanged: (value) => setState(() => _acceptedPrivacyPolicy = value),
+                onCommunicationsChanged: (value) => setState(() => _acceptedCommunications = value),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: (_loading || !_acceptedPrivacyPolicy) ? null : _register,
+                onPressed: (_loading || !_acceptedTermsOfUse || !_acceptedPrivacyPolicy) ? null : _register,
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('Cadastrar'),

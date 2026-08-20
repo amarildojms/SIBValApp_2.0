@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -11,7 +10,7 @@ import '../theme/app_theme.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/photo_picker.dart';
-import 'privacy_policy_page.dart';
+import 'registration_consent_section.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/ui/auth/CompleteGoogleProfileActivity.kt
 /// (+ CompleteGoogleProfileViewModel.kt): tela mostrada quando um login/cadastro
@@ -49,7 +48,9 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   String? _admissionForm;
   String? _maritalStatus;
   File? _pickedPhoto;
+  bool _acceptedTermsOfUse = false;
   bool _acceptedPrivacyPolicy = false;
+  bool _acceptedCommunications = false;
   bool _loading = false;
 
   @override
@@ -108,8 +109,8 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
       _showMessage('Selecione sua data de nascimento.');
       return;
     }
-    if (!_acceptedPrivacyPolicy) {
-      _showMessage('É preciso aceitar a Política de Privacidade para continuar.');
+    if (!_acceptedTermsOfUse || !_acceptedPrivacyPolicy) {
+      _showMessage('É preciso aceitar os Termos de Uso e a Política de Privacidade para continuar.');
       return;
     }
 
@@ -131,6 +132,8 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         ministry: _ministryController.text.trim(),
         churchPosition: _churchPositionController.text.trim(),
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
+        termsOfUseAccepted: _acceptedTermsOfUse,
+        communicationsConsent: _acceptedCommunications,
       );
       final photo = _pickedPhoto;
       if (photo != null) {
@@ -317,47 +320,15 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 decoration: _decoration('Cargo/Função'),
               ),
               const SizedBox(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _acceptedPrivacyPolicy,
-                    fillColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected) ? SibValColors.goldAccent : Colors.transparent,
-                    ),
-                    checkColor: SibValColors.navyBlueDark,
-                    side: const BorderSide(color: Colors.white70),
-                    onChanged: _loading ? null : (value) => setState(() => _acceptedPrivacyPolicy = value ?? false),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                          children: [
-                            const TextSpan(text: 'Li e concordo com a '),
-                            TextSpan(
-                              text: 'Política de Privacidade',
-                              style: const TextStyle(
-                                color: SibValColors.goldAccent,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
-                                    ),
-                            ),
-                            const TextSpan(
-                              text: ' e autorizo o tratamento dos meus dados pessoais conforme descrito.',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              RegistrationConsentSection(
+                dark: true,
+                acceptedTerms: _acceptedTermsOfUse,
+                acceptedPrivacy: _acceptedPrivacyPolicy,
+                acceptedCommunications: _acceptedCommunications,
+                enabled: !_loading,
+                onTermsChanged: (value) => setState(() => _acceptedTermsOfUse = value),
+                onPrivacyChanged: (value) => setState(() => _acceptedPrivacyPolicy = value),
+                onCommunicationsChanged: (value) => setState(() => _acceptedCommunications = value),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -365,7 +336,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                   backgroundColor: SibValColors.goldAccent,
                   foregroundColor: SibValColors.navyBlueDark,
                 ),
-                onPressed: (_loading || !_acceptedPrivacyPolicy) ? null : _finish,
+                onPressed: (_loading || !_acceptedTermsOfUse || !_acceptedPrivacyPolicy) ? null : _finish,
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('Concluir'),

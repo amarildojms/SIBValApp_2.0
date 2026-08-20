@@ -28,6 +28,9 @@ class CurrentUserProfile {
     this.maritalStatus = '',
     this.ministry = '',
     this.churchPosition = '',
+    this.communicationsConsent = false,
+    this.acceptedPrivacyPolicy = false,
+    this.acceptedTermsOfUse = false,
   });
 
   final String name;
@@ -45,6 +48,17 @@ class CurrentUserProfile {
   final String maritalStatus;
   final String ministry;
   final String churchPosition;
+
+  /// Checkbox opcional do cadastro (ver `registration_consent_section.dart`)
+  /// — usado por `CommunicationsConsentBanner` pra decidir se sugere ativar.
+  final bool communicationsConsent;
+
+  /// Os dois checkboxes obrigatórios do cadastro. Contas criadas antes de
+  /// 20/08/2026 (Termos de Uso) ou antes do checkbox de privacidade existir
+  /// não têm esses timestamps gravados — usado por `RequiredConsentGatePage`
+  /// pra bloquear o app até aceitarem.
+  final bool acceptedPrivacyPolicy;
+  final bool acceptedTermsOfUse;
 
   bool get canViewPrayerRequests => isAdmin || roles.contains('intercessao');
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
@@ -99,6 +113,9 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     maritalStatus: data['maritalStatus'] as String? ?? '',
     ministry: data['ministry'] as String? ?? '',
     churchPosition: data['churchPosition'] as String? ?? '',
+    communicationsConsent: data['communicationsConsent'] as bool? ?? false,
+    acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
+    acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
   );
 });
 
@@ -139,6 +156,8 @@ class UserRepository {
     String ministry = '',
     String churchPosition = '',
     bool privacyPolicyAccepted = false,
+    bool termsOfUseAccepted = false,
+    bool communicationsConsent = false,
   }) {
     final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
     return _users.doc(uid).set({
@@ -157,6 +176,9 @@ class UserRepository {
       'ministry': ministry,
       'churchPosition': churchPosition,
       if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
+      if (termsOfUseAccepted) 'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
+      'communicationsConsent': communicationsConsent,
+      if (communicationsConsent) 'communicationsConsentAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'status': UserStatus.pending,
       'isAdmin': false,
@@ -204,6 +226,25 @@ class UserRepository {
 
   Future<void> updateName(String uid, String name) {
     return _users.doc(uid).update({'name': name});
+  }
+
+  /// Usado por `CommunicationsConsentBanner` quando o usuário ativa o
+  /// consentimento (opcional, checkbox 3 do cadastro) depois de já cadastrado.
+  Future<void> setCommunicationsConsent(String uid, bool accepted) {
+    return _users.doc(uid).update({
+      'communicationsConsent': accepted,
+      if (accepted) 'communicationsConsentAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Usado por `RequiredConsentGatePage` — aceite retroativo dos Termos de
+  /// Uso e da Política de Privacidade para contas criadas antes desses
+  /// checkboxes existirem no cadastro (20/08/2026).
+  Future<void> acceptRequiredConsents(String uid) {
+    return _users.doc(uid).update({
+      'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
+      'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<List<AppUser>> getAllUsers() async {
