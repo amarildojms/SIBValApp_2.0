@@ -60,8 +60,11 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
   }
 
   void _share(Event event, DateTime localDate) {
+    final dateLine = event.isMultiDay
+        ? '${_dateTimeFormat.format(localDate)} até ${_dateTimeFormat.format(toSaoPauloTime(event.endDateTimeUtc))}'
+        : _dateTimeFormat.format(localDate);
     final text = '${event.title}\n\n${event.description}\n\n'
-        '📍 ${event.location}\n🗓️ ${_dateTimeFormat.format(localDate)}\n\n'
+        '📍 ${event.location}\n🗓️ $dateLine\n\n'
         'Confira no app da SIB Val:\n$_appShareLink';
     SharePlus.instance.share(ShareParams(text: text));
   }
@@ -94,6 +97,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
 
   Widget _buildContent(BuildContext context, Event event, String? uid, bool canManageEventos) {
     final localDate = toSaoPauloTime(event.dateTimeUtc);
+    final localEndDate = toSaoPauloTime(event.endDateTimeUtc);
     final liked = uid != null && event.likedBy.contains(uid);
     final canEdit = canManageEventos && event.source != EventSource.recurring;
 
@@ -158,7 +162,10 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                 Text('Local: ${event.location}', style: TextStyle(color: context.textSecondary, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text(
-                  '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)}',
+                  event.isMultiDay
+                      ? '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)} até '
+                          '${WeekdayFormat.full(localEndDate)}, ${_dateTimeFormat.format(localEndDate)}'
+                      : '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)}',
                   style: TextStyle(color: context.textSecondary, fontSize: 14),
                 ),
                 if (event.requiresRegistration && event.registrationLink.isNotEmpty) ...[

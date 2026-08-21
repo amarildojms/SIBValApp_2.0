@@ -212,31 +212,53 @@ class EventsPage extends ConsumerWidget {
     if (filter.registrationFilter == EventRegistrationFilter.free && event.requiresRegistration) return false;
     if (filter.dateFilter == EventDateFilter.none) return true;
 
-    final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateTimeMillis);
+    final eventStart = DateTime.fromMillisecondsSinceEpoch(event.dateTimeMillis);
+    final eventEnd = DateTime.fromMillisecondsSinceEpoch(event.endDateTimeMillis);
     final reference = DateTime.now();
 
     switch (filter.dateFilter) {
       case EventDateFilter.today:
-        return _isSameDay(reference, eventDate);
+        return _rangeIncludesDay(eventStart, eventEnd, reference);
       case EventDateFilter.thisWeek:
-        return _isSameWeek(reference, eventDate);
+        return _rangeOverlapsWeek(eventStart, eventEnd, reference);
       case EventDateFilter.thisMonth:
-        return reference.year == eventDate.year && reference.month == eventDate.month;
+        return _rangeOverlapsMonth(eventStart, eventEnd, reference.year, reference.month);
       case EventDateFilter.nextMonth:
         final nextMonth = DateTime(reference.year, reference.month + 1);
-        return nextMonth.year == eventDate.year && nextMonth.month == eventDate.month;
+        return _rangeOverlapsMonth(eventStart, eventEnd, nextMonth.year, nextMonth.month);
       case EventDateFilter.custom:
         final custom = filter.customDateMillis;
         if (custom == null) return true;
-        return _isSameDay(DateTime.fromMillisecondsSinceEpoch(custom), eventDate);
+        return _rangeIncludesDay(eventStart, eventEnd, DateTime.fromMillisecondsSinceEpoch(custom));
       case EventDateFilter.none:
         return true;
     }
   }
 
-  bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  /// True quando o dia de [day] cai em algum ponto entre o dia de [start] e o dia de [end]
+  /// (inclusive) — cobre eventos de vários dias em vez de só o dia de início.
+  bool _rangeIncludesDay(DateTime start, DateTime end, DateTime day) {
+    final dayOnly = DateTime(day.year, day.month, day.day);
+    final startOnly = DateTime(start.year, start.month, start.day);
+    final endOnly = DateTime(end.year, end.month, end.day);
+    return !dayOnly.isBefore(startOnly) && !dayOnly.isAfter(endOnly);
+  }
 
-  bool _isSameWeek(DateTime a, DateTime b) => _startOfWeek(a) == _startOfWeek(b);
+  bool _rangeOverlapsWeek(DateTime start, DateTime end, DateTime reference) {
+    final weekStart = _startOfWeek(reference);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final startOnly = DateTime(start.year, start.month, start.day);
+    final endOnly = DateTime(end.year, end.month, end.day);
+    return !endOnly.isBefore(weekStart) && !startOnly.isAfter(weekEnd);
+  }
+
+  bool _rangeOverlapsMonth(DateTime start, DateTime end, int year, int month) {
+    final monthStart = DateTime(year, month, 1);
+    final monthEnd = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
+    final startOnly = DateTime(start.year, start.month, start.day);
+    final endOnly = DateTime(end.year, end.month, end.day);
+    return !endOnly.isBefore(monthStart) && !startOnly.isAfter(monthEnd);
+  }
 
   DateTime _startOfWeek(DateTime date) {
     final daysFromSunday = date.weekday % 7;

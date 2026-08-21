@@ -34,6 +34,9 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
+  bool _isMultiDay = false;
+  DateTime? _selectedEndDate;
+  TimeOfDay? _selectedEndTime;
   String? _category;
   bool _requiresRegistration = false;
   File? _pickedFlyer;
@@ -69,6 +72,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     if (!mounted) return;
     if (event != null) {
       final localDate = event.dateTimeUtc.toLocal();
+      final localEndDate = event.endDateTimeUtc.toLocal();
       setState(() {
         _editingEvent = event;
         _titleController.text = event.title;
@@ -77,6 +81,11 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
         _existingFlyerUrl = event.flyerUrl;
         _selectedDate = DateTime(localDate.year, localDate.month, localDate.day);
         _selectedTime = TimeOfDay(hour: localDate.hour, minute: localDate.minute);
+        _isMultiDay = event.isMultiDay;
+        if (_isMultiDay) {
+          _selectedEndDate = DateTime(localEndDate.year, localEndDate.month, localEndDate.day);
+          _selectedEndTime = TimeOfDay(hour: localEndDate.hour, minute: localEndDate.minute);
+        }
         _category = event.category;
         _requiresRegistration = event.requiresRegistration;
         _registrationLinkController.text = event.registrationLink;
@@ -111,6 +120,22 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
+  Future<void> _pickEndDate() async {
+    final base = _selectedDate ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedEndDate ?? base,
+      firstDate: base,
+      lastDate: DateTime(base.year + 5),
+    );
+    if (picked != null) setState(() => _selectedEndDate = picked);
+  }
+
+  Future<void> _pickEndTime() async {
+    final picked = await showTimePicker(context: context, initialTime: _selectedEndTime ?? _selectedTime ?? TimeOfDay.now());
+    if (picked != null) setState(() => _selectedEndTime = picked);
+  }
+
   int? get _dateTimeMillis {
     final date = _selectedDate;
     final time = _selectedTime;
@@ -118,12 +143,25 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute).millisecondsSinceEpoch;
   }
 
+  /// Sem "vários dias" marcado, o fim é igual ao início (evento de 1 dia só).
+  int? get _endDateTimeMillis {
+    if (!_isMultiDay) return _dateTimeMillis;
+    final date = _selectedEndDate;
+    final time = _selectedEndTime;
+    if (date == null || time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute).millisecondsSinceEpoch;
+  }
+
   bool _validate() {
     final hasFlyer = _pickedFlyer != null || _existingFlyerUrl.isNotEmpty;
+    final start = _dateTimeMillis;
+    final end = _endDateTimeMillis;
     return _titleController.text.trim().isNotEmpty &&
         _descriptionController.text.trim().isNotEmpty &&
         _locationController.text.trim().isNotEmpty &&
-        _dateTimeMillis != null &&
+        start != null &&
+        end != null &&
+        end >= start &&
         (_category?.isNotEmpty ?? false) &&
         hasFlyer &&
         !(_requiresRegistration && _registrationLinkController.text.trim().isEmpty);
@@ -138,6 +176,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
           description: '',
           location: '',
           dateTimeMillis: 0,
+          endDateTimeMillis: 0,
           flyerUrl: '',
           flyerStoragePath: '',
           category: '',
@@ -154,6 +193,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
       description: _descriptionController.text.trim(),
       location: _locationController.text.trim(),
       dateTimeMillis: _dateTimeMillis,
+      endDateTimeMillis: _endDateTimeMillis,
       category: _category,
       requiresRegistration: _requiresRegistration,
       registrationLink: _registrationLinkController.text.trim(),
@@ -162,7 +202,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   Future<void> _save() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer (e confira se o fim não é antes do início).');
       return;
     }
     setState(() => _saving = true);
@@ -189,7 +229,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   Future<void> _approve() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer (e confira se o fim não é antes do início).');
       return;
     }
     setState(() => _saving = true);
@@ -351,6 +391,60 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text('Evento de vários dias', style: TextStyle(color: context.textPrimary)),
+                            ),
+                            Switch(
+                              value: _isMultiDay,
+                              onChanged: (value) => setState(() => _isMultiDay = value),
+                            ),
+                          ],
+                        ),
+                        if (_isMultiDay) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickEndDate,
+                                  child: InputDecorator(
+                                    decoration: const InputDecoration(
+                                      labelText: 'Data final',
+                                      suffixIcon: Icon(Icons.calendar_today_outlined),
+                                    ),
+                                    child: Text(
+                                      _selectedEndDate != null ? _dateFormat.format(_selectedEndDate!) : '',
+                                      style: TextStyle(color: context.textPrimary),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickEndTime,
+                                  child: InputDecorator(
+                                    decoration: const InputDecoration(
+                                      labelText: 'Hora final',
+                                      suffixIcon: Icon(Icons.access_time_outlined),
+                                    ),
+                                    child: Text(
+                                      _selectedEndTime != null
+                                          ? _timeFormat.format(
+                                              DateTime(2000, 1, 1, _selectedEndTime!.hour, _selectedEndTime!.minute),
+                                            )
+                                          : '',
+                                      style: TextStyle(color: context.textPrimary),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         Row(
                           children: [

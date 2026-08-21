@@ -168,6 +168,53 @@ dado explicitamente antes de eu tocar nesse arquivo (mesma cautela do caso
 `users`, mas aqui ele topou porque não há trava de segurança por uid em
 `members`).
 
+**Eventos de vários dias (20/08/2026):** `Event` ganhou `endDateTimeMillis` —
+campo que **não existe** no `Event.kt` nativo (que só tem um `dateTimeMillis`,
+um instante único). Divergência intencional: o `EventFormPage` tem um toggle
+"Evento de vários dias" que revela data/hora final; sem o toggle,
+`endDateTimeMillis` é gravado igual a `dateTimeMillis` (evento de 1 dia só,
+mesmo formato de sempre). `Event.fromFirestore` resolve o campo ausente
+caindo pro início, então documentos antigos (sem `endDateTimeMillis`)
+continuam funcionando como evento de 1 dia sem precisar de migração.
+`Event.isMultiDay` compara os dois em horário de São Paulo (dias calendário
+diferentes) e liga a exibição do intervalo em `event_card.dart`,
+`event_detail_page.dart`, `event_pending_list_page.dart` e o filtro de data em
+`events_page.dart` (`_matchesFilter`, que agora testa sobreposição de
+intervalo, não só o dia de início — um evento em andamento continua
+aparecendo no filtro "hoje"/"esta semana").
+
+Isso exigiu editar `SIBValApp2/functions/index.js` (mesma cautela dos casos
+`members`/`onUserPhotoUpdated` acima — **só editei o código-fonte, não fiz
+`firebase deploy`**, decisão do usuário, dado explicitamente ao responder as
+perguntas de design desta mudança em 20/08/2026):
+- `deleteExpiredEvents` agora só apaga um evento quando `endDateTimeMillis`
+  (não `dateTimeMillis`) já passou — a query continua filtrando por
+  `dateTimeMillis < agora` como pré-filtro barato (todo evento expirado já
+  começou), mas a decisão de apagar é em memória, usando o fim.
+- `sendEventReminders` passou a decidir tudo em memória (só filtra
+  `status == published` na query) porque agora depende de duas datas —
+  continua com a contagem regressiva de antes pra quem não começou, mas evento
+  em andamento (já passou do início, ainda não passou do fim) recebe um
+  lembrete diário novo do tipo "Dia 2 de 5 do evento X".
+- `postEventDaysToFeed` (nova função, substitui o uso de `postEventToFeed`
+  pra eventos pontuais — que continua existindo só pra recorrentes) posta um
+  item no feed pra cada dia do intervalo que cai dentro da semana atual, e
+  não mais um post único pro evento inteiro. Rastreio por dia fica no array
+  `postedFeedDays`; o booleano `postedToFeed` continua sendo o gate da query
+  (`== false`) e só vira `true` quando o último dia já foi postado — escolha
+  deliberada pra manter compatibilidade com documentos que já existiam antes
+  desta mudança (ficariam invisíveis pra query se o gate tivesse virado outro
+  nome de campo).
+- `importEventsFromEmail` grava `endDateTimeMillis: dateTimeMillis` (e-mail
+  de cadastro não tem campo pra fim diferente — evento sempre de 1 dia só
+  por esse caminho).
+
+`EventRepository.getPublishedUpcoming()` (Flutter) também mudou: a query não
+filtra mais por `dateTimeMillis >= agora` (isso escondia da lista principal
+um evento de vários dias já em andamento, cujo início já passou mas o fim
+não) — agora traz todo evento `published` e filtra em memória por
+`endDateTimeMillis >= agora`.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
