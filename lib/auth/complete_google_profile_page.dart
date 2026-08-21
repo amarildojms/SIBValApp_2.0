@@ -41,6 +41,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   DateTime? _birthdate;
+  DateTime? _baptismDate;
   File? _pickedPhoto;
   bool _acceptedTermsOfUse = false;
   bool _acceptedPrivacyPolicy = false;
@@ -75,6 +76,19 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     }
   }
 
+  Future<void> _pickBaptismDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _baptismDate ?? now,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() => _baptismDate = picked);
+    }
+  }
+
   Future<void> _finish() async {
     final cpf = _cpfController.text.trim();
     final birthdate = _birthdate;
@@ -103,6 +117,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
+        baptismDate: _baptismDate,
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
         communicationsConsent: _acceptedCommunications,
@@ -229,8 +244,20 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
               TextField(
                 controller: _addressController,
                 style: _fieldStyle,
-                textCapitalization: TextCapitalization.words,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: _decoration('Endereço (opcional)'),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _loading ? null : _pickBaptismDate,
+                child: InputDecorator(
+                  decoration: _decoration('Data de Batismo (opcional)',
+                      suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
+                  child: Text(
+                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
+                    style: _fieldStyle,
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               RegistrationConsentSection(

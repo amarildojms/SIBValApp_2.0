@@ -59,6 +59,7 @@ class Member {
   final List<String> ministryIds;
   final List<MemberMinistry> ministries;
   final String linkedUid;
+  final DateTime? photoUpdatedAt;
 
   const Member({
     required this.id,
@@ -81,6 +82,7 @@ class Member {
     this.ministryIds = const [],
     this.ministries = const [],
     this.linkedUid = '',
+    this.photoUpdatedAt,
   });
 
   factory Member.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -108,6 +110,7 @@ class Member {
           .map((m) => MemberMinistry.fromMap(Map<String, dynamic>.from(m as Map)))
           .toList(),
       linkedUid: data['linkedUid'] as String? ?? '',
+      photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
     );
   }
 }

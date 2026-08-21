@@ -1,0 +1,6 @@
+Novidades desta versão:
+- Central de Mensagens: receba avisos enviados pela igreja e reuniões agendadas, com lembrete um dia antes e no dia.
+- Central de notificações: arraste para os lados para descartar, ou limpe tudo de uma vez.
+- Data de batismo agora pode ser preenchida por você mesmo, além da Secretaria.
+- Correção: fotos de perfil desatualizadas em Aniversariantes e Rol de Membros.
+- Ajustes visuais: menu Mais mais compacto e barra superior com cor fixa ao rolar a tela.

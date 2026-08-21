@@ -75,7 +75,7 @@ class ManageMinistriesPage extends ConsumerWidget {
         content: TextField(
           controller: controller,
           autofocus: true,
-          textCapitalization: TextCapitalization.words,
+          textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Nome do ministério'),
         ),
         actions: [
@@ -163,7 +163,7 @@ class _MinistryTile extends ConsumerWidget {
         content: TextField(
           controller: controller,
           autofocus: true,
-          textCapitalization: TextCapitalization.words,
+          textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Nome do ministério'),
         ),
         actions: [
@@ -240,7 +240,7 @@ class _AddCargoFieldState extends ConsumerState<_AddCargoField> {
         Expanded(
           child: TextField(
             controller: _controller,
-            textCapitalization: TextCapitalization.words,
+            textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(labelText: 'Novo cargo/função'),
             onSubmitted: (_) => _submit(),
           ),

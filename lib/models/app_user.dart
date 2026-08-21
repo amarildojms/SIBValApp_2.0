@@ -22,6 +22,7 @@ class AppUser {
   final List<String> roles;
   final String phone;
   final String address;
+  final DateTime? baptismDate;
 
   const AppUser({
     required this.uid,
@@ -37,6 +38,7 @@ class AppUser {
     required this.roles,
     this.phone = '',
     this.address = '',
+    this.baptismDate,
   });
 
   factory AppUser.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -55,6 +57,7 @@ class AppUser {
       roles: List<String>.from(data['roles'] as List? ?? const []),
       phone: data['phone'] as String? ?? '',
       address: data['address'] as String? ?? '',
+      baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -73,6 +76,7 @@ class AppUser {
       roles: roles ?? this.roles,
       phone: phone,
       address: address,
+      baptismDate: baptismDate,
     );
   }
 }
@@ -88,4 +92,5 @@ abstract final class UserRole {
   static const midia = 'midia';
   static const intercessao = 'intercessao';
   static const eventos = 'eventos';
+  static const publicacoes = 'publicacoes';
 }

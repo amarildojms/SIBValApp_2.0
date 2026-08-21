@@ -6,6 +6,7 @@ import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
 import '../home/post_comments_page.dart';
+import '../messages/message_detail_page.dart';
 import '../models/notification.dart';
 import '../prayer/prayer_page.dart';
 
@@ -37,5 +38,9 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.prayerRequest:
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage()));
+    case NotificationType.message:
+      if (targetId.isNotEmpty) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => MessageDetailPage(messageId: targetId)));
+      }
   }
 }

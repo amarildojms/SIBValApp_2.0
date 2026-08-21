@@ -28,58 +28,107 @@ class NotificationsPage extends ConsumerWidget {
         bottom: true,
         top: false,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const ScreenTitle('Notificações'),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => ref.refresh(notificationsProvider.future),
-              child: notificationsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => ListView(
-            children: [
-              const SizedBox(height: 80),
-              Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-            ],
-          ),
-          data: (notifications) {
-            if (notifications.isEmpty) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Text('Nenhuma notificação por enquanto.', style: TextStyle(color: context.textSecondary)),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(child: ScreenTitle('Notificações')),
+                if ((notificationsAsync.asData?.value.isNotEmpty ?? false))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton(
+                      onPressed: () => _dismissAll(ref, notificationsAsync.asData!.value, uid),
+                      child: const Text('Limpar tudo'),
+                    ),
                   ),
-                ],
-              );
-            }
-            return ListView.builder(
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final notification = notifications[index];
-                final isUnread = uid != null && !notification.readBy.contains(uid);
-                final color = isUnread ? context.textPrimary : context.textTertiary;
-                final timestamp =
-                    notification.createdAt != null ? _dateFormat.format(notification.createdAt!.toDate()) : '';
-                return ListTile(
-                  title: Text(
-                    notification.title,
-                    style: TextStyle(color: color, fontWeight: isUnread ? FontWeight.bold : FontWeight.normal),
-                  ),
-                  subtitle: Text('${notification.body}\n$timestamp', style: TextStyle(color: color)),
-                  isThreeLine: true,
-                  onTap: () => _onTap(context, ref, notification, uid),
-                );
-              },
-            );
-              },
+              ],
             ),
-          ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref.refresh(notificationsProvider.future),
+                child: notificationsAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => ListView(
+                    children: [
+                      const SizedBox(height: 80),
+                      Center(
+                        child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+                      ),
+                    ],
+                  ),
+                  data: (notifications) {
+                    if (notifications.isEmpty) {
+                      return ListView(
+                        children: [
+                          const SizedBox(height: 80),
+                          Center(
+                            child: Text(
+                              'Nenhuma notificação por enquanto.',
+                              style: TextStyle(color: context.textSecondary),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: notifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = notifications[index];
+                        final isUnread = uid != null && !notification.readBy.contains(uid);
+                        final color = isUnread ? context.textPrimary : context.textTertiary;
+                        final timestamp = notification.createdAt != null
+                            ? _dateFormat.format(notification.createdAt!.toDate())
+                            : '';
+                        return Dismissible(
+                          key: ValueKey(notification.id),
+                          direction: DismissDirection.horizontal,
+                          background: _dismissBackground(Alignment.centerLeft),
+                          secondaryBackground: _dismissBackground(Alignment.centerRight),
+                          onDismissed: (_) => _dismiss(ref, notification, uid),
+                          child: ListTile(
+                            title: Text(
+                              notification.title,
+                              style: TextStyle(
+                                color: color,
+                                fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text('${notification.body}\n$timestamp', style: TextStyle(color: color)),
+                            isThreeLine: true,
+                            onTap: () => _onTap(context, ref, notification, uid),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-      ),
       ),
     );
+  }
+
+  Widget _dismissBackground(Alignment alignment) {
+    return Container(
+      color: Colors.redAccent,
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: const Icon(Icons.delete_outline, color: Colors.white),
+    );
+  }
+
+  Future<void> _dismiss(WidgetRef ref, AppNotification notification, String? uid) async {
+    if (uid == null) return;
+    await ref.read(notificationRepositoryProvider).dismiss(notification.id, uid);
+    ref.invalidate(notificationsProvider);
+  }
+
+  Future<void> _dismissAll(WidgetRef ref, List<AppNotification> notifications, String? uid) async {
+    if (uid == null) return;
+    await ref.read(notificationRepositoryProvider).dismissAll(notifications.map((n) => n.id).toList(), uid);
+    ref.invalidate(notificationsProvider);
   }
 
   Future<void> _onTap(BuildContext context, WidgetRef ref, AppNotification notification, String? uid) async {

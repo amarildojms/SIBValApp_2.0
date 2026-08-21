@@ -20,8 +20,10 @@ import 'data/user_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'gallery/album_list_page.dart';
+import 'data/message_repository.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
+import 'messages/messages_page.dart';
 import 'models/hymn.dart';
 import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
@@ -29,6 +31,7 @@ import 'partners/partners_page.dart';
 import 'prayer/prayer_page.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_settings_page.dart';
+import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
 
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
@@ -83,7 +86,9 @@ class _MainShellState extends State<MainShell> {
               children: [
                 const CommunicationsConsentBanner(),
                 const NotificationPermissionBanner(),
-                Expanded(child: IndexedStack(index: _index, children: _pages)),
+                Expanded(
+                  child: IndexedStack(index: _index, children: _pages),
+                ),
               ],
             ),
             bottomNavigationBar: NavigationBar(
@@ -93,8 +98,11 @@ class _MainShellState extends State<MainShell> {
               destinations: [
                 NavigationDestination(
                   icon: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
-                  selectedIcon: const _BoldAssetIcon('assets/icons/ic_devocional.png',
-                      size: 26, color: SibValColors.navyBlueDark),
+                  selectedIcon: const _BoldAssetIcon(
+                    'assets/icons/ic_devocional.png',
+                    size: 26,
+                    color: SibValColors.navyBlueDark,
+                  ),
                   label: 'Devocionais',
                 ),
                 const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
@@ -121,13 +129,7 @@ class _BoldAssetIcon extends StatelessWidget {
   final double size;
   final Color color;
 
-  static const _offsets = [
-    Offset.zero,
-    Offset(-0.8, 0),
-    Offset(0.8, 0),
-    Offset(0, -0.8),
-    Offset(0, 0.8),
-  ];
+  static const _offsets = [Offset.zero, Offset(-0.8, 0), Offset(0.8, 0), Offset(0, -0.8), Offset(0, 0.8)];
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +145,41 @@ class _BoldAssetIcon extends StatelessWidget {
                 child: Image.asset(asset, color: color, colorBlendMode: BlendMode.srcIn),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Engrenagem (configuração) com um pequeno envelope no canto — remete a
+/// "configuração de e-mails" sem precisar de um ícone customizado novo (só
+/// compõe dois `Icons` do Material já usados em outros lugares do app).
+class _SettingsMailIcon extends StatelessWidget {
+  const _SettingsMailIcon({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.settings_outlined, color: color, size: 24),
+          Positioned(
+            bottom: -2,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.mail_outline, color: color, size: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -186,9 +223,12 @@ class _MaisPage extends ConsumerWidget {
     final canViewPrayerRequests = profile?.canViewPrayerRequests ?? false;
     final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
-    final pendingPrayerCountAsync =
-        canViewPrayerRequests ? ref.watch(pendingPrayerCountProvider) : const AsyncValue.data(0);
+    final pendingPrayerCountAsync = canViewPrayerRequests
+        ? ref.watch(pendingPrayerCountProvider)
+        : const AsyncValue.data(0);
     final pendingPrayerCount = pendingPrayerCountAsync.asData?.value ?? 0;
+    final pendingMessagesCountAsync = uid != null ? ref.watch(pendingMessagesCountProvider) : const AsyncValue.data(0);
+    final pendingMessagesCount = pendingMessagesCountAsync.asData?.value ?? 0;
 
     final tiles = [
       // Tier 1 — disponível para todos, sem login.
@@ -206,15 +246,17 @@ class _MaisPage extends ConsumerWidget {
         imageAsset: 'assets/icons/ic_cc.png',
         imageSize: 30,
         label: 'Cantor Cristão',
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao))),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao))),
       ),
       _MoreTile(
         imageAsset: 'assets/icons/ic_hcc.png',
         imageSize: 30,
         label: 'HCC',
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
       ),
       _MoreTile(
         imageAsset: 'assets/icons/ic_prayer.png',
@@ -248,6 +290,13 @@ class _MaisPage extends ConsumerWidget {
           label: 'Rol de Membros',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MembersPage())),
         ),
+      if (uid != null)
+        _MoreTile(
+          icon: Icons.mail_outline,
+          label: 'Mensagens',
+          badgeCount: pendingMessagesCount,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MessagesPage())),
+        ),
       if (profile?.canManageBirthdays ?? false)
         _MoreTile(
           icon: Icons.groups_outlined,
@@ -271,7 +320,7 @@ class _MaisPage extends ConsumerWidget {
         ),
       if (canManageEventos)
         _MoreTile(
-          icon: Icons.email_outlined,
+          customIcon: _SettingsMailIcon(color: context.textPrimary),
           label: 'E-mails de eventos',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventEmailSendersPage())),
         ),
@@ -283,18 +332,15 @@ class _MaisPage extends ConsumerWidget {
       appBar: const SibValAppBar(isHome: false),
       body: ListView(
         children: [
-          if (uid != null && profile != null)
-            _MoreHeader(profile: profile)
-          else
-            const SizedBox(height: 16),
+          if (uid != null && profile != null) _MoreHeader(profile: profile) else const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            mainAxisSpacing: 20,
+            mainAxisSpacing: 0,
             crossAxisSpacing: 8,
-            childAspectRatio: 0.95,
+            childAspectRatio: 1.2,
             children: tiles,
           ),
           Divider(color: Theme.of(context).colorScheme.outlineVariant),
@@ -304,8 +350,7 @@ class _MaisPage extends ConsumerWidget {
                 ? SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () =>
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginPage())),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginPage())),
                       child: const Text('Entrar'),
                     ),
                   )
@@ -316,10 +361,7 @@ class _MaisPage extends ConsumerWidget {
                         style: TextStyle(color: context.textSecondary),
                       ),
                       const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () => FirebaseAuth.instance.signOut(),
-                        child: const Text('Sair'),
-                      ),
+                      ElevatedButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Sair')),
                     ],
                   ),
           ),
@@ -360,7 +402,9 @@ class _MoreHeader extends ConsumerWidget {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.white24,
-                backgroundImage: profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null,
+                backgroundImage: profile.photoUrl.isNotEmpty
+                    ? NetworkImage(cacheBustedPhotoUrl(profile.photoUrl, profile.photoUpdatedAt))
+                    : null,
                 child: profile.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
               ),
               const SizedBox(width: 16),
@@ -373,17 +417,11 @@ class _MoreHeader extends ConsumerWidget {
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      'Editar perfil',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
+                    const Text('Editar perfil', style: TextStyle(color: Colors.white70, fontSize: 13)),
                     if (membershipLabel != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          membershipLabel,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
+                        child: Text(membershipLabel, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                       ),
                   ],
                 ),
@@ -463,16 +501,21 @@ class _MoreTile extends StatelessWidget {
   const _MoreTile({
     this.icon,
     this.imageAsset,
+    this.customIcon,
     this.imageSize = 22,
     required this.label,
     this.onTap,
     this.badgeCount = 0,
     this.enabled = true,
     this.comingSoon = false,
-  }) : assert(icon != null || imageAsset != null);
+  }) : assert(icon != null || imageAsset != null || customIcon != null);
 
   final IconData? icon;
   final String? imageAsset;
+
+  /// Substitui `icon`/`imageAsset` quando o ícone precisa de composição (ex.:
+  /// engrenagem + envelope de "E-mails de eventos") — ver `_SettingsMailIcon`.
+  final Widget? customIcon;
 
   /// Tamanho do ícone de imagem dentro do CircleAvatar (22 por padrão) — Cantor
   /// Cristão e HCC usam 30 (20/08/2026, a pedido do usuário: ficavam pequenos
@@ -494,7 +537,7 @@ class _MoreTile extends StatelessWidget {
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 1),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -504,9 +547,17 @@ class _MoreTile extends StatelessWidget {
               child: CircleAvatar(
                 radius: 22,
                 backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: imageAsset != null
-                    ? Image.asset(imageAsset!, width: imageSize, height: imageSize, color: color, colorBlendMode: BlendMode.srcIn)
-                    : Icon(icon, color: color),
+                child:
+                    customIcon ??
+                    (imageAsset != null
+                        ? Image.asset(
+                            imageAsset!,
+                            width: imageSize,
+                            height: imageSize,
+                            color: color,
+                            colorBlendMode: BlendMode.srcIn,
+                          )
+                        : Icon(icon, color: color)),
               ),
             ),
             const SizedBox(height: 3),

@@ -9,6 +9,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/member.dart';
 import '../theme/app_theme.dart';
+import '../util/cache_busted_image.dart';
 import '../util/photo_picker.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -170,8 +171,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                 backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                                 backgroundImage: _pickedPhoto != null
                                     ? FileImage(_pickedPhoto!)
-                                    : (profile.photoUrl.isNotEmpty ? NetworkImage(profile.photoUrl) : null)
-                                        as ImageProvider?,
+                                    : (profile.photoUrl.isNotEmpty
+                                        ? NetworkImage(cacheBustedPhotoUrl(profile.photoUrl, profile.photoUpdatedAt))
+                                        : null) as ImageProvider?,
                                 child: _pickedPhoto == null && profile.photoUrl.isEmpty
                                     ? Icon(Icons.person, size: 48, color: context.textSecondary)
                                     : null,
@@ -210,7 +212,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _addressController,
-                        textCapitalization: TextCapitalization.words,
+                        textCapitalization: TextCapitalization.sentences,
                         decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
                       ),
                       const SizedBox(height: 24),
@@ -230,7 +232,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       const SizedBox(height: 16),
                       _ReadOnlyField(label: 'Igreja de origem', value: _orDash(member?.originChurch)),
                       const SizedBox(height: 16),
-                      _ReadOnlyField(label: 'Data de Batismo', value: _formatDate(member?.baptismDate)),
+                      _BaptismDateField(member: member),
                       const SizedBox(height: 16),
                       _ReadOnlyField(label: 'Estado civil', value: _orDash(member?.maritalStatus)),
                       const SizedBox(height: 16),
@@ -252,13 +254,70 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
   static String _orDash(String? value) => (value == null || value.isEmpty) ? '—' : value;
 
-  static String _formatDate(DateTime? date) => date != null ? DateFormat('dd/MM/yyyy').format(date) : '—';
-
   static String _ministriesLabel(List<MemberMinistry>? ministries) {
     if (ministries == null || ministries.isEmpty) return '—';
     return ministries
         .map((m) => m.cargos.isEmpty ? m.ministryName : '${m.ministryName} (${m.cargos.join(', ')})')
         .join('\n');
+  }
+}
+
+/// Diferente dos demais campos eclesiásticos (só leitura aqui), a data de
+/// batismo pode ser preenchida tanto pela Secretaria (em Rol de Membros)
+/// quanto pelo próprio usuário — ver `firestore.rules` nativo
+/// (`members.baptismDate`) e `MemberRepository.updateBaptismDate`. Só fica
+/// editável depois que o cadastro é aprovado e o registro de `Member` existe
+/// (`member != null`); antes disso não há onde gravar.
+class _BaptismDateField extends ConsumerStatefulWidget {
+  const _BaptismDateField({required this.member});
+
+  final Member? member;
+
+  @override
+  ConsumerState<_BaptismDateField> createState() => _BaptismDateFieldState();
+}
+
+class _BaptismDateFieldState extends ConsumerState<_BaptismDateField> {
+  bool _saving = false;
+
+  Future<void> _pickDate() async {
+    final member = widget.member;
+    if (member == null || _saving) return;
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: member.baptismDate ?? now,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(memberRepositoryProvider).updateBaptismDate(member.id, picked);
+      ref.invalidate(myMemberProvider);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final member = widget.member;
+    return InkWell(
+      onTap: member == null ? null : _pickDate,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Data de Batismo',
+          suffixIcon: _saving
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : Icon(member == null ? null : Icons.edit_calendar_outlined, color: context.textSecondary),
+        ),
+        child: Text(member == null ? '—' : (member.baptismDate != null ? _formatDate(member.baptismDate) : 'Toque para informar')),
+      ),
+    );
   }
 }
 
@@ -278,3 +337,5 @@ class _ReadOnlyField extends StatelessWidget {
 }
 
 enum _UnsavedChangesAction { save, discard }
+
+String _formatDate(DateTime? date) => date != null ? DateFormat('dd/MM/yyyy').format(date) : '—';

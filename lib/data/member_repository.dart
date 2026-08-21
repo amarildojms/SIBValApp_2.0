@@ -123,6 +123,7 @@ class MemberRepository {
       'birthMonth': birthMonth,
       'photoUrl': photoUrl,
       'storagePath': storagePath,
+      if (photoFile != null) 'photoUpdatedAt': FieldValue.serverTimestamp(),
       'createdBy': uid,
       'createdAt': FieldValue.serverTimestamp(),
       'phone': phone,
@@ -145,6 +146,7 @@ class MemberRepository {
       birthMonth: birthMonth,
       photoUrl: photoUrl,
       storagePath: storagePath,
+      photoUpdatedAt: photoFile != null ? DateTime.now() : null,
       createdBy: uid,
       createdAt: DateTime.now(),
       phone: phone,
@@ -200,6 +202,7 @@ class MemberRepository {
       'birthMonth': birthMonth,
       'photoUrl': photoUrl,
       'storagePath': storagePath,
+      if (photoFile != null) 'photoUpdatedAt': FieldValue.serverTimestamp(),
       'createdBy': member.createdBy,
       'createdAt': member.createdAt != null ? Timestamp.fromDate(member.createdAt!) : FieldValue.serverTimestamp(),
       'phone': phone,
@@ -259,12 +262,24 @@ class MemberRepository {
       'phone': user.phone,
       'address': user.address,
       if (user.photoUrl.isNotEmpty) 'photoUrl': user.photoUrl,
+      if (user.photoUrl.isNotEmpty) 'photoUpdatedAt': FieldValue.serverTimestamp(),
+      if (user.baptismDate != null) 'baptismDate': Timestamp.fromDate(user.baptismDate!),
     };
 
     await _members.doc(canonicalId).set(data, SetOptions(merge: true));
     if (existingId != null && existingId != canonicalId) {
       await _members.doc(existingId).delete();
     }
+  }
+
+  /// Único campo de `members` que o próprio usuário (dono do registro via
+  /// `linkedUid`) pode editar sem ser Secretaria — ver `firestore.rules`
+  /// nativo, `EditProfilePage`. Os demais campos eclesiásticos continuam
+  /// exclusividade da Secretaria em Rol de Membros.
+  Future<void> updateBaptismDate(String memberId, DateTime? baptismDate) {
+    return _members.doc(memberId).update({
+      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+    });
   }
 
   Future<void> delete(Member member) async {

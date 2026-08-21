@@ -7,6 +7,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../notifications/notifications_page.dart';
 import '../theme/app_theme.dart';
+import '../util/cache_busted_image.dart';
 
 /// Espelha app_bar_main.xml/MainActivity.kt: barra fixa navy, sem texto de
 /// título em nenhuma tela — só a logo centralizada. À esquerda, o sino de
@@ -33,6 +34,12 @@ class SibValAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: SibValColors.navyBlue,
       foregroundColor: Colors.white,
+      // Material 3 aplica um tint de "surfaceTintColor" sobre a AppBar quando o
+      // conteúdo rola por baixo dela (scrolledUnderElevation) — sem isso, o azul
+      // muda de tom ao rolar a tela. Desligado de propósito: a cor da marca deve
+      // ficar sempre fixa.
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
       leading: isHome ? const _NotificationBellButton() : const _BackButton(),
       title: Image.asset('assets/images/logo.png', height: 40),
       centerTitle: true,
@@ -90,13 +97,16 @@ class _LoginButton extends ConsumerWidget {
         ),
       );
     }
-    final photoUrl = ref.watch(currentUserProfileProvider).asData?.value?.photoUrl ?? '';
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    final photoUrl = profile?.photoUrl ?? '';
     return Padding(
       padding: const EdgeInsets.all(8),
       child: CircleAvatar(
         radius: 16,
         backgroundColor: Colors.white24,
-        backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+        backgroundImage: photoUrl.isNotEmpty
+            ? NetworkImage(cacheBustedPhotoUrl(photoUrl, profile?.photoUpdatedAt))
+            : null,
         child: photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white, size: 18) : null,
       ),
     );

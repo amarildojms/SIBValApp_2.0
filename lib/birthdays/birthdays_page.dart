@@ -7,6 +7,7 @@ import '../data/member_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/member.dart';
 import '../theme/app_theme.dart';
+import '../util/cache_busted_image.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Espelha BirthdaysFragment.kt/BirthdaysViewModel.kt: calendário do mês (grade
@@ -172,7 +173,9 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: member.photoUrl.isNotEmpty ? NetworkImage(member.photoUrl) : null,
+                          backgroundImage: member.photoUrl.isNotEmpty
+                              ? NetworkImage(cacheBustedPhotoUrl(member.photoUrl, member.photoUpdatedAt))
+                              : null,
                           child: member.photoUrl.isEmpty ? const Icon(Icons.cake_outlined) : null,
                         ),
                         title: Text(member.name),

@@ -12,6 +12,7 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/member.dart';
 import '../theme/app_theme.dart';
+import '../util/cache_busted_image.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -60,7 +61,9 @@ class _MembersPageState extends ConsumerState<MembersPage> {
     final membersAsync = ref.watch(membersProvider);
     final profileAsync = ref.watch(currentUserProfileProvider);
     final canManage = profileAsync.asData?.value?.canManageBirthdays ?? false;
-    final incompleteCount = (membersAsync.asData?.value ?? const <Member>[]).where(_hasIncompleteEcclesiasticalData).length;
+    final incompleteCount = (membersAsync.asData?.value ?? const <Member>[])
+        .where(_hasIncompleteEcclesiasticalData)
+        .length;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -75,82 +78,90 @@ class _MembersPageState extends ConsumerState<MembersPage> {
         bottom: true,
         top: false,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const ScreenTitle('Rol de Membros'),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(labelText: 'Buscar por nome ou CPF', prefixIcon: Icon(Icons.search)),
-              onChanged: (value) => setState(() => _query = value),
-            ),
-          ),
-          if (canManage)
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const ScreenTitle('Rol de Membros'),
             Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              child: Badge(
-                label: Text('$incompleteCount'),
-                isLabelVisible: incompleteCount > 0,
-                alignment: AlignmentDirectional.topEnd,
-                child: FilterChip(
-                  label: const Text('Cadastros incompletos (dados eclesiásticos)'),
-                  selected: _onlyIncomplete,
-                  onSelected: (value) => setState(() => _onlyIncomplete = value),
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(labelText: 'Buscar por nome ou CPF', prefixIcon: Icon(Icons.search)),
+                onChanged: (value) => setState(() => _query = value),
               ),
             ),
-          Expanded(
-            child: membersAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) =>
-                  Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-              data: (members) {
-                var filtered = _query.trim().isEmpty
-                    ? members
-                    : members.where((m) {
-                        final query = _query.toLowerCase();
-                        final queryDigits = _query.replaceAll(RegExp(r'\D'), '');
-                        final matchesName = m.name.toLowerCase().contains(query);
-                        final matchesCpf = queryDigits.isNotEmpty && m.cpf.contains(queryDigits);
-                        return matchesName || matchesCpf;
-                      }).toList();
-                if (canManage && _onlyIncomplete) {
-                  filtered = filtered.where(_hasIncompleteEcclesiasticalData).toList();
-                }
-                if (filtered.isEmpty) {
-                  return Center(child: Text('Nenhum membro encontrado.', style: TextStyle(color: context.textSecondary)));
-                }
-                return ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final member = filtered[index];
-                    final dateLabel =
-                        '${member.birthDay.toString().padLeft(2, '0')}/${member.birthMonth.toString().padLeft(2, '0')}';
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: member.photoUrl.isNotEmpty ? NetworkImage(member.photoUrl) : null,
-                        child: member.photoUrl.isEmpty ? const Icon(Icons.cake_outlined) : null,
-                      ),
-                      title: Text(member.name, style: TextStyle(color: context.textPrimary)),
-                      subtitle: Text(
-                        member.email.isNotEmpty ? '$dateLabel • ${member.email}' : dateLabel,
-                        style: TextStyle(color: context.textSecondary),
-                      ),
-                      trailing: canManage && _hasIncompleteEcclesiasticalData(member)
-                          ? const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.amber)
-                          : null,
-                      onTap: canManage
-                          ? () => showDialog<void>(context: context, builder: (_) => _MemberDialog(existing: member))
-                          : null,
-                      onLongPress: canManage ? () => _confirmDelete(context, ref, member) : null,
+            if (canManage)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                child: Badge(
+                  label: Text('$incompleteCount'),
+                  isLabelVisible: incompleteCount > 0,
+                  alignment: AlignmentDirectional.topEnd,
+                  child: FilterChip(
+                    label: const Text('Cadastros incompletos (dados eclesiásticos)'),
+                    selected: _onlyIncomplete,
+                    onSelected: (value) => setState(() => _onlyIncomplete = value),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: membersAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(
+                  child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+                ),
+                data: (members) {
+                  var filtered = _query.trim().isEmpty
+                      ? members
+                      : members.where((m) {
+                          final query = _query.toLowerCase();
+                          final queryDigits = _query.replaceAll(RegExp(r'\D'), '');
+                          final matchesName = m.name.toLowerCase().contains(query);
+                          final matchesCpf = queryDigits.isNotEmpty && m.cpf.contains(queryDigits);
+                          return matchesName || matchesCpf;
+                        }).toList();
+                  if (canManage && _onlyIncomplete) {
+                    filtered = filtered.where(_hasIncompleteEcclesiasticalData).toList();
+                  }
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: Text('Nenhum membro encontrado.', style: TextStyle(color: context.textSecondary)),
                     );
-                  },
-                );
-              },
+                  }
+                  return ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final member = filtered[index];
+                      final dateLabel =
+                          '${member.birthDay.toString().padLeft(2, '0')}/${member.birthMonth.toString().padLeft(2, '0')}';
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: member.photoUrl.isNotEmpty
+                              ? NetworkImage(cacheBustedPhotoUrl(member.photoUrl, member.photoUpdatedAt))
+                              : null,
+                          child: member.photoUrl.isEmpty ? const Icon(Icons.cake_outlined) : null,
+                        ),
+                        title: Text(member.name, style: TextStyle(color: context.textPrimary)),
+                        subtitle: Text(
+                          member.email.isNotEmpty ? '$dateLabel • ${member.email}' : dateLabel,
+                          style: TextStyle(color: context.textSecondary),
+                        ),
+                        trailing: canManage && _hasIncompleteEcclesiasticalData(member)
+                            ? const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.amber)
+                            : null,
+                        onTap: canManage
+                            ? () => showDialog<void>(
+                                context: context,
+                                builder: (_) => _MemberDialog(existing: member),
+                              )
+                            : null,
+                        onLongPress: canManage ? () => _confirmDelete(context, ref, member) : null,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -208,8 +219,12 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
   late final _originChurchController = TextEditingController(text: widget.existing?.originChurch ?? '');
   late DateTime? _membershipDate = widget.existing?.membershipDate;
   late DateTime? _baptismDate = widget.existing?.baptismDate;
-  late String? _admissionForm = (widget.existing?.admissionForm ?? '').isNotEmpty ? widget.existing!.admissionForm : null;
-  late String? _maritalStatus = (widget.existing?.maritalStatus ?? '').isNotEmpty ? widget.existing!.maritalStatus : null;
+  late String? _admissionForm = (widget.existing?.admissionForm ?? '').isNotEmpty
+      ? widget.existing!.admissionForm
+      : null;
+  late String? _maritalStatus = (widget.existing?.maritalStatus ?? '').isNotEmpty
+      ? widget.existing!.maritalStatus
+      : null;
   late final List<_SelectedMinistry> _selectedMinistries = [
     for (final m in widget.existing?.ministries ?? const <MemberMinistry>[])
       _SelectedMinistry(ministryId: m.ministryId, ministryName: m.ministryName, cargos: {...m.cargos}),
@@ -277,15 +292,12 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     final month = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
     final cpf = _cpfController.text;
     if (name.isEmpty || day < 1 || day > 31 || month < 1 || month > 12) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preencha nome e data de nascimento válidos (DD/MM).')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Preencha nome e data de nascimento válidos (DD/MM).')));
       return;
     }
     if (!CpfValidator.isValid(cpf)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um CPF válido.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe um CPF válido.')));
       return;
     }
 
@@ -358,8 +370,12 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     if (_pickedPhoto != null) {
       photoProvider = FileImage(_pickedPhoto!);
     } else if ((widget.existing?.photoUrl ?? '').isNotEmpty) {
-      photoProvider = NetworkImage(widget.existing!.photoUrl);
+      photoProvider = NetworkImage(cacheBustedPhotoUrl(widget.existing!.photoUrl, widget.existing!.photoUpdatedAt));
     }
+    // A foto de quem já tem conta (linkedUid) vem sempre do perfil do próprio
+    // usuário (sincronizada pela Cloud Function `onUserPhotoUpdated`) — só é
+    // editável aqui pra quem foi cadastrado manualmente e ainda não tem conta.
+    final hasLinkedAccount = (widget.existing?.linkedUid ?? '').isNotEmpty;
 
     return AlertDialog(
       title: Text(widget.existing == null ? 'Adicionar membro' : 'Editar membro'),
@@ -368,17 +384,28 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             GestureDetector(
-              onTap: _pickPhoto,
+              onTap: hasLinkedAccount ? null : _pickPhoto,
               child: CircleAvatar(
                 radius: 36,
                 backgroundImage: photoProvider,
                 child: photoProvider == null ? const Icon(Icons.camera_alt_outlined) : null,
               ),
             ),
+            if (hasLinkedAccount) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Foto sincronizada do perfil do usuário',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.textSecondary, fontSize: 11),
+              ),
+            ],
             const SizedBox(height: 16),
             Text('* Campos obrigatórios', style: TextStyle(color: context.textSecondary, fontSize: 12)),
             const SizedBox(height: 8),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nome *')),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Nome *'),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _cpfController,
@@ -414,7 +441,10 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Dados eclesiásticos', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Dados eclesiásticos',
+                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             InkWell(
@@ -431,9 +461,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
             DropdownButtonFormField<String>(
               initialValue: _admissionForm,
               decoration: const InputDecoration(labelText: 'Forma de Adesão'),
-              items: [
-                for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
-              ],
+              items: [for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option))],
               onChanged: (value) => setState(() {
                 _admissionForm = value;
                 if (value == 'Batismo') {
@@ -462,15 +490,16 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
             DropdownButtonFormField<String>(
               initialValue: _maritalStatus,
               decoration: const InputDecoration(labelText: 'Estado civil'),
-              items: [
-                for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
-              ],
+              items: [for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option))],
               onChanged: (value) => setState(() => _maritalStatus = value),
             ),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Ministérios e Cargos', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Ministérios e Cargos',
+                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             Align(
@@ -615,10 +644,7 @@ class _MinistryPickerDialogState extends State<_MinistryPickerDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(_selected),
-          child: const Text('Confirmar'),
-        ),
+        TextButton(onPressed: () => Navigator.of(context).pop(_selected), child: const Text('Confirmar')),
       ],
     );
   }
@@ -632,6 +658,9 @@ class _BirthdayDateFormatter extends TextInputFormatter {
     final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
     final trimmed = digits.length > 4 ? digits.substring(0, 4) : digits;
     final formatted = trimmed.length > 2 ? '${trimmed.substring(0, 2)}/${trimmed.substring(2)}' : trimmed;
-    return TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 }

@@ -33,6 +33,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   DateTime? _birthdate;
+  DateTime? _baptismDate;
   File? _pickedPhoto;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -70,6 +71,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     );
     if (picked != null) {
       setState(() => _birthdate = picked);
+    }
+  }
+
+  Future<void> _pickBaptismDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _baptismDate ?? now,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() => _baptismDate = picked);
     }
   }
 
@@ -129,6 +143,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         cpf: cpf,
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
+        baptismDate: _baptismDate,
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
         communicationsConsent: _acceptedCommunications,
@@ -301,8 +316,21 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               const SizedBox(height: 16),
               TextField(
                 controller: _addressController,
-                textCapitalization: TextCapitalization.words,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _pickBaptismDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data de Batismo (opcional)',
+                    suffixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  child: Text(
+                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               TextField(

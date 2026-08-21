@@ -39,7 +39,7 @@ class EventsPage extends ConsumerWidget {
             ? FloatingActionButton(
                 heroTag: 'events_fab',
                 onPressed: () => _onAddEvent(context, tab),
-                child: const Icon(Icons.add),
+                child: Icon(tab == EventsTab.recorrente ? Icons.edit : Icons.add),
               )
             : null,
         body: Column(

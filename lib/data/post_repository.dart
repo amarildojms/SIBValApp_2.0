@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/comment.dart';
@@ -15,9 +18,10 @@ import '../models/post.dart';
 /// ficando abaixo só dos posts de aniversário do dia, e voltam ao fluxo
 /// cronológico normal assim que o evento passa.
 class PostRepository {
-  PostRepository(this._firestore);
+  PostRepository(this._firestore, this._storage);
 
   final FirebaseFirestore _firestore;
+  final FirebaseStorage _storage;
 
   CollectionReference<Map<String, dynamic>> get _posts => _firestore.collection('posts');
   CollectionReference<Map<String, dynamic>> _comments(String postId) =>
@@ -91,6 +95,36 @@ class PostRepository {
     return 2;
   }
 
+  /// Publicação manual no feed "Início" — restrita a quem tem
+  /// `canManagePublications` (papel Publicações ou admin, ver
+  /// `firestore.rules` nativo `posts.create`). Espelha o resto do feed
+  /// (curtida/comentário), sem equivalente direto no app nativo.
+  Future<void> createManualPost({
+    required String authorUid,
+    required String authorName,
+    required String text,
+    File? imageFile,
+  }) async {
+    final doc = _posts.doc();
+    var imageUrl = '';
+    if (imageFile != null) {
+      final ref = _storage.ref('posts/${doc.id}.jpg');
+      await ref.putFile(imageFile);
+      imageUrl = await ref.getDownloadURL();
+    }
+    await doc.set({
+      'authorUid': authorUid,
+      'authorName': authorName,
+      'text': text,
+      'imageUrl': imageUrl,
+      'createdAt': FieldValue.serverTimestamp(),
+      'likedBy': <String>[],
+      'commentCount': 0,
+      'postType': PostType.manual,
+      'targetId': '',
+    });
+  }
+
   Future<void> toggleLike(String postId, String uid, bool liked) {
     return _posts.doc(postId).update({
       'likedBy': liked ? FieldValue.arrayUnion([uid]) : FieldValue.arrayRemove([uid]),
@@ -117,7 +151,7 @@ class PostRepository {
 }
 
 final postRepositoryProvider = Provider<PostRepository>((ref) {
-  return PostRepository(FirebaseFirestore.instance);
+  return PostRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
 });
 
 final postsProvider = FutureProvider.autoDispose<List<Post>>((ref) {

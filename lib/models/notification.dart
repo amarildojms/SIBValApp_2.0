@@ -12,6 +12,7 @@ class AppNotification {
   final String audience;
   final String targetUid;
   final List<String> readBy;
+  final List<String> dismissedBy;
   final Timestamp? createdAt;
 
   const AppNotification({
@@ -23,6 +24,7 @@ class AppNotification {
     required this.audience,
     required this.targetUid,
     required this.readBy,
+    required this.dismissedBy,
     required this.createdAt,
   });
 
@@ -37,6 +39,7 @@ class AppNotification {
       audience: data['audience'] as String? ?? NotificationAudience.all,
       targetUid: data['targetUid'] as String? ?? '',
       readBy: List<String>.from(data['readBy'] as List? ?? const []),
+      dismissedBy: List<String>.from(data['dismissedBy'] as List? ?? const []),
       createdAt: data['createdAt'] as Timestamp?,
     );
   }
@@ -51,6 +54,7 @@ abstract final class NotificationType {
   static const postLike = 'post_like';
   static const postComment = 'post_comment';
   static const prayerRequest = 'prayer_request';
+  static const message = 'message';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem

@@ -206,6 +206,7 @@ class _UserCard extends ConsumerWidget {
                   _RoleChip(label: 'Mídia', role: UserRole.midia, user: user),
                   _RoleChip(label: 'Intercessão', role: UserRole.intercessao, user: user),
                   _RoleChip(label: 'Eventos', role: UserRole.eventos, user: user),
+                  _RoleChip(label: 'Publicações', role: UserRole.publicacoes, user: user),
                 ],
               ),
               Align(

@@ -21,6 +21,7 @@ class NotificationRepository {
   }) async {
     final snapshot = await _notifications.orderBy('createdAt', descending: true).limit(limit).get();
     return snapshot.docs.map(AppNotification.fromFirestore).where((n) {
+      if (n.dismissedBy.contains(uid)) return false;
       return n.audience == NotificationAudience.all ||
           (n.audience == NotificationAudience.admin && isAdmin) ||
           (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
@@ -38,6 +39,30 @@ class NotificationRepository {
     }
     await batch.commit();
   }
+
+  /// "Descartar" — a coleção `notifications` é compartilhada (uma mesma
+  /// notificação de audiência `all`/`admin`/etc. aparece pra vários usuários),
+  /// então excluir o documento apagaria a notificação pra todo mundo. Em vez
+  /// disso, cada usuário guarda seu próprio dispensar em `dismissedBy`, igual
+  /// ao padrão já usado em `readBy`, e a notificação some só da lista dele.
+  Future<void> dismiss(String id, String uid) {
+    return _notifications.doc(id).update({
+      'dismissedBy': FieldValue.arrayUnion([uid]),
+    });
+  }
+
+  /// "Limpar tudo" — dispensa de uma vez todas as notificações atualmente
+  /// visíveis pro usuário (mesmo `dismissedBy`, um batch em vez de uma a uma).
+  Future<void> dismissAll(List<String> ids, String uid) async {
+    if (ids.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final id in ids) {
+      batch.update(_notifications.doc(id), {
+        'dismissedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
+    await batch.commit();
+  }
 }
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
@@ -48,7 +73,9 @@ final notificationsProvider = FutureProvider.autoDispose<List<AppNotification>>(
   final uid = ref.watch(currentUidProvider);
   if (uid == null) return const [];
   final profile = await ref.watch(currentUserProfileProvider.future);
-  return ref.watch(notificationRepositoryProvider).getRecent(
+  return ref
+      .watch(notificationRepositoryProvider)
+      .getRecent(
         isAdmin: profile?.isAdmin ?? false,
         uid: uid,
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,

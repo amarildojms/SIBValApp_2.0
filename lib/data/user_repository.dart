@@ -25,6 +25,7 @@ class CurrentUserProfile {
     required this.hasBirthdate,
     this.phone = '',
     this.address = '',
+    this.photoUpdatedAt,
     this.communicationsConsent = false,
     this.acceptedPrivacyPolicy = false,
     this.acceptedTermsOfUse = false,
@@ -39,6 +40,7 @@ class CurrentUserProfile {
   final bool hasBirthdate;
   final String phone;
   final String address;
+  final DateTime? photoUpdatedAt;
 
   /// Checkbox opcional do cadastro (ver `registration_consent_section.dart`)
   /// — usado por `CommunicationsConsentBanner` pra decidir se sugere ativar.
@@ -55,7 +57,11 @@ class CurrentUserProfile {
   bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
   bool get canManageEventos => isAdmin || roles.contains('eventos');
   bool get canManageGallery => isAdmin || roles.contains('midia');
-  bool get canManageDevotionals => isAdmin || roles.contains('secretaria');
+  // ALTERADO (21/08/2026): publicar devocionais e posts manuais no feed
+  // "Início" virou exclusividade do papel Publicações — a Secretaria não
+  // gerencia mais esse conteúdo.
+  bool get canManageDevotionals => isAdmin || roles.contains('publicacoes');
+  bool get canManagePublications => isAdmin || roles.contains('publicacoes');
 
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
@@ -103,6 +109,7 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     hasBirthdate: data['birthdate'] != null,
     phone: data['phone'] as String? ?? '',
     address: data['address'] as String? ?? '',
+    photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
     communicationsConsent: data['communicationsConsent'] as bool? ?? false,
     acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
     acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
@@ -140,6 +147,7 @@ class UserRepository {
     required String cpf,
     String phone = '',
     String address = '',
+    DateTime? baptismDate,
     bool privacyPolicyAccepted = false,
     bool termsOfUseAccepted = false,
     bool communicationsConsent = false,
@@ -154,6 +162,7 @@ class UserRepository {
       'cpf': normalizedCpf,
       'phone': phone,
       'address': address,
+      if (baptismDate != null) 'baptismDate': Timestamp.fromDate(baptismDate),
       if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
       if (termsOfUseAccepted) 'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
       'communicationsConsent': communicationsConsent,
@@ -188,7 +197,11 @@ class UserRepository {
     final ref = _storage.ref(storagePath);
     await ref.putFile(photoFile);
     final photoUrl = await ref.getDownloadURL();
-    await _users.doc(uid).update({'photoUrl': photoUrl, 'photoStoragePath': storagePath});
+    await _users.doc(uid).update({
+      'photoUrl': photoUrl,
+      'photoStoragePath': storagePath,
+      'photoUpdatedAt': FieldValue.serverTimestamp(),
+    });
     return photoUrl;
   }
 
