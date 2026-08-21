@@ -8,6 +8,7 @@ import '../data/settings_repository.dart';
 import '../data/user_repository.dart';
 import '../models/prayer_request.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'archived_prayer_page.dart';
 
@@ -29,6 +30,7 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _scrollController = ScrollController();
   bool _isAnonymous = false;
   bool _sending = false;
   String? _nameError;
@@ -40,6 +42,7 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -62,6 +65,7 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
       _sending = true;
       _nameError = null;
     });
+    _scrollController.scrollToSaveButton();
     try {
       await ref.read(prayerRepositoryProvider).submit(PrayerRequest(
             id: '',
@@ -207,6 +211,7 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
         bottom: true,
         top: false,
         child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
           const ScreenTitle('Pedido de Oração'),

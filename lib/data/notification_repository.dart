@@ -29,6 +29,26 @@ class NotificationRepository {
     }).toList();
   }
 
+  /// Tempo real (21/08/2026) — ver `notificationsProvider`. O sino e o badge
+  /// de não lidas devem atualizar assim que uma notificação nova chega, sem
+  /// esperar a tela ser reaberta.
+  Stream<List<AppNotification>> watchRecent({
+    required bool isAdmin,
+    required String uid,
+    bool canViewPrayerRequests = false,
+    int limit = 50,
+  }) {
+    return _notifications.orderBy('createdAt', descending: true).limit(limit).snapshots().map((snapshot) {
+      return snapshot.docs.map(AppNotification.fromFirestore).where((n) {
+        if (n.dismissedBy.contains(uid)) return false;
+        return n.audience == NotificationAudience.all ||
+            (n.audience == NotificationAudience.admin && isAdmin) ||
+            (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
+            (n.audience == NotificationAudience.user && n.targetUid == uid);
+      }).toList();
+    });
+  }
+
   Future<void> markAsRead(List<String> ids, String uid) async {
     if (ids.isEmpty) return;
     final batch = _firestore.batch();
@@ -69,13 +89,16 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   return NotificationRepository(FirebaseFirestore.instance);
 });
 
-final notificationsProvider = FutureProvider.autoDispose<List<AppNotification>>((ref) async {
+final notificationsProvider = StreamProvider.autoDispose<List<AppNotification>>((ref) async* {
   final uid = ref.watch(currentUidProvider);
-  if (uid == null) return const [];
+  if (uid == null) {
+    yield const [];
+    return;
+  }
   final profile = await ref.watch(currentUserProfileProvider.future);
-  return ref
+  yield* ref
       .watch(notificationRepositoryProvider)
-      .getRecent(
+      .watchRecent(
         isAdmin: profile?.isAdmin ?? false,
         uid: uid,
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,

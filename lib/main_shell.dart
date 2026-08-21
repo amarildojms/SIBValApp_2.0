@@ -13,9 +13,11 @@ import 'auth/login_page.dart';
 import 'auth/required_consent_gate_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
+import 'contribute/contribute_page.dart';
 import 'data/member_repository.dart';
 import 'data/post_repository.dart' show currentUidProvider;
 import 'data/prayer_repository.dart';
+import 'data/settings_repository.dart';
 import 'data/user_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
@@ -33,6 +35,7 @@ import 'theme/app_theme.dart';
 import 'theme/theme_settings_page.dart';
 import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
+import 'widgets/update_gate.dart';
 
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
 /// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
@@ -51,7 +54,7 @@ class _MainShellState extends State<MainShell> {
     DevotionalsListPage(),
     EventsPage(),
     HomeFeedPage(),
-    _ComingSoonPage(title: 'Contribua'),
+    ContributePage(),
     _MaisPage(),
   ];
 
@@ -75,6 +78,13 @@ class _MainShellState extends State<MainShell> {
           if (uid != null) {
             ref.read(pushNotificationServiceProvider).requestPermissionAndRegisterToken(uid);
           }
+          // Bloqueio obrigatório de atualização (21/08/2026) — vale pra
+          // qualquer um, logado ou não, ver `update_gate.dart`.
+          final updateStatus = ref.watch(updateStatusProvider).asData?.value;
+          final versionConfig = ref.watch(appVersionConfigProvider).asData?.value;
+          if (updateStatus == UpdateStatus.forceBlocked && versionConfig != null) {
+            return UpdateRequiredPage(config: versionConfig);
+          }
           // Contas logadas criadas antes dos Termos de Uso/checkbox de
           // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
           // aceitarem — ver `RequiredConsentGatePage`.
@@ -86,6 +96,8 @@ class _MainShellState extends State<MainShell> {
               children: [
                 const CommunicationsConsentBanner(),
                 const NotificationPermissionBanner(),
+                if (updateStatus == UpdateStatus.graceWarning && versionConfig != null)
+                  UpdateAvailableBanner(config: versionConfig),
                 Expanded(
                   child: IndexedStack(index: _index, children: _pages),
                 ),
@@ -178,30 +190,6 @@ class _SettingsMailIcon extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.mail_outline, color: color, size: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ComingSoonPage extends StatelessWidget {
-  const _ComingSoonPage({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const SibValAppBar(isHome: false),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ScreenTitle(title),
-          Expanded(
-            child: Center(
-              child: Text('Em breve.', style: TextStyle(color: context.textSecondary, fontSize: 16)),
             ),
           ),
         ],

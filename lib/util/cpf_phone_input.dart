@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'masked_input.dart';
+
 /// Só dígitos, formata como ###.###.###-## enquanto digita — usado tanto no
 /// cadastro por e-mail (`register_page.dart`) quanto no de completar perfil
 /// via Google (`complete_google_profile_page.dart`), daí ser compartilhado
@@ -7,7 +9,7 @@ import 'package:flutter/services.dart';
 class CpfInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final digits = digitsAfterEdit(oldValue, newValue);
     final trimmed = digits.length > 11 ? digits.substring(0, 11) : digits;
     final buffer = StringBuffer();
     for (var i = 0; i < trimmed.length; i++) {
@@ -23,7 +25,7 @@ class CpfInputFormatter extends TextInputFormatter {
 class PhoneInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final digits = digitsAfterEdit(oldValue, newValue);
     final trimmed = digits.length > 11 ? digits.substring(0, 11) : digits;
     final hyphenIndex = trimmed.length <= 10 ? 5 : 6;
     final buffer = StringBuffer();

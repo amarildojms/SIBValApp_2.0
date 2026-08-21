@@ -4,12 +4,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
+import '../models/address.dart';
 import '../theme/app_theme.dart';
+import '../util/age.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/photo_picker.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/address_fields.dart';
+import '../widgets/date_field.dart';
 import '../widgets/google_logo.dart';
 import 'complete_google_profile_page.dart';
 import 'login_page.dart' show ApprovalResult, resolveApprovalState;
@@ -29,9 +33,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _cpfController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
+  final _addressKey = GlobalKey<AddressFieldsState>();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _scrollController = ScrollController();
   DateTime? _birthdate;
   DateTime? _baptismDate;
   File? _pickedPhoto;
@@ -48,9 +53,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     _cpfController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -58,32 +63,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final photo = await pickAndCropProfilePhoto();
     if (photo != null) {
       setState(() => _pickedPhoto = photo);
-    }
-  }
-
-  Future<void> _pickBirthdate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year - 20),
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-    );
-    if (picked != null) {
-      setState(() => _birthdate = picked);
-    }
-  }
-
-  Future<void> _pickBaptismDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _baptismDate ?? now,
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-    if (picked != null) {
-      setState(() => _baptismDate = picked);
     }
   }
 
@@ -107,6 +86,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       _showMessage('Informe sua data de nascimento.');
       return;
     }
+    if (ageInYears(birthdate) < minimumRegistrationAge) {
+      _showMessage('É preciso ter pelo menos $minimumRegistrationAge anos para se cadastrar.');
+      return;
+    }
     if (email.isEmpty || !email.contains('@')) {
       _showMessage('E-mail inválido.');
       return;
@@ -125,6 +108,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     setState(() => _loading = true);
+    _scrollController.scrollToSaveButton();
     try {
       final credential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
@@ -142,7 +126,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         birthdate: birthdate,
         cpf: cpf,
         phone: _phoneController.text.trim(),
-        address: _addressController.text.trim(),
+        addressDetails: _addressKey.currentState!.value,
         baptismDate: _baptismDate,
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
@@ -246,6 +230,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         bottom: true,
         top: false,
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -288,17 +273,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 decoration: const InputDecoration(labelText: 'CPF *'),
               ),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _pickBirthdate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Data de nascimento *',
-                    suffixIcon: Icon(Icons.calendar_today_outlined),
-                  ),
-                  child: Text(
-                    _birthdate != null ? DateFormat('dd/MM/yyyy').format(_birthdate!) : '',
-                  ),
-                ),
+              DateField(
+                label: 'Data de nascimento *',
+                value: _birthdate,
+                firstDate: DateTime(DateTime.now().year - 110),
+                lastDate: maxBirthdateForAge(minimumRegistrationAge),
+                onChanged: (date) => setState(() => _birthdate = date),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -314,23 +294,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: _addressController,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+              Text(
+                'Endereço (opcional)',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
               ),
+              const SizedBox(height: 8),
+              AddressFields(key: _addressKey, initial: Address.empty),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _pickBaptismDate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Data de Batismo (opcional)',
-                    suffixIcon: Icon(Icons.calendar_today_outlined),
-                  ),
-                  child: Text(
-                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
-                  ),
-                ),
+              DateField(
+                label: 'Data de Batismo (opcional)',
+                value: _baptismDate,
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+                onChanged: (date) => setState(() => _baptismDate = date),
               ),
               const SizedBox(height: 24),
               TextField(

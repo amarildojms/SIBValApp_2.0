@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../data/devotional_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Espelha DevotionalFormFragment.kt/...ViewModel.kt: cadastro/edição de
@@ -24,11 +25,10 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
   final _titleController = TextEditingController();
   final _textController = TextEditingController();
   final _authorController = TextEditingController();
+  final _scrollController = ScrollController();
   DateTime? _selectedDate;
   bool _loading = false;
   bool _saving = false;
-
-  static final _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
 
   @override
   void initState() {
@@ -51,19 +51,6 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
     setState(() => _loading = false);
   }
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 5),
-    );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-    }
-  }
-
   Future<void> _save() async {
     final title = _titleController.text.trim();
     final text = _textController.text.trim();
@@ -77,6 +64,7 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
     }
 
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     try {
       final repository = ref.read(devotionalRepositoryProvider);
       if (widget.isEditing) {
@@ -120,6 +108,7 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
     _titleController.dispose();
     _textController.dispose();
     _authorController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -133,6 +122,7 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
         child: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              controller: _scrollController,
               padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,19 +138,13 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
                           decoration: const InputDecoration(labelText: 'Título', border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 12),
-                        InkWell(
-                          onTap: _pickDate,
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: 'Data de publicação',
-                              border: OutlineInputBorder(),
-                              suffixIcon: Icon(Icons.calendar_today_outlined),
-                            ),
-                            child: Text(
-                              _selectedDate != null ? _dateFormat.format(_selectedDate!) : '',
-                              style: TextStyle(color: context.textPrimary),
-                            ),
-                          ),
+                        DateField(
+                          label: 'Data de publicação',
+                          value: _selectedDate,
+                          firstDate: DateTime(DateTime.now().year - 5),
+                          lastDate: DateTime(DateTime.now().year + 5),
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          onChanged: (date) => setState(() => _selectedDate = date),
                         ),
                         const SizedBox(height: 12),
                         TextField(

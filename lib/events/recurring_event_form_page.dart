@@ -7,6 +7,7 @@ import '../data/recurring_event_repository.dart';
 import '../models/recurring_event.dart';
 import '../models/recurring_event_flyer.dart' show RecurringEventCategory, recurringEventFlyerCategoryLabel;
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'recurring_event_utils.dart';
 
@@ -28,6 +29,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _locationController = TextEditingController();
+  final _scrollController = ScrollController();
 
   String? _category;
   int? _weekday;
@@ -54,6 +56,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
     _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -127,6 +130,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
 
   Future<void> _performSave(_EditScope scope) async {
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     try {
       final repo = ref.read(recurringEventRepositoryProvider);
       final existing = _editingEvent;
@@ -203,6 +207,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
     if (confirmed != true) return;
 
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     try {
       await ref.read(recurringEventRepositoryProvider).delete(_editingEvent!);
       if (mounted) Navigator.of(context).pop();
@@ -229,6 +234,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
         child: _loadingEvent
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              controller: _scrollController,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

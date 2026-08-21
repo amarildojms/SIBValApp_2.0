@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/address.dart';
 import '../models/app_user.dart';
 import '../models/member.dart';
 import 'post_repository.dart' show currentUidProvider;
@@ -25,6 +26,7 @@ class CurrentUserProfile {
     required this.hasBirthdate,
     this.phone = '',
     this.address = '',
+    this.addressDetails = Address.empty,
     this.photoUpdatedAt,
     this.communicationsConsent = false,
     this.acceptedPrivacyPolicy = false,
@@ -40,6 +42,7 @@ class CurrentUserProfile {
   final bool hasBirthdate;
   final String phone;
   final String address;
+  final Address addressDetails;
   final DateTime? photoUpdatedAt;
 
   /// Checkbox opcional do cadastro (ver `registration_consent_section.dart`)
@@ -109,6 +112,7 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     hasBirthdate: data['birthdate'] != null,
     phone: data['phone'] as String? ?? '',
     address: data['address'] as String? ?? '',
+    addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
     photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
     communicationsConsent: data['communicationsConsent'] as bool? ?? false,
     acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
@@ -146,7 +150,7 @@ class UserRepository {
     required DateTime birthdate,
     required String cpf,
     String phone = '',
-    String address = '',
+    Address addressDetails = Address.empty,
     DateTime? baptismDate,
     bool privacyPolicyAccepted = false,
     bool termsOfUseAccepted = false,
@@ -161,7 +165,8 @@ class UserRepository {
       'birthDay': birthdate.day,
       'cpf': normalizedCpf,
       'phone': phone,
-      'address': address,
+      'address': addressDetails.formatted,
+      'addressDetails': addressDetails.toMap(),
       if (baptismDate != null) 'baptismDate': Timestamp.fromDate(baptismDate),
       if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
       if (termsOfUseAccepted) 'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
@@ -182,11 +187,12 @@ class UserRepository {
   Future<void> updateProfileDetails({
     required String uid,
     required String phone,
-    required String address,
+    required Address addressDetails,
   }) {
     return _users.doc(uid).update({
       'phone': phone,
-      'address': address,
+      'address': addressDetails.formatted,
+      'addressDetails': addressDetails.toMap(),
     });
   }
 
@@ -233,6 +239,11 @@ class UserRepository {
     return snapshot.docs.map(AppUser.fromFirestore).toList();
   }
 
+  /// Tempo real (21/08/2026) — ver `allUsersProvider`.
+  Stream<List<AppUser>> watchAllUsers() {
+    return _users.orderBy('name').snapshots().map((s) => s.docs.map(AppUser.fromFirestore).toList());
+  }
+
   Future<int> getPendingCount() async {
     final snapshot = await _users.where('status', isEqualTo: UserStatus.pending).get();
     return snapshot.docs.length;
@@ -266,18 +277,22 @@ final userRepositoryProvider = Provider<UserRepository>((ref) {
   return UserRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
 });
 
+/// `StreamProvider` (21/08/2026, era `FutureProvider`) — o badge de "Gerenciar
+/// Usuários" e a lista devem refletir um cadastro novo assim que ele chega.
 /// Pendentes primeiro, depois por nome — mesma ordenação de ManageUsersViewModel.kt.
-final allUsersProvider = FutureProvider.autoDispose<List<AppUser>>((ref) async {
-  final users = await ref.watch(userRepositoryProvider).getAllUsers();
-  final sorted = [...users]
-    ..sort((a, b) {
-      final pendingCompare = (a.status != UserStatus.pending ? 1 : 0).compareTo(b.status != UserStatus.pending ? 1 : 0);
-      if (pendingCompare != 0) return pendingCompare;
-      return a.name.compareTo(b.name);
-    });
-  return sorted;
+final allUsersProvider = StreamProvider.autoDispose<List<AppUser>>((ref) {
+  return ref.watch(userRepositoryProvider).watchAllUsers().map((users) {
+    final sorted = [...users]
+      ..sort((a, b) {
+        final pendingCompare = (a.status != UserStatus.pending ? 1 : 0).compareTo(b.status != UserStatus.pending ? 1 : 0);
+        if (pendingCompare != 0) return pendingCompare;
+        return a.name.compareTo(b.name);
+      });
+    return sorted;
+  });
 });
 
-final pendingUserCountProvider = FutureProvider.autoDispose<int>((ref) {
-  return ref.watch(userRepositoryProvider).getPendingCount();
+final pendingUserCountProvider = StreamProvider.autoDispose<int>((ref) {
+  final users = ref.watch(allUsersProvider).asData?.value ?? const <AppUser>[];
+  return Stream.value(users.where((u) => u.status == UserStatus.pending).length);
 });

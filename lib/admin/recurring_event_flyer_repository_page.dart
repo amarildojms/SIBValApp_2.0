@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import '../data/recurring_event_flyer_repository.dart';
 import '../models/recurring_event_flyer.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Espelha RecurringEventFlyerRepositoryFragment.kt/...ViewModel.kt/...Adapter.kt:
@@ -179,8 +181,13 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
   DateTime? _selectedDate;
   File? _pickedFlyer;
   bool _saving = false;
+  final _scrollController = ScrollController();
 
-  static final _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickFlyer() async {
     final picked = await ImagePicker().pickImage(
@@ -191,19 +198,6 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
     );
     if (picked != null) {
       setState(() => _pickedFlyer = File(picked.path));
-    }
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 2),
-    );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
     }
   }
 
@@ -218,6 +212,7 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
     }
 
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     final date = _selectedDate;
     final dateKey = _isDefault || date == null
         ? ''
@@ -245,6 +240,7 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
         bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 20,
       ),
       child: SingleChildScrollView(
+        controller: _scrollController,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,15 +280,12 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
             ),
             if (!_isDefault) ...[
               const SizedBox(height: 8),
-              InkWell(
-                onTap: _pickDate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Data', suffixIcon: Icon(Icons.calendar_today_outlined)),
-                  child: Text(
-                    _selectedDate != null ? _dateFormat.format(_selectedDate!) : '',
-                    style: TextStyle(color: context.textPrimary),
-                  ),
-                ),
+              DateField(
+                label: 'Data',
+                value: _selectedDate,
+                firstDate: DateTime(DateTime.now().year - 1),
+                lastDate: DateTime(DateTime.now().year + 2),
+                onChanged: (date) => setState(() => _selectedDate = date),
               ),
             ],
             const SizedBox(height: 20),

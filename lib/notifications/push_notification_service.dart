@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/notification_repository.dart';
 import '../data/user_repository.dart';
 import 'notification_navigation.dart';
 
@@ -23,9 +25,10 @@ import 'notification_navigation.dart';
 /// plano/app finalizado o próprio SDK do FCM já exibe a notificação no
 /// system tray sem passar por código do app, igual no nativo.
 class PushNotificationService {
-  PushNotificationService(this._userRepository);
+  PushNotificationService(this._userRepository, this._notificationRepository);
 
   final UserRepository _userRepository;
+  final NotificationRepository _notificationRepository;
 
   /// Usado pelo `MaterialApp` em main.dart e por este serviço para navegar a
   /// partir do toque numa notificação, já que isso acontece fora da árvore
@@ -99,18 +102,35 @@ class PushNotificationService {
   }
 
   void _onMessageOpenedApp(RemoteMessage message) {
-    _navigate(message.data['type'] as String? ?? '', message.data['targetId'] as String? ?? '');
+    _navigate(
+      type: message.data['type'] as String? ?? '',
+      targetId: message.data['targetId'] as String? ?? '',
+      notificationId: message.data['notificationId'] as String? ?? '',
+    );
   }
 
   void _onLocalNotificationTap(NotificationResponse response) {
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
     final data = jsonDecode(payload) as Map<String, dynamic>;
-    _navigate(data['type'] as String? ?? '', data['targetId'] as String? ?? '');
+    _navigate(
+      type: data['type'] as String? ?? '',
+      targetId: data['targetId'] as String? ?? '',
+      notificationId: data['notificationId'] as String? ?? '',
+    );
   }
 
-  void _navigate(String type, String targetId) {
+  /// Marca como lida mesmo quando a notificação é aberta direto pelo toque
+  /// (push ou notificação local), sem passar pela Central de notificações
+  /// dentro do app — antes só acontecia ali (22/08/2026, a pedido do
+  /// usuário). `notificationId` vem no payload desde a mesma data (ver
+  /// `SIBValApp2/functions/index.js`); ausente = push antigo, ignora.
+  Future<void> _navigate({required String type, required String targetId, required String notificationId}) async {
     if (type.isEmpty) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (notificationId.isNotEmpty && uid != null) {
+      await _notificationRepository.markAsRead([notificationId], uid);
+    }
     final context = navigatorKey.currentContext;
     if (context == null) return;
     navigateForNotificationType(context, type: type, targetId: targetId);
@@ -118,5 +138,5 @@ class PushNotificationService {
 }
 
 final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
-  return PushNotificationService(ref.watch(userRepositoryProvider));
+  return PushNotificationService(ref.watch(userRepositoryProvider), ref.watch(notificationRepositoryProvider));
 });

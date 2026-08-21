@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 
 import '../data/member_repository.dart';
 import '../data/ministry_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
+import '../models/address.dart';
 import '../models/member.dart';
 import '../theme/app_theme.dart';
 import '../util/cache_busted_image.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
+import '../util/masked_input.dart';
+import '../widgets/address_fields.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Espelha MembersFragment.kt/MembersViewModel.kt: lista de membros (alimenta
@@ -215,7 +218,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
         .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: widget.existing?.phone ?? ''))
         .text,
   );
-  late final _addressController = TextEditingController(text: widget.existing?.address ?? '');
+  final _addressKey = GlobalKey<AddressFieldsState>();
   late final _originChurchController = TextEditingController(text: widget.existing?.originChurch ?? '');
   late DateTime? _membershipDate = widget.existing?.membershipDate;
   late DateTime? _baptismDate = widget.existing?.baptismDate;
@@ -239,7 +242,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     _cpfController.dispose();
     _dateController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
     _originChurchController.dispose();
     super.dispose();
   }
@@ -254,17 +256,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
     if (picked != null) {
       setState(() => _pickedPhoto = File(picked.path));
     }
-  }
-
-  Future<void> _pickDate(DateTime? current, ValueChanged<DateTime> onPicked) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now,
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-    );
-    if (picked != null) onPicked(picked);
   }
 
   Future<void> _pickMinistries() async {
@@ -319,7 +310,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           photoFile: _pickedPhoto,
           uid: uid,
           phone: _phoneController.text.trim(),
-          address: _addressController.text.trim(),
+          addressDetails: _addressKey.currentState!.value,
           membershipDate: _membershipDate,
           admissionForm: _admissionForm ?? '',
           originChurch: _originChurchController.text.trim(),
@@ -337,7 +328,7 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           birthMonth: month,
           photoFile: _pickedPhoto,
           phone: _phoneController.text.trim(),
-          address: _addressController.text.trim(),
+          addressDetails: _addressKey.currentState!.value,
           membershipDate: _membershipDate,
           admissionForm: _admissionForm ?? '',
           originChurch: _originChurchController.text.trim(),
@@ -434,10 +425,15 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               inputFormatters: [PhoneInputFormatter()],
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _addressController,
-              decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Endereço (opcional)',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
             ),
+            const SizedBox(height: 8),
+            AddressFields(key: _addressKey, initial: widget.existing?.addressDetails ?? Address.empty),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
@@ -447,15 +443,12 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            InkWell(
-              onTap: () => _pickDate(_membershipDate, (date) => setState(() => _membershipDate = date)),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Data de Membresia',
-                  suffixIcon: Icon(Icons.calendar_today_outlined),
-                ),
-                child: Text(_membershipDate != null ? DateFormat('dd/MM/yyyy').format(_membershipDate!) : ''),
-              ),
+            DateField(
+              label: 'Data de Membresia',
+              value: _membershipDate,
+              firstDate: DateTime(DateTime.now().year - 110),
+              lastDate: DateTime.now(),
+              onChanged: (date) => setState(() => _membershipDate = date),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
@@ -476,15 +469,12 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               decoration: const InputDecoration(labelText: 'Igreja de origem'),
             ),
             const SizedBox(height: 8),
-            InkWell(
-              onTap: () => _pickDate(_baptismDate, (date) => setState(() => _baptismDate = date)),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Data de Batismo',
-                  suffixIcon: Icon(Icons.calendar_today_outlined),
-                ),
-                child: Text(_baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : ''),
-              ),
+            DateField(
+              label: 'Data de Batismo',
+              value: _baptismDate,
+              firstDate: DateTime(DateTime.now().year - 110),
+              lastDate: DateTime.now(),
+              onChanged: (date) => setState(() => _baptismDate = date),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
@@ -655,7 +645,7 @@ class _MinistryPickerDialogState extends State<_MinistryPickerDialog> {
 class _BirthdayDateFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final digits = digitsAfterEdit(oldValue, newValue);
     final trimmed = digits.length > 4 ? digits.substring(0, 4) : digits;
     final formatted = trimmed.length > 2 ? '${trimmed.substring(0, 2)}/${trimmed.substring(2)}' : trimmed;
     return TextEditingValue(

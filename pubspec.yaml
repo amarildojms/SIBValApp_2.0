@@ -18,11 +18,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 23, ajuste aqui e gere o
-# AAB de novo. Versão anterior (22) já estava em teste fechado; esta soma as
-# mudanças de 21/08/2026 (Mensagens, perfil Publicações, data de batismo
-# editável pelo usuário, correção de cache de foto, ajustes de UI).
-version: 1.1.0+23
+# Play Console antes de enviar; se for maior que 24, ajuste aqui e gere o
+# AAB de novo. Versão anterior (23) já estava em teste fechado; esta soma as
+# mudanças de 21-22/08/2026: aba Contribua (CNPJ/PIX/conta bancária,
+# múltiplas chaves), endereço em campos com CEP automático, bloqueio de
+# cadastro para menor de 12 anos, aviso de atualização obrigatória, ícone de
+# notificação, contadores/notificações em tempo real, correção de
+# sincronização de foto no Rol de Membros, e correções de UX (máscaras de
+# campo, calendário nativo pra digitar data).
+version: 1.2.0+24
 
 environment:
   sdk: ^3.13.0
@@ -66,6 +70,10 @@ dependencies:
   # 13.x (via ^12.0.0) só pede compileSdk 35, dentro do compileSdk 36 do
   # projeto (flutter.compileSdkVersion). Revisar quando o SDK 37 estabilizar.
   permission_handler: ^12.0.0
+  # Busca de endereço por CEP (ViaCEP) no cadastro/edição de perfil.
+  http: ^1.2.0
+  # Versão instalada do app, comparada com a mínima exigida (ver update_gate.dart).
+  package_info_plus: ^10.2.1
 
 dev_dependencies:
   flutter_test:

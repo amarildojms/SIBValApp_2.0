@@ -8,6 +8,8 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/app_user.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Envio de nova mensagem — só admin chega aqui (gate no FAB de
@@ -29,32 +31,34 @@ class _MessageFormPageState extends ConsumerState<MessageFormPage> {
   final _bodyController = TextEditingController();
   bool _sendToAll = false;
   bool _isMeeting = false;
-  DateTime? _meetingAt;
+  DateTime? _meetingDate;
+  TimeOfDay? _meetingTime;
   final _selectedUsers = <AppUser>[];
   final _selectedMinistryIds = <String>{};
   bool _sending = false;
+  final _scrollController = ScrollController();
 
-  static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
+  static final _timeFormat = DateFormat('HH:mm', 'pt_BR');
 
   @override
   void dispose() {
     _titleController.dispose();
     _bodyController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickMeetingDateTime() async {
+  DateTime? get _meetingAt {
+    final date = _meetingDate;
+    final time = _meetingTime;
+    if (date == null || time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  Future<void> _pickMeetingTime() async {
     final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _meetingAt ?? now,
-      firstDate: now.subtract(const Duration(days: 1)),
-      lastDate: DateTime(now.year + 5),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_meetingAt ?? now));
-    if (time == null) return;
-    setState(() => _meetingAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    final picked = await showTimePicker(context: context, initialTime: _meetingTime ?? TimeOfDay.fromDateTime(now));
+    if (picked != null) setState(() => _meetingTime = picked);
   }
 
   Future<void> _pickMinistries(List<Ministry> allMinistries) async {
@@ -92,6 +96,7 @@ class _MessageFormPageState extends ConsumerState<MessageFormPage> {
     if (uid == null || profile == null) return;
 
     setState(() => _sending = true);
+    _scrollController.scrollToSaveButton();
     try {
       await ref
           .read(messageRepositoryProvider)
@@ -130,6 +135,7 @@ class _MessageFormPageState extends ConsumerState<MessageFormPage> {
         bottom: true,
         top: false,
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(24),
           children: [
             const ScreenTitle('Nova mensagem'),
@@ -228,15 +234,35 @@ class _MessageFormPageState extends ConsumerState<MessageFormPage> {
             ),
             if (_isMeeting) ...[
               const SizedBox(height: 8),
-              InkWell(
-                onTap: _pickMeetingDateTime,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Data e hora da reunião',
-                    suffixIcon: Icon(Icons.event_outlined),
+              Row(
+                children: [
+                  Expanded(
+                    child: DateField(
+                      label: 'Data da reunião',
+                      value: _meetingDate,
+                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      lastDate: DateTime(DateTime.now().year + 5),
+                      onChanged: (date) => setState(() => _meetingDate = date),
+                    ),
                   ),
-                  child: Text(_meetingAt != null ? _dateFormat.format(_meetingAt!) : 'Toque para selecionar'),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickMeetingTime,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Hora',
+                          suffixIcon: Icon(Icons.access_time_outlined),
+                        ),
+                        child: Text(
+                          _meetingTime != null
+                              ? _timeFormat.format(DateTime(2000, 1, 1, _meetingTime!.hour, _meetingTime!.minute))
+                              : '',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 24),

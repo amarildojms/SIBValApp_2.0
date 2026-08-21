@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'address.dart';
+
 /// Espelha app/src/main/java/com/sibval/app/data/model/User.kt — mesma
 /// coleção `users` no Firestore. Nomeado AppUser pra não colidir com a
 /// classe User do firebase_auth, já usada em outros arquivos.
@@ -22,6 +24,7 @@ class AppUser {
   final List<String> roles;
   final String phone;
   final String address;
+  final Address addressDetails;
   final DateTime? baptismDate;
 
   const AppUser({
@@ -38,6 +41,7 @@ class AppUser {
     required this.roles,
     this.phone = '',
     this.address = '',
+    this.addressDetails = Address.empty,
     this.baptismDate,
   });
 
@@ -57,6 +61,7 @@ class AppUser {
       roles: List<String>.from(data['roles'] as List? ?? const []),
       phone: data['phone'] as String? ?? '',
       address: data['address'] as String? ?? '',
+      addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
       baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
     );
   }
@@ -76,6 +81,7 @@ class AppUser {
       roles: roles ?? this.roles,
       phone: phone,
       address: address,
+      addressDetails: addressDetails,
       baptismDate: baptismDate,
     );
   }

@@ -3,12 +3,16 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../data/user_repository.dart';
+import '../models/address.dart';
 import '../theme/app_theme.dart';
+import '../util/age.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/photo_picker.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/address_fields.dart';
+import '../widgets/date_field.dart';
 import 'registration_consent_section.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/ui/auth/CompleteGoogleProfileActivity.kt
@@ -39,7 +43,8 @@ class CompleteGoogleProfilePage extends ConsumerStatefulWidget {
 class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfilePage> {
   final _cpfController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
+  final _addressKey = GlobalKey<AddressFieldsState>();
+  final _scrollController = ScrollController();
   DateTime? _birthdate;
   DateTime? _baptismDate;
   File? _pickedPhoto;
@@ -52,7 +57,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
   void dispose() {
     _cpfController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -60,32 +65,6 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
     final photo = await pickAndCropProfilePhoto();
     if (photo != null) {
       setState(() => _pickedPhoto = photo);
-    }
-  }
-
-  Future<void> _pickBirthdate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year - 20),
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-    );
-    if (picked != null) {
-      setState(() => _birthdate = picked);
-    }
-  }
-
-  Future<void> _pickBaptismDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _baptismDate ?? now,
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-    if (picked != null) {
-      setState(() => _baptismDate = picked);
     }
   }
 
@@ -101,12 +80,17 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
       _showMessage('Selecione sua data de nascimento.');
       return;
     }
+    if (ageInYears(birthdate) < minimumRegistrationAge) {
+      _showMessage('É preciso ter pelo menos $minimumRegistrationAge anos para se cadastrar.');
+      return;
+    }
     if (!_acceptedTermsOfUse || !_acceptedPrivacyPolicy) {
       _showMessage('É preciso aceitar os Termos de Uso e a Política de Privacidade para continuar.');
       return;
     }
 
     setState(() => _loading = true);
+    _scrollController.scrollToSaveButton();
     try {
       final repository = ref.read(userRepositoryProvider);
       await repository.createUserProfile(
@@ -116,7 +100,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
         birthdate: birthdate,
         cpf: cpf,
         phone: _phoneController.text.trim(),
-        address: _addressController.text.trim(),
+        addressDetails: _addressKey.currentState!.value,
         baptismDate: _baptismDate,
         privacyPolicyAccepted: _acceptedPrivacyPolicy,
         termsOfUseAccepted: _acceptedTermsOfUse,
@@ -184,6 +168,7 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
       appBar: AppBar(backgroundColor: SibValColors.navyBlue, foregroundColor: Colors.white),
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -222,15 +207,16 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 decoration: _decoration('CPF *'),
               ),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _loading ? null : _pickBirthdate,
-                child: InputDecorator(
-                  decoration: _decoration('Data de nascimento *', suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
-                  child: Text(
-                    _birthdate != null ? DateFormat('dd/MM/yyyy').format(_birthdate!) : '',
-                    style: _fieldStyle,
-                  ),
-                ),
+              DateField(
+                label: 'Data de nascimento *',
+                value: _birthdate,
+                enabled: !_loading,
+                firstDate: DateTime(DateTime.now().year - 110),
+                lastDate: maxBirthdateForAge(minimumRegistrationAge),
+                decoration: _decoration('Data de nascimento *'),
+                style: _fieldStyle,
+                iconColor: Colors.white70,
+                onChanged: (date) => setState(() => _birthdate = date),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -241,23 +227,28 @@ class _CompleteGoogleProfilePageState extends ConsumerState<CompleteGoogleProfil
                 decoration: _decoration('Telefone (opcional)'),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: _addressController,
+              const Text('Endereço (opcional)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 8),
+              AddressFields(
+                key: _addressKey,
+                initial: Address.empty,
+                enabled: !_loading,
+                decorationBuilder: _decoration,
                 style: _fieldStyle,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: _decoration('Endereço (opcional)'),
+                iconColor: Colors.white70,
+                dropdownColor: SibValColors.navyBlue,
               ),
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _loading ? null : _pickBaptismDate,
-                child: InputDecorator(
-                  decoration: _decoration('Data de Batismo (opcional)',
-                      suffixIcon: const Icon(Icons.calendar_today_outlined, color: Colors.white70)),
-                  child: Text(
-                    _baptismDate != null ? DateFormat('dd/MM/yyyy').format(_baptismDate!) : '',
-                    style: _fieldStyle,
-                  ),
-                ),
+              DateField(
+                label: 'Data de Batismo (opcional)',
+                value: _baptismDate,
+                enabled: !_loading,
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+                decoration: _decoration('Data de Batismo (opcional)'),
+                style: _fieldStyle,
+                iconColor: Colors.white70,
+                onChanged: (date) => setState(() => _baptismDate = date),
               ),
               const SizedBox(height: 24),
               RegistrationConsentSection(

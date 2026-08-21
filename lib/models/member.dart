@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'address.dart';
+
 /// Ministério(s) que o membro exerce, com os cargos/funções marcados dentro
 /// de cada um (20/08/2026, substitui os antigos campos livres `ministry`/
 /// `churchPosition`). `ministryName` é denormalizado do `Ministry`
@@ -51,6 +53,7 @@ class Member {
   final DateTime? createdAt;
   final String phone;
   final String address;
+  final Address addressDetails;
   final DateTime? membershipDate;
   final String admissionForm;
   final String originChurch;
@@ -74,6 +77,7 @@ class Member {
     required this.createdAt,
     this.phone = '',
     this.address = '',
+    this.addressDetails = Address.empty,
     this.membershipDate,
     this.admissionForm = '',
     this.originChurch = '',
@@ -100,6 +104,7 @@ class Member {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       phone: data['phone'] as String? ?? '',
       address: data['address'] as String? ?? '',
+      addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
       membershipDate: (data['membershipDate'] as Timestamp?)?.toDate(),
       admissionForm: data['admissionForm'] as String? ?? '',
       originChurch: data['originChurch'] as String? ?? '',

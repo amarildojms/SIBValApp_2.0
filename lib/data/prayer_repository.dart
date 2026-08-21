@@ -36,6 +36,16 @@ class PrayerRepository {
     return snapshot.docs.map(PrayerRequest.fromFirestore).toList();
   }
 
+  /// Tempo real (21/08/2026) — ver `prayerRequestsProvider`.
+  Stream<List<PrayerRequest>> watchAll({int limit = 200}) {
+    return _requests
+        .where('isArchived', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs.map(PrayerRequest.fromFirestore).toList());
+  }
+
   Future<List<PrayerRequest>> getArchived({int limit = 200}) async {
     final snapshot = await _requests
         .where('isArchived', isEqualTo: true)
@@ -61,8 +71,11 @@ final prayerRepositoryProvider = Provider<PrayerRepository>((ref) {
   return PrayerRepository(FirebaseFirestore.instance);
 });
 
-final prayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
-  return ref.watch(prayerRepositoryProvider).getAll();
+/// `StreamProvider` (21/08/2026, era `FutureProvider`) — o badge e a lista
+/// devem refletir um pedido novo assim que ele chega, sem esperar um
+/// `ref.invalidate` manual. Mesmo padrão de `membersProvider`.
+final prayerRequestsProvider = StreamProvider.autoDispose<List<PrayerRequest>>((ref) {
+  return ref.watch(prayerRepositoryProvider).watchAll();
 });
 
 final archivedPrayerRequestsProvider = FutureProvider.autoDispose<List<PrayerRequest>>((ref) {
@@ -72,7 +85,6 @@ final archivedPrayerRequestsProvider = FutureProvider.autoDispose<List<PrayerReq
 /// Badge no ícone "Pedido de Oração" do menu Mais — pedidos ainda não
 /// encaminhados ao responsável (arquivar é efeito colateral de
 /// `PrayerPage._sendToResponsible`, então o badge cai sozinho depois disso).
-final pendingPrayerCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  final requests = await ref.watch(prayerRequestsProvider.future);
-  return requests.length;
+final pendingPrayerCountProvider = StreamProvider.autoDispose<int>((ref) {
+  return ref.watch(prayerRepositoryProvider).watchAll().map((requests) => requests.length);
 });

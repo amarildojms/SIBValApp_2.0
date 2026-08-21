@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/address.dart';
 import '../models/app_user.dart';
 import '../models/member.dart';
 import 'post_repository.dart' show currentUidProvider;
@@ -32,6 +33,11 @@ class MemberRepository {
   Future<List<Member>> getAll() async {
     final snapshot = await _members.orderBy('name').get();
     return snapshot.docs.map(Member.fromFirestore).toList();
+  }
+
+  /// Tempo real (21/08/2026) — ver `membersProvider`.
+  Stream<List<Member>> watchAll() {
+    return _members.orderBy('name').snapshots().map((s) => s.docs.map(Member.fromFirestore).toList());
   }
 
   Future<Member?> getByLinkedUid(String uid) async {
@@ -93,7 +99,7 @@ class MemberRepository {
     required File? photoFile,
     required String uid,
     String phone = '',
-    String address = '',
+    Address addressDetails = Address.empty,
     DateTime? membershipDate,
     String admissionForm = '',
     String originChurch = '',
@@ -127,7 +133,8 @@ class MemberRepository {
       'createdBy': uid,
       'createdAt': FieldValue.serverTimestamp(),
       'phone': phone,
-      'address': address,
+      'address': addressDetails.formatted,
+      'addressDetails': addressDetails.toMap(),
       'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
       'admissionForm': admissionForm,
       'originChurch': originChurch,
@@ -150,7 +157,8 @@ class MemberRepository {
       createdBy: uid,
       createdAt: DateTime.now(),
       phone: phone,
-      address: address,
+      address: addressDetails.formatted,
+      addressDetails: addressDetails,
       membershipDate: membershipDate,
       admissionForm: admissionForm,
       originChurch: originChurch,
@@ -170,7 +178,7 @@ class MemberRepository {
     required int birthMonth,
     required File? photoFile,
     String phone = '',
-    String address = '',
+    Address addressDetails = Address.empty,
     DateTime? membershipDate,
     String admissionForm = '',
     String originChurch = '',
@@ -206,7 +214,8 @@ class MemberRepository {
       'createdBy': member.createdBy,
       'createdAt': member.createdAt != null ? Timestamp.fromDate(member.createdAt!) : FieldValue.serverTimestamp(),
       'phone': phone,
-      'address': address,
+      'address': addressDetails.formatted,
+      'addressDetails': addressDetails.toMap(),
       'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
       'admissionForm': admissionForm,
       'originChurch': originChurch,
@@ -261,6 +270,7 @@ class MemberRepository {
       'linkedUid': user.uid,
       'phone': user.phone,
       'address': user.address,
+      'addressDetails': user.addressDetails.toMap(),
       if (user.photoUrl.isNotEmpty) 'photoUrl': user.photoUrl,
       if (user.photoUrl.isNotEmpty) 'photoUpdatedAt': FieldValue.serverTimestamp(),
       if (user.baptismDate != null) 'baptismDate': Timestamp.fromDate(user.baptismDate!),
@@ -327,8 +337,13 @@ final memberRepositoryProvider = Provider<MemberRepository>((ref) {
   return MemberRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
 });
 
-final membersProvider = FutureProvider.autoDispose<List<Member>>((ref) {
-  return ref.watch(memberRepositoryProvider).getAll();
+/// `StreamProvider` (21/08/2026, era `FutureProvider`) — Rol de Membros e
+/// Aniversariantes ficavam sem atualizar sozinhos quando a Cloud Function
+/// `onUserPhotoUpdated` sincronizava a foto do perfil pro `Member` vinculado:
+/// nada invalidava esse provider depois de uma escrita feita do lado do
+/// servidor. Mesmo padrão já usado em `myMemberProvider`.
+final membersProvider = StreamProvider.autoDispose<List<Member>>((ref) {
+  return ref.watch(memberRepositoryProvider).watchAll();
 });
 
 /// Membro vinculado ao usuário logado — alimenta o % de cadastro, "Membro

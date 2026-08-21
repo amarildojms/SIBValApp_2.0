@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Publicação manual no feed "Início" — tela nova (21/08/2026), sem
@@ -23,10 +24,12 @@ class _PostFormPageState extends ConsumerState<PostFormPage> {
   final _textController = TextEditingController();
   File? _pickedImage;
   bool _saving = false;
+  final _scrollController = ScrollController();
 
   @override
   void dispose() {
     _textController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -51,6 +54,7 @@ class _PostFormPageState extends ConsumerState<PostFormPage> {
     if (uid == null || profile == null) return;
 
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     try {
       await ref
           .read(postRepositoryProvider)
@@ -71,6 +75,7 @@ class _PostFormPageState extends ConsumerState<PostFormPage> {
         bottom: true,
         top: false,
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

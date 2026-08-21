@@ -11,6 +11,9 @@ import '../models/member.dart';
 import '../theme/app_theme.dart';
 import '../util/cache_busted_image.dart';
 import '../util/photo_picker.dart';
+import '../util/scroll_to_save.dart';
+import '../widgets/address_fields.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Tela de edição de perfil aberta a partir do menu "Mais": foto, nome,
@@ -29,7 +32,8 @@ class EditProfilePage extends ConsumerStatefulWidget {
 class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
+  final _addressKey = GlobalKey<AddressFieldsState>();
+  final _scrollController = ScrollController();
   File? _pickedPhoto;
   bool _initialized = false;
   bool _saving = false;
@@ -38,7 +42,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    for (final controller in [_nameController, _phoneController, _addressController]) {
+    for (final controller in [_nameController, _phoneController]) {
       controller.addListener(_markDirty);
     }
   }
@@ -47,7 +51,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -106,13 +110,14 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     }
 
     setState(() => _saving = true);
+    _scrollController.scrollToSaveButton();
     try {
       final repository = ref.read(userRepositoryProvider);
       await repository.updateName(uid, name);
       await repository.updateProfileDetails(
         uid: uid,
         phone: _phoneController.text.trim(),
-        address: _addressController.text.trim(),
+        addressDetails: _addressKey.currentState!.value,
       );
       final photo = _pickedPhoto;
       if (photo != null) {
@@ -138,7 +143,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     if (profile != null && !_initialized) {
       _nameController.text = profile.name;
       _phoneController.text = profile.phone;
-      _addressController.text = profile.address;
       _initialized = true;
     }
 
@@ -155,6 +159,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
           child: profile == null || uid == null
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
+                  controller: _scrollController,
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,10 +215,15 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _addressController,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(labelText: 'Endereço (opcional)'),
+                      Text(
+                        'Endereço (opcional)',
+                        style: TextStyle(color: context.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      AddressFields(
+                        key: _addressKey,
+                        initial: profile.addressDetails,
+                        onAnyChange: _markDirty,
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -280,20 +290,12 @@ class _BaptismDateField extends ConsumerStatefulWidget {
 class _BaptismDateFieldState extends ConsumerState<_BaptismDateField> {
   bool _saving = false;
 
-  Future<void> _pickDate() async {
+  Future<void> _onPicked(DateTime? date) async {
     final member = widget.member;
-    if (member == null || _saving) return;
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: member.baptismDate ?? now,
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-    if (picked == null) return;
+    if (member == null || date == null) return;
     setState(() => _saving = true);
     try {
-      await ref.read(memberRepositoryProvider).updateBaptismDate(member.id, picked);
+      await ref.read(memberRepositoryProvider).updateBaptismDate(member.id, date);
       ref.invalidate(myMemberProvider);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -303,20 +305,25 @@ class _BaptismDateFieldState extends ConsumerState<_BaptismDateField> {
   @override
   Widget build(BuildContext context) {
     final member = widget.member;
-    return InkWell(
-      onTap: member == null ? null : _pickDate,
-      child: InputDecorator(
-        decoration: InputDecoration(
+    if (_saving) {
+      return InputDecorator(
+        decoration: const InputDecoration(
           labelText: 'Data de Batismo',
-          suffixIcon: _saving
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                )
-              : Icon(member == null ? null : Icons.edit_calendar_outlined, color: context.textSecondary),
+          suffixIcon: Padding(
+            padding: EdgeInsets.all(12),
+            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
         ),
-        child: Text(member == null ? '—' : (member.baptismDate != null ? _formatDate(member.baptismDate) : 'Toque para informar')),
-      ),
+        child: Text(member?.baptismDate != null ? _formatDate(member!.baptismDate) : 'Toque para informar'),
+      );
+    }
+    return DateField(
+      label: 'Data de Batismo',
+      value: member?.baptismDate,
+      enabled: member != null,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      onChanged: _onPicked,
     );
   }
 }

@@ -102,7 +102,7 @@ class RegistrationConsentSection extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const TermsOfUsePage()),
                       ),
               ),
-              const TextSpan(text: '.'),
+              const TextSpan(text: '. *'),
             ],
           ),
         ),
@@ -124,7 +124,7 @@ class RegistrationConsentSection extends StatelessWidget {
                       ),
               ),
               const TextSpan(
-                text: ' e do tratamento dos meus dados pessoais, conforme as finalidades nela descritas.',
+                text: ' e do tratamento dos meus dados pessoais, conforme as finalidades nela descritas. *',
               ),
             ],
           ),
@@ -141,7 +141,8 @@ class RegistrationConsentSection extends StatelessWidget {
                 text: 'Autorizo o recebimento de comunicações da igreja pelo aplicativo, '
                     'incluindo avisos, programações, eventos, atividades, notícias, '
                     'informações relacionadas à vida da igreja, a divulgação do meu '
-                    'aniversário e meus pedidos de oração e a exposição de fotos minhas.',
+                    'aniversário e meus pedidos de oração e a exposição de fotos minhas. '
+                    '(opcional)',
               ),
             ],
           ),

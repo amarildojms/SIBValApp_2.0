@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../util/scroll_to_save.dart';
 import 'registration_consent_section.dart';
 
 /// Exibida por `main_shell.dart` no lugar do app inteiro quando o usuário
@@ -26,9 +27,17 @@ class _RequiredConsentGatePageState extends ConsumerState<RequiredConsentGatePag
   bool _acceptedPrivacy = false;
   late bool _acceptedCommunications = widget.communicationsConsent;
   bool _loading = false;
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _continue() async {
     setState(() => _loading = true);
+    _scrollController.scrollToSaveButton();
     try {
       final repository = ref.read(userRepositoryProvider);
       await repository.acceptRequiredConsents(widget.uid);
@@ -58,6 +67,7 @@ class _RequiredConsentGatePageState extends ConsumerState<RequiredConsentGatePag
         bottom: true,
         top: false,
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

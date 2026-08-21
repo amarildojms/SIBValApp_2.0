@@ -25,6 +25,15 @@ class MessageRepository {
     return snapshot.docs.map(AppMessage.fromFirestore).where((m) => m.isRecipient(uid)).toList();
   }
 
+  /// Tempo real (21/08/2026) — ver `inboxMessagesProvider`.
+  Stream<List<AppMessage>> watchRecent({required String uid, int limit = 100}) {
+    return _messages
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs.map(AppMessage.fromFirestore).where((m) => m.isRecipient(uid)).toList());
+  }
+
   Future<AppMessage?> getById(String id) async {
     final doc = await _messages.doc(id).get();
     return doc.exists ? AppMessage.fromFirestore(doc) : null;
@@ -98,27 +107,32 @@ final messageByIdProvider = FutureProvider.autoDispose.family<AppMessage?, Strin
   return ref.watch(messageRepositoryProvider).getById(id);
 });
 
-final inboxMessagesProvider = FutureProvider.autoDispose<List<AppMessage>>((ref) async {
+/// `StreamProvider` (21/08/2026, era `FutureProvider`) — a Caixa de entrada,
+/// o badge de "Mensagens" e as reuniões futuras devem aparecer assim que o
+/// admin envia, sem esperar um refresh manual.
+final inboxMessagesProvider = StreamProvider.autoDispose<List<AppMessage>>((ref) {
   final uid = ref.watch(currentUidProvider);
-  if (uid == null) return const [];
-  return ref.watch(messageRepositoryProvider).getRecent(uid: uid);
+  if (uid == null) return Stream.value(const <AppMessage>[]);
+  return ref.watch(messageRepositoryProvider).watchRecent(uid: uid);
 });
 
 /// Mensagens com `isMeeting` e `meetingAt` no futuro, mais próxima primeiro —
-/// alimenta a seção "Próximas reuniões" no topo de `MessagesPage`.
-final upcomingMeetingsProvider = FutureProvider.autoDispose<List<AppMessage>>((ref) async {
-  final messages = await ref.watch(inboxMessagesProvider.future);
+/// alimenta a seção "Próximas reuniões" no topo de `MessagesPage`. Deriva de
+/// `inboxMessagesProvider` via `ref.watch` (não `.stream` — reconstrói este
+/// provider a cada nova emissão, o que já basta pra ficar reativo).
+final upcomingMeetingsProvider = StreamProvider.autoDispose<List<AppMessage>>((ref) {
+  final messages = ref.watch(inboxMessagesProvider).asData?.value ?? const <AppMessage>[];
   final now = DateTime.now();
   final meetings = messages.where((m) => m.isMeeting && m.meetingAt != null && m.meetingAt!.isAfter(now)).toList()
     ..sort((a, b) => a.meetingAt!.compareTo(b.meetingAt!));
-  return meetings;
+  return Stream.value(meetings);
 });
 
-final pendingMessagesCountProvider = FutureProvider.autoDispose<int>((ref) async {
+final pendingMessagesCountProvider = StreamProvider.autoDispose<int>((ref) {
   final uid = ref.watch(currentUidProvider);
-  if (uid == null) return 0;
-  final messages = await ref.watch(inboxMessagesProvider.future);
-  return messages.where((m) => !m.readBy.contains(uid)).length;
+  if (uid == null) return Stream.value(0);
+  final messages = ref.watch(inboxMessagesProvider).asData?.value ?? const <AppMessage>[];
+  return Stream.value(messages.where((m) => !m.readBy.contains(uid)).length);
 });
 
 /// Só admin envia mensagens (gate no FAB de `MessagesPage`, espelhando
