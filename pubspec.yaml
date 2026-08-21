@@ -59,6 +59,13 @@ dependencies:
   image_cropper: ^12.2.1
   firebase_messaging: ^16.5.0
   flutter_local_notifications: ^22.3.0
+  # Preso em ^12.0.0 (não a última, ^13.x): permission_handler_android 14.x
+  # (puxado por permission_handler >=13.0.0) exige compileSdk 37, que a Android
+  # SDK Platform aqui instala como pasta "android-37.0" — o Gradle procura o
+  # alvo "android-37" e não acha, falhando o build. permission_handler_android
+  # 13.x (via ^12.0.0) só pede compileSdk 35, dentro do compileSdk 36 do
+  # projeto (flutter.compileSdkVersion). Revisar quando o SDK 37 estabilizar.
+  permission_handler: ^12.0.0
 
 dev_dependencies:
   flutter_test:

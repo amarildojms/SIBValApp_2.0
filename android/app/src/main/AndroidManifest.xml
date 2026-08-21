@@ -32,10 +32,14 @@
             android:value="2" />
 
         <!-- Requerida pelo image_cropper (biblioteca uCrop) — sem essa
-             declaração explícita a tela de corte de foto não abre. -->
+             declaração explícita a tela de corte de foto não abre.
+             Sem screenOrientation fixo (removido em 20/08/2026): a partir do
+             Android 16 o sistema ignora restrições de orientação em telas
+             grandes (dobráveis/tablets) e o Play Console passou a marcar
+             isso como problema de compatibilidade — a MainActivity já não
+             tinha nenhuma restrição, só esta tela de corte tinha. -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
-            android:screenOrientation="portrait"
             android:theme="@style/Ucrop.CropTheme"/>
 
         <!-- Canal/ícone usados pelo próprio SDK do FCM quando exibe a

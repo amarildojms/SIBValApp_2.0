@@ -23,6 +23,7 @@ import 'gallery/album_list_page.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
 import 'models/hymn.dart';
+import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
 import 'partners/partners_page.dart';
 import 'prayer/prayer_page.dart';
@@ -81,6 +82,7 @@ class _MainShellState extends State<MainShell> {
             body: Column(
               children: [
                 const CommunicationsConsentBanner(),
+                const NotificationPermissionBanner(),
                 Expanded(child: IndexedStack(index: _index, children: _pages)),
               ],
             ),

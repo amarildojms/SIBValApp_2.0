@@ -184,9 +184,11 @@ intervalo, não só o dia de início — um evento em andamento continua
 aparecendo no filtro "hoje"/"esta semana").
 
 Isso exigiu editar `SIBValApp2/functions/index.js` (mesma cautela dos casos
-`members`/`onUserPhotoUpdated` acima — **só editei o código-fonte, não fiz
-`firebase deploy`**, decisão do usuário, dado explicitamente ao responder as
-perguntas de design desta mudança em 20/08/2026):
+`members`/`onUserPhotoUpdated` acima — editei o código-fonte só depois do
+usuário responder as perguntas de design desta mudança em 20/08/2026; o
+deploy, `firebase deploy --only functions --project sibval-app-project`, só
+rodou depois, num pedido explícito e separado — "Pode fazer o deploy" — e já
+foi feito):
 - `deleteExpiredEvents` agora só apaga um evento quando `endDateTimeMillis`
   (não `dateTimeMillis`) já passou — a query continua filtrando por
   `dateTimeMillis < agora` como pré-filtro barato (todo evento expirado já
@@ -214,6 +216,39 @@ filtra mais por `dateTimeMillis >= agora` (isso escondia da lista principal
 um evento de vários dias já em andamento, cujo início já passou mas o fim
 não) — agora traz todo evento `published` e filtra em memória por
 `endDateTimeMillis >= agora`.
+
+**Limpeza anual de ministérios/cargos (20/08/2026):** nova Cloud Function
+`resetAnnualMinistries` (`SIBValApp2/functions/index.js`, editada e já
+deployada), agendada pra todo **20 de janeiro** às 3h (horário de Brasília) —
+zera `ministryIds`/`ministries` de todo documento em `members`, porque a
+igreja reorganiza quem exerce qual ministério/cargo a cada ano e o vínculo do
+ano anterior não deve persistir. Só limpa esses dois campos denormalizados no
+membro; o resto do cadastro (nome, CPF, foto...) não é tocado, e o catálogo
+em si (coleção `ministries`, gerenciada em `manage_ministries_page.dart`)
+continua intacto pra reatribuição ao longo do novo ano. O pedido original do
+usuário foi "limpar dos cadastros de membros **e usuários**", mas
+`users/{uid}` nunca guardou ministério/cargo — esse dado é *lido* na tela de
+perfil (`edit_profile_page.dart`, campo somente-leitura) direto do `Member`
+vinculado, então limpar `members` já resolve os dois lugares onde isso
+aparece.
+
+**Banner de aviso de notificação desativada (20/08/2026):**
+`lib/notifications/notification_permission_banner.dart`, mesmo padrão do
+banner de consentimento de comunicações
+(`communications_consent_banner.dart`) — intervalo de 21 dias entre
+exibições, opt-out permanente via `shared_preferences`, mostrado em
+`main_shell.dart` logo abaixo dele. Só aparece quando
+`FirebaseMessaging.instance.getNotificationSettings().authorizationStatus`
+é `denied` (o pedido de permissão em si já acontece automaticamente ao
+logar, ver `PushNotificationService.requestPermissionAndRegisterToken`).
+Como Android 13+/iOS não reabrem o diálogo do sistema depois de uma negativa,
+o botão "Ativar" leva direto pras configurações do app via
+`permission_handler` (`openAppSettings()` — pacote novo, adicionado só por
+causa deste banner; não precisou de nenhuma outra permissão nova, já que
+`POST_NOTIFICATIONS` já estava declarada no manifest desde a implementação
+de FCM). Reavalia sozinho ao voltar do app de Configurações
+(`WidgetsBindingObserver`/`AppLifecycleState.resumed`), sem esperar o
+próximo intervalo.
 
 ## Como responder "o que falta migrar"
 
