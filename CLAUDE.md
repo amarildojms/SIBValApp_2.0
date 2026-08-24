@@ -285,6 +285,54 @@ de FCM). Reavalia sozinho ao voltar do app de Configurações
 (`WidgetsBindingObserver`/`AppLifecycleState.resumed`), sem esperar o
 próximo intervalo.
 
+**Notificação some da barra + marca como lida ao abrir a tela relacionada
+(24/08/2026):** antes só acontecia ao tocar direto na notificação (push ou
+item da Central). Pedido do usuário: também acontecer quando ele chega na
+tela relacionada por outro caminho (ex.: abrir "Aniversariantes" pelo menu,
+com uma notificação de aniversário ainda não lida) — nesse caso a
+notificação deve sumir da barra do celular, não só ficar lida dentro do app.
+
+Isso exigiu o app passar a controlar a exibição em **qualquer** estado
+(antes só em primeiro plano — em segundo plano/fechado quem mostrava era o
+próprio SDK do FCM, com um ID fora do controle do app, impossível de
+cancelar depois). Mudança confirmada com o usuário, ciente do trade-off
+(iOS pode atrasar/não entregar push "silencioso" com o app fechado —
+limitação da Apple):
+- `SIBValApp2/functions/index.js`: todo envio (~15 pontos —
+  `sendBirthdayNotifications`, `onPostLiked`, `onPostCommented`,
+  `sendDevotionalNotifications`, `onUserCreated`, `onPrayerRequestCreated`,
+  `sendEventReminders`, `sendRecurringEventReminders`,
+  `importEventsFromEmail`, `onMessageCreated`, `sendMeetingReminders`) passou
+  a mandar mensagem "só com dados" (helper `dataOnlyMessage`, sem o bloco
+  `notification` do FCM — `title`/`body` viajam dentro de `data`, com
+  `android.priority: "high"` + `apns...content-available` pra manter a
+  entrega confiável em segundo plano/app fechado).
+- `lib/notifications/push_notification_service.dart`: novo
+  `firebaseMessagingBackgroundHandler` (função solta, `@pragma('vm:entry-point')`,
+  registrada em `main.dart` antes do `runApp`) mostra a notificação local
+  também em segundo plano/app fechado — isolate separado, não reaproveita a
+  instância de `PushNotificationService`, por isso a exibição foi extraída
+  pro helper solto `showFcmLocalNotification`. O ID da notificação local
+  virou `notificationId.hashCode` (era `message.hashCode`, não
+  reproduzível) — é o que permite `cancelNotification(notificationId)`
+  cancelar uma notificação específica depois.
+- Novo `lib/notifications/notification_read_sync.dart`
+  (`syncNotificationsForScreen`): chamado no `initState` de toda tela ligada
+  a um tipo de notificação (`BirthdaysPage`, `DevotionalDetailPage`,
+  `EventDetailPage`, `EventPendingListPage`, `ManageUsersPage`, `PrayerPage`,
+  `PostCommentsPage`, `MessageDetailPage` — mesmo mapeamento tipo→tela de
+  `navigateForNotificationType`) — marca como lida e cancela da barra toda
+  notificação não lida daquele tipo (e, quando a tela tem um alvo específico,
+  só as que apontam pro mesmo `targetId`). `EventPendingListPage` virou
+  `ConsumerStatefulWidget` (era `ConsumerWidget`) só pra ter um `initState`
+  onde chamar isso, mesmo padrão das outras.
+- `ios/Runner/Info.plist` ganhou `UIBackgroundModes` com
+  `remote-notification` — sem isso o iOS ignora push de dados em segundo
+  plano.
+
+Só editei o código-fonte das Cloud Functions — deploy fica pra um pedido
+explícito separado, mesmo padrão desta sessão.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

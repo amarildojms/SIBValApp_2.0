@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/devotional_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/devotional.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -39,6 +41,7 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
   void initState() {
     super.initState();
     _load();
+    syncNotificationsForScreen(ref, type: NotificationType.devotional, targetId: widget.devotionalId);
   }
 
   Future<void> _load() async {

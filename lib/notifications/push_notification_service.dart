@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -8,7 +9,65 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/notification_repository.dart';
 import '../data/user_repository.dart';
+import '../firebase_options.dart';
 import 'notification_navigation.dart';
+
+const _pushChannelId = 'default_channel';
+const _pushChannelName = 'Notificações';
+
+/// Id local determinístico a partir do id do doc em `notifications`
+/// (`notificationId`, presente em toda mensagem desde 22/08/2026) — permite
+/// cancelar essa notificação específica da barra depois (ver
+/// `PushNotificationService.cancelNotification` e
+/// `lib/notifications/notification_read_sync.dart`), coisa que não dava com
+/// `message.hashCode` (não reproduzível a partir do id salvo no Firestore).
+int _localNotificationId(String notificationId) => notificationId.hashCode;
+
+/// Mostra a notificação local a partir de `data` (mensagem só-com-dados,
+/// sem bloco `notification` do FCM — ver `dataOnlyMessage` em
+/// `SIBValApp2/functions/index.js`, 24/08/2026). Função solta (fora da
+/// classe) porque também é chamada por `firebaseMessagingBackgroundHandler`,
+/// que roda num isolate separado e não pode reaproveitar a instância de
+/// `PushNotificationService`.
+Future<void> showFcmLocalNotification(Map<String, dynamic> data) async {
+  final plugin = FlutterLocalNotificationsPlugin();
+  await plugin.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('ic_notification'),
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+  await plugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(
+        const AndroidNotificationChannel(_pushChannelId, _pushChannelName, importance: Importance.high),
+      );
+  final notificationId = data['notificationId'] as String? ?? '';
+  await plugin.show(
+    id: notificationId.isNotEmpty ? _localNotificationId(notificationId) : DateTime.now().millisecondsSinceEpoch,
+    title: data['title'] as String?,
+    body: data['body'] as String?,
+    notificationDetails: const NotificationDetails(
+      android: AndroidNotificationDetails(_pushChannelId, _pushChannelName, icon: 'ic_notification'),
+      iOS: DarwinNotificationDetails(),
+    ),
+    payload: jsonEncode(data),
+  );
+}
+
+/// Manipulador de mensagens FCM em segundo plano/app fechado — exigido pelo
+/// `firebase_messaging` pra rodar num isolate próprio quando o app não está
+/// em primeiro plano, registrado em main.dart antes do `runApp`. Precisa
+/// inicializar o Firebase de novo (isolates não compartilham o estado do
+/// motor Flutter). Substitui a exibição automática do SDK do FCM (que
+/// existia enquanto as mensagens carregavam o bloco `notification`) — agora
+/// o app decide mostrar em qualquer estado, com o mesmo id previsível de
+/// `showFcmLocalNotification`, pra poder cancelar depois.
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await showFcmLocalNotification(message.data);
+}
 
 /// Espelha app/src/main/java/com/sibval/app/notifications/FcmService.kt
 /// (`onNewToken`/`onMessageReceived`) + o `setUpNotifications()` de
@@ -20,10 +79,13 @@ import 'notification_navigation.dart';
 /// (flutter_local_notifications só resolve ícone pequeno como recurso
 /// `drawable`, não `mipmap`).
 ///
-/// Só a exibição em primeiro plano precisa de código aqui
-/// (`flutter_local_notifications`, canal `default_channel`) — em segundo
-/// plano/app finalizado o próprio SDK do FCM já exibe a notificação no
-/// system tray sem passar por código do app, igual no nativo.
+/// Desde 24/08/2026 as mensagens do FCM são só-com-dados (sem bloco
+/// `notification`) — o app decide exibir sozinho em qualquer estado
+/// (`_onForegroundMessage` aqui, ou `firebaseMessagingBackgroundHandler` em
+/// segundo plano/fechado), o que permite cancelar uma notificação
+/// específica da barra depois (`cancelNotification`), usado quando o
+/// usuário abre a tela relacionada sem tocar na notificação (ver
+/// `lib/notifications/notification_read_sync.dart`).
 class PushNotificationService {
   PushNotificationService(this._userRepository, this._notificationRepository);
 
@@ -35,8 +97,8 @@ class PushNotificationService {
   /// de qualquer tela específica.
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  static const _channelId = 'default_channel';
-  static const _channelName = 'Notificações';
+  static const _channelId = _pushChannelId;
+  static const _channelName = _pushChannelName;
 
   final _localNotifications = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
@@ -87,18 +149,19 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
-    await _localNotifications.show(
-      id: message.hashCode,
-      title: notification.title,
-      body: notification.body,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(_channelId, _channelName, icon: 'ic_notification'),
-        iOS: DarwinNotificationDetails(),
-      ),
-      payload: jsonEncode(message.data),
-    );
+    if (message.data.isEmpty) return;
+    await showFcmLocalNotification(message.data);
+  }
+
+  /// Cancela a notificação da barra do celular — usado tanto ao tocar nela
+  /// (`_navigate`, autocancel já cuida disso, mas não custa) quanto quando o
+  /// usuário chega na tela relacionada por outro caminho (ver
+  /// `lib/notifications/notification_read_sync.dart`). `notificationId`
+  /// vazio (push antigo, sem esse campo) é ignorado — nada pra cancelar.
+  Future<void> cancelNotification(String notificationId) async {
+    if (notificationId.isEmpty) return;
+    await _ensureInitialized();
+    await _localNotifications.cancel(id: _localNotificationId(notificationId));
   }
 
   void _onMessageOpenedApp(RemoteMessage message) {

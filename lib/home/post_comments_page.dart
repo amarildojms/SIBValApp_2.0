@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 
 import '../data/post_repository.dart';
 import '../models/comment.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -31,6 +33,8 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
   void initState() {
     super.initState();
     _load();
+    syncNotificationsForScreen(ref, type: NotificationType.postLike, targetId: widget.postId);
+    syncNotificationsForScreen(ref, type: NotificationType.postComment, targetId: widget.postId);
   }
 
   @override

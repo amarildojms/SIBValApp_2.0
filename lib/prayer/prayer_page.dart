@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/prayer_repository.dart';
 import '../data/settings_repository.dart';
 import '../data/user_repository.dart';
+import '../models/notification.dart';
 import '../models/prayer_request.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../util/scroll_to_save.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -35,6 +37,12 @@ class _PrayerPageState extends ConsumerState<PrayerPage> {
   bool _sending = false;
   String? _nameError;
   bool _prefilled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    syncNotificationsForScreen(ref, type: NotificationType.prayerRequest);
+  }
 
   @override
   void dispose() {

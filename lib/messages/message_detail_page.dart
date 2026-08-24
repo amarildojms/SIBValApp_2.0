@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../data/message_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -23,6 +25,12 @@ class MessageDetailPage extends ConsumerStatefulWidget {
 class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
   bool _markedRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    syncNotificationsForScreen(ref, type: NotificationType.message, targetId: widget.messageId);
+  }
 
   Future<void> _markAsReadOnceLoaded() async {
     if (_markedRead) return;

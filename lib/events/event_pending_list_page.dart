@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../data/event_repository.dart';
 import '../models/event.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'event_form_page.dart';
@@ -11,11 +13,22 @@ import 'event_form_page.dart';
 /// Espelha EventPendingListFragment.kt: eventos com status pendente
 /// (normalmente vindos de e-mail), aguardando revisão de quem gerencia
 /// eventos. Tocar num item abre EventFormPage em modo revisão.
-class EventPendingListPage extends ConsumerWidget {
+class EventPendingListPage extends ConsumerStatefulWidget {
   const EventPendingListPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EventPendingListPage> createState() => _EventPendingListPageState();
+}
+
+class _EventPendingListPageState extends ConsumerState<EventPendingListPage> {
+  @override
+  void initState() {
+    super.initState();
+    syncNotificationsForScreen(ref, type: NotificationType.eventPending);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final pendingAsync = ref.watch(eventPendingProvider);
 
     return Scaffold(

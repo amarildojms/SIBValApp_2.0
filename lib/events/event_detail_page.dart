@@ -9,6 +9,8 @@ import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/event.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../util/weekday_format.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -37,6 +39,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
   void initState() {
     super.initState();
     _load();
+    syncNotificationsForScreen(ref, type: NotificationType.eventReminder, targetId: widget.eventId);
   }
 
   Future<void> _load() async {

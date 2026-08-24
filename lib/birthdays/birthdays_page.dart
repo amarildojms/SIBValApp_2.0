@@ -6,6 +6,8 @@ import '../auth/login_page.dart';
 import '../data/member_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/member.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../util/cache_busted_image.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -34,6 +36,7 @@ class _BirthdaysPageState extends ConsumerState<BirthdaysPage> {
     _month = now.month;
     _year = now.year;
     _selectedDay = now.day;
+    syncNotificationsForScreen(ref, type: NotificationType.birthday);
   }
 
   void _previousMonth() {

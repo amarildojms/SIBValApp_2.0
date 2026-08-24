@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/member_repository.dart';
 import '../data/user_repository.dart';
 import '../models/app_user.dart';
+import '../models/notification.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -21,6 +23,12 @@ class ManageUsersPage extends ConsumerStatefulWidget {
 class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
   final _searchController = TextEditingController();
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    syncNotificationsForScreen(ref, type: NotificationType.userApproval);
+  }
 
   @override
   void dispose() {
