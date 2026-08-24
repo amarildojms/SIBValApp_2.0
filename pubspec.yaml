@@ -18,15 +18,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 24, ajuste aqui e gere o
-# AAB de novo. Versão anterior (23) já estava em teste fechado; esta soma as
-# mudanças de 21-22/08/2026: aba Contribua (CNPJ/PIX/conta bancária,
-# múltiplas chaves), endereço em campos com CEP automático, bloqueio de
-# cadastro para menor de 12 anos, aviso de atualização obrigatória, ícone de
-# notificação, contadores/notificações em tempo real, correção de
-# sincronização de foto no Rol de Membros, e correções de UX (máscaras de
-# campo, calendário nativo pra digitar data).
-version: 1.2.0+24
+# Play Console antes de enviar; se for maior que 25, ajuste aqui e gere o
+# AAB de novo. Versão anterior (24) já estava em teste fechado; esta soma as
+# mudanças de 23-24/08/2026: reforma do feed "Início" (ordenação só por
+# data/hora, tempo real via StreamProvider, evento repostado 24h/6h antes,
+# aniversariante às 01h, edição/exclusão de post manual pelo autor ou
+# admin), remoção do recurso de evento de vários dias, e notificações
+# passam a sumir da barra do celular e marcar como lidas ao abrir a tela
+# relacionada, mesmo sem tocar na notificação (mensagens FCM só-com-dados).
+version: 1.3.0+25
 
 environment:
   sdk: ^3.13.0
