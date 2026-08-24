@@ -34,6 +34,19 @@ class MessageRepository {
         .map((s) => s.docs.map(AppMessage.fromFirestore).where((m) => m.isRecipient(uid)).toList());
   }
 
+  /// Base da Caixa de Saída — todas as mensagens, mais recente primeiro, sem
+  /// filtro de destinatário. `sentMessagesProvider` filtra por remetente em
+  /// memória (mesmo padrão de `AppMessage.isRecipient`, em vez de um
+  /// `where('senderUid', ...)` que exigiria índice composto pra combinar com
+  /// o `orderBy('createdAt')`).
+  Stream<List<AppMessage>> watchSent({int limit = 200}) {
+    return _messages
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs.map(AppMessage.fromFirestore).toList());
+  }
+
   Future<AppMessage?> getById(String id) async {
     final doc = await _messages.doc(id).get();
     return doc.exists ? AppMessage.fromFirestore(doc) : null;
@@ -139,4 +152,16 @@ final pendingMessagesCountProvider = StreamProvider.autoDispose<int>((ref) {
 /// `firestore.rules` nativo `messages.create`).
 final canSendMessagesProvider = Provider<bool>((ref) {
   return ref.watch(currentUserProfileProvider).asData?.value?.isAdmin ?? false;
+});
+
+/// Alimenta `MessageOutboxPage` (24/08/2026) — só as mensagens que o próprio
+/// usuário logado enviou (não as de outros admins), filtradas em memória a
+/// partir de `MessageRepository.watchSent`.
+final sentMessagesProvider = StreamProvider.autoDispose<List<AppMessage>>((ref) {
+  final uid = ref.watch(currentUidProvider);
+  if (uid == null) return Stream.value(const <AppMessage>[]);
+  return ref
+      .watch(messageRepositoryProvider)
+      .watchSent()
+      .map((messages) => messages.where((m) => m.senderUid == uid).toList());
 });

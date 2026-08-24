@@ -390,6 +390,54 @@ uma linha só (`maxLines: 1`, `TextOverflow.ellipsis`), e o título "Contribua"
 o `ScreenTitle` genérico compartilhado — layout mais compacto, sem o botão
 solto numa linha própria abaixo do título.
 
+**Caixa de Saída de mensagens, remetente fora do próprio broadcast, badge de
+Devocionais em tempo real e flyer de devocional tocável (24/08/2026):**
+- `MessageOutboxPage` (`lib/messages/message_outbox_page.dart`, sem
+  equivalente nativo, mesma linha de `MessagesPage` de 21/08/2026): acesso
+  fica **dentro de `MessagesPage`**, não um tile do menu Mais — passou por
+  dois ajustes na mesma sessão a pedido do usuário: primeiro um ícone na app
+  bar, depois trocado (ainda 24/08/2026) por um botão de largura cheia
+  "Mensagens Enviadas" no rodapé da tela (`OutlinedButton.icon`, abaixo da
+  lista de mensagens, dentro do mesmo `Column`), sempre só pra quem
+  `canSendMessagesProvider`. Lista só as mensagens que **o próprio usuário
+  logado enviou**
+  (`sentMessagesProvider` filtra `senderUid == uid` em memória sobre
+  `MessageRepository.watchSent`, mesmo padrão de índice evitável já usado em
+  `AppMessage.isRecipient` — evita um `where('senderUid', ...)` que exigiria
+  índice composto combinado com `orderBy('createdAt')`), cada item em
+  `ExpansionTile` com o texto completo — não navega pra `MessageDetailPage` de
+  propósito, porque essa tela marca como lida ao abrir
+  (`_markAsReadOnceLoaded`) e contaria o próprio remetente/admin como leitor.
+- `AppMessage.isRecipient` (`lib/models/app_message.dart`) passou a excluir o
+  remetente de um envio `sendToAll` — antes um admin que mandava mensagem pra
+  todos via `sendToAll` também recebia a própria mensagem na Caixa de Entrada;
+  agora só a vê na Caixa de Saída. Continua valendo se o remetente se incluiu
+  deliberadamente entre destinatários específicos (`recipientUids`).
+- `devotionalsProvider` (`lib/data/devotional_repository.dart`) virou
+  `StreamProvider` (era `FutureProvider`, `DevotionalRepository.getPublished`
+  removido em favor de `watchPublished`) — mesmo padrão de tempo real já
+  usado em mensagens/usuários pendentes/pedidos de oração. Novo
+  `unreadDevotionalsCountProvider` alimenta um `Badge` no ícone "Devocionais"
+  da barra inferior (`main_shell.dart`), mesmo padrão de badge já usado nos
+  tiles do menu Mais — fecha o pedido do usuário de contador em tempo real
+  também pra Devocionais (Mensagens/Gerenciar Usuários/Pedidos de Oração já
+  eram `StreamProvider` antes desta sessão).
+- Texto da devocional (`DevotionalDetailPage`) ganhou `textAlign:
+  TextAlign.justify`.
+- `PostCard` (`lib/home/post_card.dart`): o flyer do post automático de
+  devocional (`PostType.devotional`) agora é tocável, igual já acontecia com
+  evento — leva pra `DevotionalDetailPage` daquele dia via `Post.targetId`
+  (já gravado como o id da devocional pela Cloud Function nativa, conferido
+  em `functions/index.js`; não precisou mudar nada lá).
+- Conferido nesta sessão e **já implementado antes dela**, sem mudança
+  necessária: marcar notificação como lida ao entrar na tela relacionada
+  mesmo sem vir de um push (`syncNotificationsForScreen`, chamado no
+  `initState` de todas as telas ligadas a um tipo de notificação, `Gerenciar
+  Usuários` incluso) e o % de cadastro considerando também os campos
+  opcionais, não só os obrigatórios (`CurrentUserProfile.completionPercent`,
+  soma nome/CPF/e-mail/data de nascimento + telefone/endereço + dados
+  eclesiásticos do `Member` vinculado, 12 campos no total).
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

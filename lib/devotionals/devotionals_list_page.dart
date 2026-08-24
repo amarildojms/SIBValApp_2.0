@@ -43,7 +43,10 @@ class DevotionalsListPage extends ConsumerWidget {
           const ScreenTitle('Devocionais'),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => ref.refresh(devotionalsProvider.future),
+              onRefresh: () async {
+                ref.invalidate(devotionalsProvider);
+                await ref.read(devotionalsProvider.future);
+              },
               child: devotionalsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ListView(

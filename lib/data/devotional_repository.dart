@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/devotional.dart';
+import 'post_repository.dart' show currentUidProvider;
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/DevotionalRepository.kt.
 class DevotionalRepository {
@@ -14,14 +15,17 @@ class DevotionalRepository {
 
   static String dateKeyOf(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
-  Future<List<Devotional>> getPublished({int limit = 60}) async {
+  /// Tempo real (24/08/2026) — a lista e o badge de não lidas (bottom nav
+  /// "Devocionais") devem refletir uma devocional nova/editada assim que ela
+  /// chega, sem esperar um refresh manual. Ver `devotionalsProvider`.
+  Stream<List<Devotional>> watchPublished({int limit = 60}) {
     final todayKey = dateKeyOf(DateTime.now());
-    final snapshot = await _devotionals
+    return _devotionals
         .where('dateKey', isLessThanOrEqualTo: todayKey)
         .orderBy('dateKey', descending: true)
         .limit(limit)
-        .get();
-    return snapshot.docs.map(Devotional.fromFirestore).toList();
+        .snapshots()
+        .map((s) => s.docs.map(Devotional.fromFirestore).toList());
   }
 
   Future<Devotional?> getById(String id) async {
@@ -85,8 +89,21 @@ final devotionalRepositoryProvider = Provider<DevotionalRepository>((ref) {
   return DevotionalRepository(FirebaseFirestore.instance);
 });
 
-final devotionalsProvider = FutureProvider.autoDispose<List<Devotional>>((ref) {
-  return ref.watch(devotionalRepositoryProvider).getPublished();
+/// `StreamProvider` (24/08/2026, era `FutureProvider`) — ver
+/// `DevotionalRepository.watchPublished`.
+final devotionalsProvider = StreamProvider.autoDispose<List<Devotional>>((ref) {
+  return ref.watch(devotionalRepositoryProvider).watchPublished();
+});
+
+/// Alimenta o badge do ícone "Devocionais" na barra inferior (24/08/2026,
+/// pedido do usuário) — mesma contagem de não lidas usada em destaque na
+/// lista (`DevotionalsListPage`), derivada de `devotionalsProvider` em vez de
+/// uma query própria.
+final unreadDevotionalsCountProvider = StreamProvider.autoDispose<int>((ref) {
+  final uid = ref.watch(currentUidProvider);
+  if (uid == null) return Stream.value(0);
+  final devotionals = ref.watch(devotionalsProvider).asData?.value ?? const <Devotional>[];
+  return Stream.value(devotionals.where((d) => !d.readBy.contains(uid)).length);
 });
 
 final devotionalRepositoryListProvider = FutureProvider.autoDispose<List<Devotional>>((ref) {

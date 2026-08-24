@@ -19,6 +19,7 @@ import 'data/post_repository.dart' show currentUidProvider;
 import 'data/prayer_repository.dart';
 import 'data/settings_repository.dart';
 import 'data/user_repository.dart';
+import 'data/devotional_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'gallery/album_list_page.dart';
@@ -71,6 +72,10 @@ class _MainShellState extends State<MainShell> {
         builder: (context, ref, _) {
           final uid = ref.watch(currentUidProvider);
           final profile = ref.watch(currentUserProfileProvider).asData?.value;
+          final unreadDevotionalsAsync = uid != null
+              ? ref.watch(unreadDevotionalsCountProvider)
+              : const AsyncValue.data(0);
+          final unreadDevotionals = unreadDevotionalsAsync.asData?.value ?? 0;
           // Espelha HomeFragment.kt `setUpNotifications()`: pede permissão de
           // notificação e registra o token FCM assim que há um uid logado. O
           // próprio serviço deduplica por uid, então chamar em todo build é
@@ -109,11 +114,19 @@ class _MainShellState extends State<MainShell> {
               backgroundColor: SibValColors.navyBlue,
               destinations: [
                 NavigationDestination(
-                  icon: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
-                  selectedIcon: const _BoldAssetIcon(
-                    'assets/icons/ic_devocional.png',
-                    size: 26,
-                    color: SibValColors.navyBlueDark,
+                  icon: Badge(
+                    label: Text('$unreadDevotionals'),
+                    isLabelVisible: unreadDevotionals > 0,
+                    child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
+                  ),
+                  selectedIcon: Badge(
+                    label: Text('$unreadDevotionals'),
+                    isLabelVisible: unreadDevotionals > 0,
+                    child: const _BoldAssetIcon(
+                      'assets/icons/ic_devocional.png',
+                      size: 26,
+                      color: SibValColors.navyBlueDark,
+                    ),
                   ),
                   label: 'Devocionais',
                 ),

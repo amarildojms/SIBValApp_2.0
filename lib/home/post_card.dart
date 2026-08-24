@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../models/post.dart';
@@ -18,6 +19,12 @@ import '../models/post.dart';
 ///
 /// [onEditTap]/[onDeleteTap] só vêm preenchidos pra post manual do próprio
 /// autor (ou admin) — mostram um menu (⋮) no cabeçalho.
+///
+/// O flyer do post automático de devocional (`PostType.devotional`) também
+/// é tocável (24/08/2026, a pedido do usuário) — leva pra
+/// `DevotionalDetailPage` daquele dia via `Post.targetId` (gravado como o id
+/// da devocional pela Cloud Function que cria o post, mesmo campo usado por
+/// evento pro id do evento).
 class PostCard extends StatelessWidget {
   const PostCard({
     super.key,
@@ -48,12 +55,15 @@ class PostCard extends StatelessWidget {
     }
 
     final isEvent = post.postType == PostType.event;
+    final isDevotional = post.postType == PostType.devotional;
     final eventDate = post.eventDateSaoPaulo;
     // Sem data resolvida (evento apagado ou virou inacessível) conta como
     // finalizado também — o link levaria a "Evento não encontrado", então
     // não faz sentido deixar tocável nem omitir o selo só por falta de dado.
     final isPastEvent = isEvent && (eventDate == null || post.isPastEvent);
-    final isTappable = isEvent && post.targetId.isNotEmpty && eventDate != null && !post.isPastEvent;
+    final isTappable =
+        (isEvent && post.targetId.isNotEmpty && eventDate != null && !post.isPastEvent) ||
+        (isDevotional && post.targetId.isNotEmpty);
 
     final cardColor = Theme.of(context).cardColor;
     return Card(
@@ -101,7 +111,11 @@ class PostCard extends StatelessWidget {
             GestureDetector(
               onTap: isTappable
                   ? () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => EventDetailPage(eventId: post.targetId)),
+                        MaterialPageRoute(
+                          builder: (_) => isDevotional
+                              ? DevotionalDetailPage(devotionalId: post.targetId)
+                              : EventDetailPage(eventId: post.targetId),
+                        ),
                       )
                   : null,
               child: Stack(

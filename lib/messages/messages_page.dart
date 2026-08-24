@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'message_detail_page.dart';
 import 'message_form_page.dart';
+import 'message_outbox_page.dart';
 
 /// Central de Mensagens (21/08/2026, sem equivalente no app nativo) — lista
 /// de mensagens recebidas (diretas, por ministério ou para todos), com seção
@@ -28,11 +29,18 @@ class MessagesPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
+      // Deslocado pra cima (24/08/2026) pra não ficar em cima do botão
+      // "Mensagens Enviadas" no rodapé — altura aproximada desse botão
+      // (OutlinedButton + padding vertical 8+8).
       floatingActionButton: canSend
-          ? FloatingActionButton(
-              heroTag: 'messages_fab',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MessageFormPage())),
-              child: const Icon(Icons.add),
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 72),
+              child: FloatingActionButton(
+                heroTag: 'messages_fab',
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MessageFormPage())),
+                child: const Icon(Icons.add),
+              ),
             )
           : null,
       body: SafeArea(
@@ -83,6 +91,22 @@ class MessagesPage extends ConsumerWidget {
                 ),
               ),
             ),
+            // Caixa de Saída (24/08/2026) — acesso fica dentro de Mensagens em
+            // vez de um tile próprio no menu Mais, a pedido do usuário; botão
+            // fixo no rodapé, só pra quem pode enviar (admin).
+            if (canSend)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.outbox_outlined),
+                    label: const Text('Mensagens Enviadas'),
+                    onPressed: () =>
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MessageOutboxPage())),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

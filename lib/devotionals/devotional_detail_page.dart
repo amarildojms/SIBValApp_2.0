@@ -116,6 +116,7 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
                             const SizedBox(height: 16),
                             Text(
                               devotional.text,
+                              textAlign: TextAlign.justify,
                               style: TextStyle(color: context.textPrimary, fontSize: _fontSize, height: 1.4),
                             ),
                             const SizedBox(height: 20),

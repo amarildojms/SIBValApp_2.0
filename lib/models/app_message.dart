@@ -67,6 +67,14 @@ class AppMessage {
   }
 
   /// True quando [uid] é destinatário desta mensagem — `sendToAll` cobre todo
-  /// mundo, senão checa a lista já resolvida.
-  bool isRecipient(String uid) => sendToAll || recipientUids.contains(uid);
+  /// mundo, senão checa a lista já resolvida. Exceção: o próprio remetente
+  /// nunca é destinatário de um envio `sendToAll` (24/08/2026, a pedido do
+  /// usuário) — ele já vê a mensagem na Caixa de Saída, não faz sentido ela
+  /// também aparecer na própria Caixa de Entrada. Se o remetente se incluiu
+  /// deliberadamente entre os destinatários específicos (`recipientUids`),
+  /// isso continua valendo.
+  bool isRecipient(String uid) {
+    if (uid == senderUid) return recipientUids.contains(uid);
+    return sendToAll || recipientUids.contains(uid);
+  }
 }
