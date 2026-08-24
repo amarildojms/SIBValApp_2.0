@@ -38,19 +38,27 @@ class _PixDraft {
 
 /// Rascunho editável de uma conta bancária (22/08/2026).
 class _BankDraft {
-  _BankDraft({String label = '', this.bankName, String agency = '', String account = ''})
-      : labelController = TextEditingController(text: label),
-        agencyController = TextEditingController(text: agency),
-        accountController = TextEditingController(text: account);
+  _BankDraft({
+    String label = '',
+    this.bankName,
+    String agency = '',
+    String operation = '',
+    String account = '',
+  }) : labelController = TextEditingController(text: label),
+       agencyController = TextEditingController(text: agency),
+       operationController = TextEditingController(text: operation),
+       accountController = TextEditingController(text: account);
 
   final TextEditingController labelController;
   String? bankName;
   final TextEditingController agencyController;
+  final TextEditingController operationController;
   final TextEditingController accountController;
 
   void dispose() {
     labelController.dispose();
     agencyController.dispose();
+    operationController.dispose();
     accountController.dispose();
   }
 }
@@ -90,6 +98,7 @@ class _ContributeSettingsPageState extends ConsumerState<ContributeSettingsPage>
         label: entry.label,
         bankName: entry.bankName.isNotEmpty ? entry.bankName : null,
         agency: entry.agency,
+        operation: entry.operation,
         account: entry.account,
       ),
   ];
@@ -178,9 +187,12 @@ class _ContributeSettingsPageState extends ConsumerState<ContributeSettingsPage>
         final label = draft.labelController.text.trim();
         final bankName = draft.bankName ?? '';
         final agency = draft.agencyController.text.trim();
+        final operation = draft.operationController.text.trim();
         final account = draft.accountController.text.trim();
-        if (label.isEmpty && bankName.isEmpty && agency.isEmpty && account.isEmpty) continue;
-        bankAccounts.add(BankAccountEntry(label: label, bankName: bankName, agency: agency, account: account));
+        if (label.isEmpty && bankName.isEmpty && agency.isEmpty && operation.isEmpty && account.isEmpty) continue;
+        bankAccounts.add(
+          BankAccountEntry(label: label, bankName: bankName, agency: agency, operation: operation, account: account),
+        );
       }
 
       await repo.update(
@@ -379,9 +391,22 @@ class _ContributeSettingsPageState extends ConsumerState<ContributeSettingsPage>
               onChanged: (value) => setState(() => draft.bankName = value),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: draft.agencyController,
-              decoration: const InputDecoration(labelText: 'Agência'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: draft.agencyController,
+                    decoration: const InputDecoration(labelText: 'Agência'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: draft.operationController,
+                    decoration: const InputDecoration(labelText: 'Operação'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             TextField(

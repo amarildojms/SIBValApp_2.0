@@ -38,12 +38,18 @@ class BankAccountEntry {
     this.label = '',
     this.bankName = '',
     this.agency = '',
+    this.operation = '',
     this.account = '',
   });
 
   final String label;
   final String bankName;
   final String agency;
+
+  /// Código de operação (ex.: 001, 013, 1288) — obrigatório por alguns bancos
+  /// (Caixa Econômica Federal, principalmente) além de agência e conta pra
+  /// TED/DOC. Adicionado 24/08/2026 (faltava no cadastro).
+  final String operation;
   final String account;
 
   factory BankAccountEntry.fromMap(Map<String, dynamic> map) {
@@ -51,6 +57,7 @@ class BankAccountEntry {
       label: map['label'] as String? ?? '',
       bankName: map['bankName'] as String? ?? '',
       agency: map['agency'] as String? ?? '',
+      operation: map['operation'] as String? ?? '',
       account: map['account'] as String? ?? '',
     );
   }
@@ -59,6 +66,7 @@ class BankAccountEntry {
         'label': label,
         'bankName': bankName,
         'agency': agency,
+        'operation': operation,
         'account': account,
       };
 }

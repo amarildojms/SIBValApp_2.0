@@ -47,7 +47,23 @@ class HomeFeedPage extends ConsumerWidget {
           ],
         ),
         data: (posts) {
-          if (posts.isEmpty) {
+          // Post de aniversário de MEMBRESIA (24/08/2026) é fixado no topo só
+          // pra quem tem targetId == uid logado, e só no próprio dia do
+          // aniversário (isFromToday) — todo mundo mais nem vê, mesmo a
+          // coleção `posts` sendo de leitura pública (o filtro é só aqui, no
+          // cliente; ver PostType.membershipAnniversary).
+          final pinned = <Post>[];
+          final rest = <Post>[];
+          for (final post in posts) {
+            if (post.postType == PostType.membershipAnniversary) {
+              if (uid != null && post.targetId == uid && post.isFromToday) pinned.add(post);
+              continue;
+            }
+            rest.add(post);
+          }
+          final orderedPosts = [...pinned, ...rest];
+
+          if (orderedPosts.isEmpty) {
             return ListView(
               children: [
                 const SizedBox(height: 80),
@@ -58,9 +74,9 @@ class HomeFeedPage extends ConsumerWidget {
             );
           }
           return ListView.builder(
-            itemCount: posts.length,
+            itemCount: orderedPosts.length,
             itemBuilder: (context, index) {
-              final post = posts[index];
+              final post = orderedPosts[index];
               final liked = uid != null && post.likedBy.contains(uid);
               final canEdit =
                   post.postType == PostType.manual && (isAdmin || (uid != null && post.authorUid == uid));

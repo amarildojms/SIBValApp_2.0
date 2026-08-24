@@ -32,31 +32,39 @@ class ContributePage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ScreenTitle('Contribua'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Contribua',
+                      style: TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold, fontSize: 19),
+                    ),
+                  ),
+                  if (isAdmin)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ContributeSettingsPage(initial: infoAsync.asData?.value ?? ContributionInfo.empty),
+                        ),
+                      ),
+                      icon: const Icon(Icons.settings_outlined, size: 18),
+                      label: const Text('Configurar'),
+                    ),
+                ],
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 children: [
-                  if (isAdmin)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ContributeSettingsPage(initial: infoAsync.asData?.value ?? ContributionInfo.empty),
-                          ),
-                        ),
-                        icon: const Icon(Icons.settings_outlined, size: 18),
-                        label: const Text('Configurar'),
-                      ),
-                    ),
-                  const SizedBox(height: 4),
                   const _VerseCard(),
                   const SizedBox(height: 16),
                   infoAsync.when(
@@ -137,7 +145,9 @@ class _ContributionContent extends StatelessWidget {
         if (info.churchName.isNotEmpty)
           Text(
             info.churchName,
-            style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: context.textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
           ),
         if (info.cnpj.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -224,6 +234,7 @@ class _BankCard extends StatelessWidget {
         children: [
           if (bank.bankName.isNotEmpty) _InfoRow(label: 'Banco', value: bank.bankName),
           if (bank.agency.isNotEmpty) _InfoRow(label: 'Agência', value: bank.agency),
+          if (bank.operation.isNotEmpty) _InfoRow(label: 'Operação', value: bank.operation),
           if (bank.account.isNotEmpty) _InfoRow(label: 'Conta', value: bank.account),
         ],
       ),

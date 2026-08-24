@@ -33,6 +33,7 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.postLike:
     case NotificationType.postComment:
+    case NotificationType.membershipAnniversary:
       if (targetId.isNotEmpty) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => PostCommentsPage(postId: targetId)));
       }

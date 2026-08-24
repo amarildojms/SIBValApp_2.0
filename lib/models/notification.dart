@@ -55,6 +55,7 @@ abstract final class NotificationType {
   static const postComment = 'post_comment';
   static const prayerRequest = 'prayer_request';
   static const message = 'message';
+  static const membershipAnniversary = 'membership_anniversary';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem

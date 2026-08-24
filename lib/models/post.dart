@@ -71,6 +71,18 @@ class Post {
     final todayDay = DateTime(today.year, today.month, today.day);
     return eventDay.isBefore(todayDay);
   }
+
+  /// Verdadeiro só no dia em que o post foi criado (fuso America/Sao_Paulo) —
+  /// usado por [PostType.membershipAnniversary] pra deixar de aparecer
+  /// fixado assim que o dia do aniversário passa (24/08/2026, a pedido do
+  /// usuário: antes ficava fixado até a limpeza semanal do feed, na
+  /// segunda-feira seguinte).
+  bool get isFromToday {
+    if (createdAt == null) return false;
+    final created = toSaoPauloTime(createdAt!.toUtc());
+    final today = toSaoPauloTimeNow();
+    return created.year == today.year && created.month == today.month && created.day == today.day;
+  }
 }
 
 abstract final class PostType {
@@ -78,4 +90,10 @@ abstract final class PostType {
   static const devotional = 'devotional';
   static const event = 'event';
   static const birthday = 'birthday';
+
+  /// Post fixado (24/08/2026) — `targetId` é o uid de quem faz aniversário de
+  /// MEMBRESIA hoje, e o feed (`home_feed_page.dart`) só mostra esse post,
+  /// fixado no topo, pro dono desse uid; todo mundo mais nem vê, mesmo a
+  /// coleção `posts` sendo de leitura pública (filtro é só no cliente).
+  static const membershipAnniversary = 'membership_anniversary';
 }

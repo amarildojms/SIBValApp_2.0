@@ -333,6 +333,63 @@ limitação da Apple):
 Só editei o código-fonte das Cloud Functions — deploy fica pra um pedido
 explícito separado, mesmo padrão desta sessão.
 
+**Aniversário de MEMBRESIA: push pessoal + post fixado só pro aniversariante
+(24/08/2026):** pedido do usuário, distinto do aniversário de nascimento
+(`sendBirthdayNotifications`/`postBirthdaysToFeed`, que notifica todo mundo).
+Aqui só o próprio membro é avisado. Em `SIBValApp2/functions/index.js` (só
+editei o código-fonte — **não fiz `firebase deploy`**, mesma cautela de
+sempre): `getTodaysMembershipAnniversaryMembers` acha quem faz aniversário de
+`membershipDate` hoje (dia/mês batem, ano != o de hoje) varrendo `members` em
+memória (não dá pra indexar dia/mês de um Timestamp num único `where`, ao
+contrário de `birthMonth`/`birthDay` que já são campos numéricos separados);
+`findLinkedUserUid` casa por e-mail contra `users`, igual
+`postBirthdayForMember` já fazia. `postMembershipAnniversaryForMember` cria
+um post `postType: "membership_anniversary"` com `targetId` = uid do
+aniversariante (idempotente via `lastMembershipAnniversaryFeedPostDate` +
+`membershipAnniversaryFeedPostId` no doc do membro) — chamado pelo cron
+`postMembershipAnniversariesToFeed` (01h05), pelo cron
+`sendMembershipAnniversaryNotifications` (08h10, que manda o push pessoal
+"Parabéns, você completa X anos de membresia!" e grava a notificação
+`audience: "user"`/`targetUid`) e pelos gatilhos em tempo real
+`onMemberCreatedMembershipAnniversaryFeedSync`/
+`onMemberUpdatedMembershipAnniversaryFeedSync` (Secretaria cadastra/edita a
+data de membresia já no dia do aniversário). `resetWeeklyFeed` passou a
+apagar `membership_anniversary` também, mesmo ciclo semanal dos posts
+automáticos de aniversário/evento/devocional.
+
+O post fixado é de leitura pública no Firestore (`posts` sempre foi, `allow
+read: if true`) mas só aparece pra quem tem `targetId` igual ao uid logado —
+o filtro é só no cliente (`PostType.membershipAnniversary` em
+`lib/models/post.dart`; filtragem e fixação no topo em
+`HomeFeedPage.build`/`lib/home/home_feed_page.dart`; card com selo "Fixado
+para você" em `PostCard._buildMembershipAnniversaryCard`,
+`lib/home/post_card.dart`). Notificação usa `NotificationType.
+membershipAnniversary` (`lib/models/notification.dart`) com `targetId` = id
+do post fixado — toque nela abre `PostCommentsPage` (mesmo destino de
+curtida/comentário de aniversário de nascimento, reaproveitado em
+`notification_navigation.dart`); `PostCommentsPage` ganhou uma terceira
+chamada de `syncNotificationsForScreen` pra esse tipo.
+
+Fixado só durante o dia do aniversário (mesma sessão, pedido logo em
+seguida): `Post.isFromToday` (`lib/models/post.dart`) compara `createdAt` —
+convertido pra America/Sao_Paulo via os helpers já existentes de
+`event.dart` — com o dia de hoje; `HomeFeedPage` só fixa o post se
+`isFromToday` também for verdadeiro, senão ele simplesmente não aparece (nem
+fixado, nem solto no feed comum). Continua existindo no Firestore até a
+limpeza semanal (`resetWeeklyFeed`), só fica invisível antes disso — não
+precisou mexer nas Cloud Functions.
+
+**Aba Contribua: campo "Operação" da conta bancária + ajuste de layout
+(24/08/2026):** faltava o campo "Operação" (código exigido por alguns bancos,
+principalmente Caixa Econômica Federal, além de agência/conta pra TED/DOC) —
+adicionado a `BankAccountEntry` (`lib/models/contribution_info.dart`), com
+input em `ContributeSettingsPage._buildBankCard` e exibição em
+`_BankCard`/`contribute_page.dart`. Também: nome da igreja agora trunca em
+uma linha só (`maxLines: 1`, `TextOverflow.ellipsis`), e o título "Contribua"
++ botão "Configurar" (admin) foram movidos pra uma `Row` única, substituindo
+o `ScreenTitle` genérico compartilhado — layout mais compacto, sem o botão
+solto numa linha própria abaixo do título.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
