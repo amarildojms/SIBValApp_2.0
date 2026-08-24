@@ -168,54 +168,89 @@ dado explicitamente antes de eu tocar nesse arquivo (mesma cautela do caso
 `users`, mas aqui ele topou porque não há trava de segurança por uid em
 `members`).
 
-**Eventos de vários dias (20/08/2026):** `Event` ganhou `endDateTimeMillis` —
-campo que **não existe** no `Event.kt` nativo (que só tem um `dateTimeMillis`,
-um instante único). Divergência intencional: o `EventFormPage` tem um toggle
-"Evento de vários dias" que revela data/hora final; sem o toggle,
-`endDateTimeMillis` é gravado igual a `dateTimeMillis` (evento de 1 dia só,
-mesmo formato de sempre). `Event.fromFirestore` resolve o campo ausente
-caindo pro início, então documentos antigos (sem `endDateTimeMillis`)
-continuam funcionando como evento de 1 dia sem precisar de migração.
-`Event.isMultiDay` compara os dois em horário de São Paulo (dias calendário
-diferentes) e liga a exibição do intervalo em `event_card.dart`,
-`event_detail_page.dart`, `event_pending_list_page.dart` e o filtro de data em
-`events_page.dart` (`_matchesFilter`, que agora testa sobreposição de
-intervalo, não só o dia de início — um evento em andamento continua
-aparecendo no filtro "hoje"/"esta semana").
+**Eventos de vários dias — introduzido 20/08/2026, revertido 24/08/2026.**
+`Event` chegou a ganhar `endDateTimeMillis`/`isMultiDay` (campo/getter sem
+equivalente no `Event.kt` nativo), com toggle no `EventFormPage`, exibição de
+intervalo em `event_card.dart`/`event_detail_page.dart`/
+`event_pending_list_page.dart`, filtro de sobreposição em `events_page.dart`
+e um post por dia no feed (`postEventDaysToFeed`, `postedFeedDays`, em
+`SIBValApp2/functions/index.js`). O usuário pediu a remoção completa desse
+recurso em 24/08/2026 (ver entrada abaixo) — **não existe mais** nem no
+Flutter nem nas Cloud Functions; todo evento voltou a ser um instante único
+(`dateTimeMillis`). Se algo neste arquivo ainda mencionar `endDateTimeMillis`
+fora desta nota, está desatualizado.
 
-Isso exigiu editar `SIBValApp2/functions/index.js` (mesma cautela dos casos
-`members`/`onUserPhotoUpdated` acima — editei o código-fonte só depois do
-usuário responder as perguntas de design desta mudança em 20/08/2026; o
-deploy, `firebase deploy --only functions --project sibval-app-project`, só
-rodou depois, num pedido explícito e separado — "Pode fazer o deploy" — e já
-foi feito):
-- `deleteExpiredEvents` agora só apaga um evento quando `endDateTimeMillis`
-  (não `dateTimeMillis`) já passou — a query continua filtrando por
-  `dateTimeMillis < agora` como pré-filtro barato (todo evento expirado já
-  começou), mas a decisão de apagar é em memória, usando o fim.
-- `sendEventReminders` passou a decidir tudo em memória (só filtra
-  `status == published` na query) porque agora depende de duas datas —
-  continua com a contagem regressiva de antes pra quem não começou, mas evento
-  em andamento (já passou do início, ainda não passou do fim) recebe um
-  lembrete diário novo do tipo "Dia 2 de 5 do evento X".
-- `postEventDaysToFeed` (nova função, substitui o uso de `postEventToFeed`
-  pra eventos pontuais — que continua existindo só pra recorrentes) posta um
-  item no feed pra cada dia do intervalo que cai dentro da semana atual, e
-  não mais um post único pro evento inteiro. Rastreio por dia fica no array
-  `postedFeedDays`; o booleano `postedToFeed` continua sendo o gate da query
-  (`== false`) e só vira `true` quando o último dia já foi postado — escolha
-  deliberada pra manter compatibilidade com documentos que já existiam antes
-  desta mudança (ficariam invisíveis pra query se o gate tivesse virado outro
-  nome de campo).
-- `importEventsFromEmail` grava `endDateTimeMillis: dateTimeMillis` (e-mail
-  de cadastro não tem campo pra fim diferente — evento sempre de 1 dia só
-  por esse caminho).
+**Reforma do feed "Início" + remoção de eventos de vários dias (24/08/2026):**
+pedido do usuário foi simplificar a ordenação do feed pra sempre ser por
+data/hora de publicação (`createdAt`), com essa data mudando sozinha via
+regras de negócio em vez de uma ordenação especial no cliente, e tornar o
+feed de verdade em tempo real. `PostRepository._compareFeedOrder`/
+`_feedRank` (ranking de aniversário > evento próximo > resto) foram
+removidos; `postsProvider` virou `StreamProvider` sobre
+`.snapshots()` — primeiro uso de tempo real real no app (todo o resto do
+projeto ainda é `FutureProvider` + `ref.invalidate`, ver seção de padrão de
+código acima). `Post.eventDateTimeMillis` deixou de vir de um join ao vivo
+(`PostRepository._fetchEventDates`, removido) e passou a vir direto do
+documento — gravado pela Cloud Function que cria/reposta o post de evento.
 
-`EventRepository.getPublishedUpcoming()` (Flutter) também mudou: a query não
-filtra mais por `dateTimeMillis >= agora` (isso escondia da lista principal
-um evento de vários dias já em andamento, cujo início já passou mas o fim
-não) — agora traz todo evento `published` e filtra em memória por
-`endDateTimeMillis >= agora`.
+Mudanças em `SIBValApp2/functions/index.js` (só editei o código-fonte —
+**não fiz `firebase deploy`**, mesma cautela dos casos anteriores; fica pra
+um pedido explícito separado):
+- Aniversariante: post do feed separado do push. `sendBirthdayNotifications`
+  (08h, só push) perdeu a criação do post; nova `postBirthdaysToFeed` (01h,
+  pedido explícito do usuário) cria o post do dia, com
+  `lastBirthdayFeedPostDate` no `members` pra não duplicar com o gatilho em
+  tempo real `onMemberCreatedBirthdayFeedSync`/`onMemberUpdatedBirthdayFeedSync`
+  (cadastro/edição de membro com aniversário hoje sobe na hora).
+- Devocional: `sendDevotionalNotifications` (08h05) passou a marcar
+  `postedToFeed` na devocional; novo gatilho
+  `onDevotionalCreatedFeedSync`/`onDevotionalUpdatedFeedSync` sobe no feed na
+  hora quando cadastrada/editada já com `dateKey` de hoje.
+- Evento (pontual e recorrente **juntos**, a pedido explícito do usuário —
+  recorrente deixou de esperar ~24h antes e agora entra no mesmo lote):
+  `syncEventFeedPosts` (rodava a cada 30min) virou `postWeeklyEventsToFeed`,
+  só segunda de madrugada (`20 3 * * 1`), postando tudo que é `published` e
+  ainda não postado (`postedToFeed == false`) cuja data cai na semana atual —
+  ordenado do mais distante pro mais próximo, com `createdAt` escalonado por
+  segundo pra o mais próximo ficar por cima (pedido explícito: "do mais
+  próximo pro mais distante"). Novo gatilho
+  `onEventCreatedFeedSync`/`onEventUpdatedFeedSync` cobre "evento novo
+  vigente na semana sobe automaticamente", sem esperar a segunda. Nova
+  `repostUpcomingEventFeedPosts` (a cada 15min) apaga o post anterior
+  (`feedPostId`, guardado no doc do evento) e cria outro — com `createdAt`
+  atual (sobe pro topo) e o texto já com "Hoje"/"Amanhã" em vez do dia da
+  semana (`formatEventFeedText`) — 24h e de novo 6h antes do evento
+  (`feedRepost24hSent`/`feedRepost6hSent`, cada estágio dispara uma vez só).
+  Isso substitui o que antes era só um troca de texto no cliente
+  (`PostCard._textWithHojeAmanha`, removido) sem de fato subir o post.
+
+`firestore.rules` (`posts/{postId}`): editar/excluir post manual passou a
+exigir ser o autor (`resource.data.authorUid == request.auth.uid`) **ou**
+admin — antes bastava ter o papel Publicações genérico, então um usuário
+Publicações podia mexer no post manual de outro colega; agora não pode mais
+(decisão confirmada com o usuário). Posts automáticos (`authorUid == ""`)
+continuam só geridos pelas Cloud Functions.
+
+`PostCard` ganhou menu (⋮) com Editar/Excluir pra post manual do autor/admin;
+`PostFormPage` ganhou modo edição (`editing: Post?`); `PostRepository` ganhou
+`updateManualPost`/`deleteManualPost` e passou a gravar `storagePath` nos
+posts manuais (não gravava antes, então a imagem nunca era limpa do Storage
+ao excluir — só o doc).
+
+**Reversão de eventos de vários dias (mesma sessão, 24/08/2026):** ao
+verificar o código durante o levantamento desta reforma, o recurso descrito
+na entrada de 20/08/2026 acima ainda estava presente e commitado — o usuário
+pediu a remoção completa (não é mais um recurso do app):
+`Event.endDateTimeMillis`/`isMultiDay`/`endDateTimeUtc` saíram do modelo;
+`EventFormPage` voltou a não ter toggle de vários dias;
+`event_card.dart`/`event_detail_page.dart`/`event_pending_list_page.dart`
+voltaram à linha única de data; `events_page.dart` (`_matchesFilter`) voltou
+à comparação de dia único; `EventRepository.getPublishedUpcoming` voltou a
+filtrar `dateTimeMillis >= agora` direto na query (sem o filtro em memória
+que existia só por causa do fim diferente do início). Nas Cloud Functions,
+`deleteExpiredEvents` e `sendEventReminders` voltaram a usar só
+`dateTimeMillis`; `postEventDaysToFeed`/`postedFeedDays` foram removidos (a
+postagem no feed agora é só a `postEventToFeed` unificada, descrita acima).
 
 **Limpeza anual de ministérios/cargos (20/08/2026):** nova Cloud Function
 `resetAnnualMinistries` (`SIBValApp2/functions/index.js`, editada e já

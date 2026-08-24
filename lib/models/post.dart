@@ -6,16 +6,17 @@ import 'event.dart' show toSaoPauloTime, toSaoPauloTimeNow;
 /// `posts` no Firestore, criada tanto pelo app quanto pelas Cloud Functions
 /// (posts automáticos de devocional, evento e aniversário).
 ///
-/// `eventDateTimeMillis` não existe no documento — é preenchido por
-/// `PostRepository.getPosts` a partir do evento referenciado por `targetId`,
-/// pra permitir ordenar o feed pela proximidade da data do evento e saber
-/// quando ele já ocorreu (sem precisar duplicar a data no post no Firestore).
+/// `eventDateTimeMillis` vem direto do documento (gravado pela Cloud Function
+/// que cria/reposta o post de evento) — permite ao card saber se o evento já
+/// passou (selo "Finalizado") sem precisar buscar o evento à parte a cada
+/// atualização do feed em tempo real.
 class Post {
   final String id;
   final String authorUid;
   final String authorName;
   final String text;
   final String imageUrl;
+  final String storagePath;
   final DateTime? createdAt;
   final List<String> likedBy;
   final int commentCount;
@@ -29,6 +30,7 @@ class Post {
     required this.authorName,
     required this.text,
     required this.imageUrl,
+    required this.storagePath,
     required this.createdAt,
     required this.likedBy,
     required this.commentCount,
@@ -45,27 +47,15 @@ class Post {
       authorName: data['authorName'] as String? ?? '',
       text: data['text'] as String? ?? '',
       imageUrl: data['imageUrl'] as String? ?? '',
+      storagePath: data['storagePath'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       likedBy: List<String>.from(data['likedBy'] as List? ?? const []),
       commentCount: (data['commentCount'] as num?)?.toInt() ?? 0,
       postType: data['postType'] as String? ?? PostType.manual,
       targetId: data['targetId'] as String? ?? '',
+      eventDateTimeMillis: (data['eventDateTimeMillis'] as num?)?.toInt(),
     );
   }
-
-  Post withEventDateTimeMillis(int? millis) => Post(
-        id: id,
-        authorUid: authorUid,
-        authorName: authorName,
-        text: text,
-        imageUrl: imageUrl,
-        createdAt: createdAt,
-        likedBy: likedBy,
-        commentCount: commentCount,
-        postType: postType,
-        targetId: targetId,
-        eventDateTimeMillis: millis,
-      );
 
   DateTime? get eventDateSaoPaulo => eventDateTimeMillis != null
       ? toSaoPauloTime(DateTime.fromMillisecondsSinceEpoch(eventDateTimeMillis!, isUtc: true))

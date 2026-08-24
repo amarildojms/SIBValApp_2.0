@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 
 import '../events/event_detail_page.dart';
 import '../theme/app_theme.dart';
-import '../models/event.dart' show toSaoPauloTimeNow;
 import '../models/post.dart';
 
 /// Espelha item_post.xml/PostAdapter.kt: cabeçalho (autor + hora de criação
@@ -12,15 +11,13 @@ import '../models/post.dart';
 ///
 /// Sem equivalente nativo: posts de evento deixam de ser tocáveis — com um
 /// selo discreto "Finalizado" — assim que a data do evento passa
-/// (`Post.isPastEvent`). Um evento cujo documento não foi encontrado (apagado
-/// ou virou inacessível — ver `PostRepository._fetchEventDates`) entra na
-/// mesma categoria: sem data pra mostrar, o link só levaria a uma tela de
-/// "Evento não encontrado".
+/// (`Post.isPastEvent`). A linha `🗓️ (Ter) dd/MM, HH:mm` dentro do texto do
+/// post já vem pronta da Cloud Function (`(Hoje)`/`(Amanhã)` quando o evento
+/// reposta 24h/6h antes — ver `formatEventFeedText` em functions/index.js),
+/// sem troca no cliente.
 ///
-/// A linha `🗓️ (Ter) dd/MM, HH:mm` dentro do texto do post (gerada pela
-/// Cloud Function `postEventToFeed` em functions/index.js) tem o dia da
-/// semana entre parênteses trocado por `(Hoje)`/`(Amanhã)` quando aplicável —
-/// só essa linha, não o cabeçalho.
+/// [onEditTap]/[onDeleteTap] só vêm preenchidos pra post manual do próprio
+/// autor (ou admin) — mostram um menu (⋮) no cabeçalho.
 class PostCard extends StatelessWidget {
   const PostCard({
     super.key,
@@ -28,33 +25,18 @@ class PostCard extends StatelessWidget {
     required this.liked,
     required this.onLikeTap,
     required this.onCommentTap,
+    this.onEditTap,
+    this.onDeleteTap,
   });
 
   final Post post;
   final bool liked;
   final VoidCallback onLikeTap;
   final VoidCallback onCommentTap;
+  final VoidCallback? onEditTap;
+  final VoidCallback? onDeleteTap;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
-  static final _weekdayParenRegex = RegExp(r'🗓️ \([^)]+\)');
-
-  /// Só troca o `(dia da semana)` da linha `🗓️ (...)  já gerada pela Cloud
-  /// Function — data e hora depois dele ficam como vieram, o resto do texto
-  /// não é tocado.
-  String _textWithHojeAmanha(DateTime? eventDate) {
-    if (eventDate == null) return post.text;
-    final today = toSaoPauloTimeNow();
-    final eventDay = DateTime(eventDate.year, eventDate.month, eventDate.day);
-    final todayDay = DateTime(today.year, today.month, today.day);
-    final diff = eventDay.difference(todayDay).inDays;
-    final replacement = diff == 0
-        ? 'Hoje'
-        : diff == 1
-            ? 'Amanhã'
-            : null;
-    if (replacement == null) return post.text;
-    return post.text.replaceFirst(_weekdayParenRegex, '🗓️ ($replacement)');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,13 +75,24 @@ class PostCard extends StatelessWidget {
                     _dateFormat.format(post.createdAt!),
                     style: TextStyle(color: context.textSecondary, fontSize: 12),
                   ),
+                if (onEditTap != null || onDeleteTap != null)
+                  PopupMenuButton<VoidCallback>(
+                    icon: Icon(Icons.more_vert, color: context.textSecondary),
+                    onSelected: (action) => action(),
+                    itemBuilder: (context) => [
+                      if (onEditTap != null)
+                        PopupMenuItem(value: onEditTap!, child: const Text('Editar')),
+                      if (onDeleteTap != null)
+                        PopupMenuItem(value: onDeleteTap!, child: const Text('Excluir')),
+                    ],
+                  ),
               ],
             ),
           ),
           if (post.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-              child: Text(_textWithHojeAmanha(eventDate), style: TextStyle(color: context.textPrimary)),
+              child: Text(post.text, style: TextStyle(color: context.textPrimary)),
             ),
           if (post.imageUrl.isNotEmpty)
             GestureDetector(

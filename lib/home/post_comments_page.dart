@@ -62,7 +62,6 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
       await ref.read(postRepositoryProvider).addComment(widget.postId, uid, name, text);
       _commentController.clear();
       await _load();
-      ref.invalidate(postsProvider);
     } finally {
       if (mounted) setState(() => _sending = false);
     }

@@ -6,17 +6,17 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/comment.dart';
-import '../models/event.dart' show EventStatus;
 import '../models/post.dart';
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/PostRepository.kt —
 /// mesma coleção `posts` e subcoleção `posts/{postId}/comments`, mesmas regras
 /// (like via arrayUnion/arrayRemove, comentário incrementa commentCount).
 ///
-/// `getPosts` tem uma ordenação client-side sem equivalente nativo: posts de
-/// evento sobem no feed conforme a data se aproxima (ver `_compareFeedOrder`),
-/// ficando abaixo só dos posts de aniversário do dia, e voltam ao fluxo
-/// cronológico normal assim que o evento passa.
+/// Sem ordenação especial no cliente: o feed é sempre por `createdAt`
+/// descendente, direto do Firestore — quem decide quando um post automático
+/// sobe é a Cloud Function que o cria/reposta (evento repostado 24h/6h antes,
+/// aniversariante às 01h, devocional no seu dia), não uma regra local aqui.
+/// `postsProvider` usa `.snapshots()` (tempo real), não busca única.
 class PostRepository {
   PostRepository(this._firestore, this._storage);
 
@@ -27,72 +27,12 @@ class PostRepository {
   CollectionReference<Map<String, dynamic>> _comments(String postId) =>
       _posts.doc(postId).collection('comments');
 
-  Future<List<Post>> getPosts({int limit = 50}) async {
-    final snapshot = await _posts.orderBy('createdAt', descending: true).limit(limit).get();
-    final posts = snapshot.docs.map(Post.fromFirestore).toList();
-
-    final eventIds = posts
-        .where((post) => post.postType == PostType.event && post.targetId.isNotEmpty)
-        .map((post) => post.targetId)
-        .toSet()
-        .toList();
-    final eventDates = await _fetchEventDates(eventIds);
-
-    final enriched = posts
-        .map((post) => eventDates.containsKey(post.targetId)
-            ? post.withEventDateTimeMillis(eventDates[post.targetId])
-            : post)
-        .toList();
-    enriched.sort(_compareFeedOrder);
-    return enriched;
-  }
-
-  /// Datas dos eventos referenciados pelos posts. Busca doc a doc (`get()`
-  /// por id, em paralelo) em vez de uma query `whereIn` na coleção: a regra
-  /// do Firestore (`allow read: if resource.data.status == 'published' ||
-  /// isEventos()`) depende do conteúdo de cada documento, e o Firestore não
-  /// consegue provar essa condição pra uma query de lista sobre `__name__`
-  /// — mesmo filtrando `status` na própria query, ela vem inteira como
-  /// PERMISSION_DENIED pra quem não gerencia eventos. Um `get()` por
-  /// documento não tem essa limitação (é como `EventRepository.getById`
-  /// já busca eventos hoje).
-  Future<Map<String, int>> _fetchEventDates(List<String> eventIds) async {
-    if (eventIds.isEmpty) return const {};
-    final result = <String, int>{};
-    await Future.wait(eventIds.map((id) async {
-      try {
-        final doc = await _firestore.collection('events').doc(id).get();
-        final data = doc.data();
-        if (data == null || data['status'] != EventStatus.published) return;
-        final millis = (data['dateTimeMillis'] as num?)?.toInt();
-        if (millis != null) result[id] = millis;
-      } catch (_) {
-        // Evento não publicado (ex.: pendente/cancelado) e o usuário não
-        // gerencia eventos — a regra nega esse doc; o post cai pro fluxo
-        // normal (sem badge de data), o resto do feed não é afetado.
-      }
-    }));
-    return result;
-  }
-
-  /// Aniversariantes do dia primeiro, depois eventos que ainda vão ocorrer
-  /// (do mais próximo pro mais distante) e por último o restante do feed em
-  /// ordem cronológica normal — inclui eventos já ocorridos, que voltam a se
-  /// comportar como um post comum.
-  int _compareFeedOrder(Post a, Post b) {
-    final rankA = _feedRank(a);
-    final rankB = _feedRank(b);
-    if (rankA != rankB) return rankA.compareTo(rankB);
-    if (rankA == 1) return a.eventDateTimeMillis!.compareTo(b.eventDateTimeMillis!);
-    final createdAtA = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final createdAtB = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-    return createdAtB.compareTo(createdAtA);
-  }
-
-  int _feedRank(Post post) {
-    if (post.postType == PostType.birthday) return 0;
-    if (post.postType == PostType.event && post.eventDateTimeMillis != null && !post.isPastEvent) return 1;
-    return 2;
+  Stream<List<Post>> watchPosts({int limit = 50}) {
+    return _posts
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Post.fromFirestore).toList());
   }
 
   /// Publicação manual no feed "Início" — restrita a quem tem
@@ -107,8 +47,10 @@ class PostRepository {
   }) async {
     final doc = _posts.doc();
     var imageUrl = '';
+    var storagePath = '';
     if (imageFile != null) {
-      final ref = _storage.ref('posts/${doc.id}.jpg');
+      storagePath = 'posts/${doc.id}.jpg';
+      final ref = _storage.ref(storagePath);
       await ref.putFile(imageFile);
       imageUrl = await ref.getDownloadURL();
     }
@@ -117,12 +59,47 @@ class PostRepository {
       'authorName': authorName,
       'text': text,
       'imageUrl': imageUrl,
+      'storagePath': storagePath,
       'createdAt': FieldValue.serverTimestamp(),
       'likedBy': <String>[],
       'commentCount': 0,
       'postType': PostType.manual,
       'targetId': '',
     });
+  }
+
+  /// Edição de post manual — só o autor ou admin chega aqui (gate na UI e no
+  /// `firestore.rules`). Troca a imagem só se [imageFile] vier preenchido;
+  /// senão mantém a existente (`existingStoragePath`).
+  Future<void> updateManualPost({
+    required String postId,
+    required String text,
+    File? imageFile,
+    String existingStoragePath = '',
+  }) async {
+    final fields = <String, Object?>{'text': text};
+    if (imageFile != null) {
+      if (existingStoragePath.isNotEmpty) {
+        try {
+          await _storage.ref(existingStoragePath).delete();
+        } catch (_) {}
+      }
+      final storagePath = 'posts/$postId.jpg';
+      final ref = _storage.ref(storagePath);
+      await ref.putFile(imageFile);
+      fields['imageUrl'] = await ref.getDownloadURL();
+      fields['storagePath'] = storagePath;
+    }
+    await _posts.doc(postId).update(fields);
+  }
+
+  Future<void> deleteManualPost(Post post) async {
+    if (post.storagePath.isNotEmpty) {
+      try {
+        await _storage.ref(post.storagePath).delete();
+      } catch (_) {}
+    }
+    await _posts.doc(post.id).delete();
   }
 
   Future<void> toggleLike(String postId, String uid, bool liked) {
@@ -154,8 +131,8 @@ final postRepositoryProvider = Provider<PostRepository>((ref) {
   return PostRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
 });
 
-final postsProvider = FutureProvider.autoDispose<List<Post>>((ref) {
-  return ref.watch(postRepositoryProvider).getPosts();
+final postsProvider = StreamProvider.autoDispose<List<Post>>((ref) {
+  return ref.watch(postRepositoryProvider).watchPosts();
 });
 
 /// Reativo — dispara sozinho quando o usuário loga/desloga (o app não recria

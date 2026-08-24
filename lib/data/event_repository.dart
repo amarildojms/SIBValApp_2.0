@@ -16,21 +16,14 @@ class EventRepository {
 
   CollectionReference<Map<String, dynamic>> get _events => _firestore.collection('events');
 
-  /// Filtra por `endDateTimeMillis` (não `dateTimeMillis`) em memória, e não na query —
-  /// um evento de vários dias que já começou mas ainda não terminou tem `dateTimeMillis`
-  /// (o início) no passado, mas ainda deve aparecer na lista. `Event.fromFirestore` já
-  /// resolve `endDateTimeMillis` ausente (docs de antes de eventos multi-dia existirem)
-  /// caindo pro início, então o filtro funciona igual pros dois casos.
   Future<List<Event>> getPublishedUpcoming() async {
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     final snapshot = await _events
         .where('status', isEqualTo: EventStatus.published)
+        .where('dateTimeMillis', isGreaterThanOrEqualTo: nowMillis)
         .orderBy('dateTimeMillis')
         .get();
-    return snapshot.docs
-        .map(Event.fromFirestore)
-        .where((event) => event.endDateTimeMillis >= nowMillis)
-        .toList();
+    return snapshot.docs.map(Event.fromFirestore).toList();
   }
 
   Future<List<Event>> getPending() async {
@@ -61,7 +54,6 @@ class EventRepository {
       'description': event.description,
       'location': event.location,
       'dateTimeMillis': event.dateTimeMillis,
-      'endDateTimeMillis': event.endDateTimeMillis,
       'category': event.category,
       'requiresRegistration': event.requiresRegistration,
       'registrationLink': event.registrationLink,
@@ -72,9 +64,6 @@ class EventRepository {
       'source': EventSource.manual,
       'createdBy': createdBy,
       'createdAt': FieldValue.serverTimestamp(),
-      // Rastreamento de post no feed dia-a-dia (ver postEventDaysToFeed em functions/index.js).
-      // postedToFeed só vira true quando o último dia do evento já foi postado.
-      'postedFeedDays': const <String>[],
       'postedToFeed': false,
     });
   }
@@ -102,7 +91,6 @@ class EventRepository {
       'description': event.description,
       'location': event.location,
       'dateTimeMillis': event.dateTimeMillis,
-      'endDateTimeMillis': event.endDateTimeMillis,
       'category': event.category,
       'requiresRegistration': event.requiresRegistration,
       'registrationLink': event.registrationLink,

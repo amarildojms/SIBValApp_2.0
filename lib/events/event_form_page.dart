@@ -110,23 +110,12 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute).millisecondsSinceEpoch;
   }
 
-  /// Eventos pontuais voltaram a ser sempre de 1 dia só (21/08/2026) — o fim
-  /// é sempre igual ao início; quem precisar de mais dias cria um evento pra
-  /// cada um manualmente. `endDateTimeMillis` continua existindo no modelo
-  /// (ver `Event`) só porque `Event.fromFirestore` e as Cloud Functions ainda
-  /// dependem dele para eventos antigos já publicados como vários dias.
-  int? get _endDateTimeMillis => _dateTimeMillis;
-
   bool _validate() {
     final hasFlyer = _pickedFlyer != null || _existingFlyerUrl.isNotEmpty;
-    final start = _dateTimeMillis;
-    final end = _endDateTimeMillis;
     return _titleController.text.trim().isNotEmpty &&
         _descriptionController.text.trim().isNotEmpty &&
         _locationController.text.trim().isNotEmpty &&
-        start != null &&
-        end != null &&
-        end >= start &&
+        _dateTimeMillis != null &&
         (_category?.isNotEmpty ?? false) &&
         hasFlyer &&
         !(_requiresRegistration && _registrationLinkController.text.trim().isEmpty);
@@ -141,7 +130,6 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
           description: '',
           location: '',
           dateTimeMillis: 0,
-          endDateTimeMillis: 0,
           flyerUrl: '',
           flyerStoragePath: '',
           category: '',
@@ -158,7 +146,6 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
       description: _descriptionController.text.trim(),
       location: _locationController.text.trim(),
       dateTimeMillis: _dateTimeMillis,
-      endDateTimeMillis: _endDateTimeMillis,
       category: _category,
       requiresRegistration: _requiresRegistration,
       registrationLink: _registrationLinkController.text.trim(),
@@ -167,7 +154,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   Future<void> _save() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer (e confira se o fim não é antes do início).');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
       return;
     }
     setState(() => _saving = true);
@@ -195,7 +182,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   Future<void> _approve() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer (e confira se o fim não é antes do início).');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
       return;
     }
     setState(() => _saving = true);

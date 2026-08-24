@@ -127,9 +127,7 @@ class _PendingEventTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      event.isMultiDay
-                          ? '${_dateFormat.format(localDate)} até ${_dateFormat.format(toSaoPauloTime(event.endDateTimeUtc))}'
-                          : _dateFormat.format(localDate),
+                      _dateFormat.format(localDate),
                       style: TextStyle(color: context.textSecondary, fontSize: 12),
                     ),
                   ],

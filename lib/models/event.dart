@@ -8,7 +8,6 @@ class Event {
   final String description;
   final String location;
   final int dateTimeMillis;
-  final int endDateTimeMillis;
   final String flyerUrl;
   final String flyerStoragePath;
   final String category;
@@ -26,7 +25,6 @@ class Event {
     required this.description,
     required this.location,
     required this.dateTimeMillis,
-    required this.endDateTimeMillis,
     required this.flyerUrl,
     required this.flyerStoragePath,
     required this.category,
@@ -41,22 +39,11 @@ class Event {
 
   DateTime get dateTimeUtc => DateTime.fromMillisecondsSinceEpoch(dateTimeMillis, isUtc: true);
 
-  DateTime get endDateTimeUtc => DateTime.fromMillisecondsSinceEpoch(endDateTimeMillis, isUtc: true);
-
-  /// True quando o evento termina em um dia calendário (America/Sao_Paulo) diferente do
-  /// que começa — evento de vários dias (ex.: acampamento, congresso).
-  bool get isMultiDay {
-    final start = toSaoPauloTime(dateTimeUtc);
-    final end = toSaoPauloTime(endDateTimeUtc);
-    return start.year != end.year || start.month != end.month || start.day != end.day;
-  }
-
   Event copyWith({
     String? title,
     String? description,
     String? location,
     int? dateTimeMillis,
-    int? endDateTimeMillis,
     String? flyerUrl,
     String? flyerStoragePath,
     String? category,
@@ -70,7 +57,6 @@ class Event {
       description: description ?? this.description,
       location: location ?? this.location,
       dateTimeMillis: dateTimeMillis ?? this.dateTimeMillis,
-      endDateTimeMillis: endDateTimeMillis ?? this.endDateTimeMillis,
       flyerUrl: flyerUrl ?? this.flyerUrl,
       flyerStoragePath: flyerStoragePath ?? this.flyerStoragePath,
       category: category ?? this.category,
@@ -93,9 +79,6 @@ class Event {
       description: data['description'] as String? ?? '',
       location: data['location'] as String? ?? '',
       dateTimeMillis: dateTimeMillis,
-      // Docs anteriores à introdução de eventos multi-dia não têm este campo — cai pro
-      // início do evento, ou seja, evento de 1 dia só (comportamento anterior).
-      endDateTimeMillis: (data['endDateTimeMillis'] as num?)?.toInt() ?? dateTimeMillis,
       flyerUrl: data['flyerUrl'] as String? ?? '',
       flyerStoragePath: data['flyerStoragePath'] as String? ?? '',
       category: data['category'] as String? ?? '',
