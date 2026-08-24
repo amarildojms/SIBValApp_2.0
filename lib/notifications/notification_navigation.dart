@@ -9,6 +9,7 @@ import '../home/post_comments_page.dart';
 import '../messages/message_detail_page.dart';
 import '../models/notification.dart';
 import '../prayer/prayer_page.dart';
+import '../reception/reception_page.dart';
 
 /// Roteamento por `type`/`targetId` compartilhado entre o toque num item da
 /// Central de notificações (`NotificationsPage._onTap`) e o toque numa
@@ -43,5 +44,7 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       if (targetId.isNotEmpty) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => MessageDetailPage(messageId: targetId)));
       }
+    case NotificationType.visitor:
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReceptionPage()));
   }
 }

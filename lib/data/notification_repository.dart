@@ -17,6 +17,8 @@ class NotificationRepository {
     required bool isAdmin,
     required String uid,
     bool canViewPrayerRequests = false,
+    bool canViewVisitorSummaries = false,
+    bool canViewVisitorDetails = false,
     int limit = 50,
   }) async {
     final snapshot = await _notifications.orderBy('createdAt', descending: true).limit(limit).get();
@@ -25,6 +27,7 @@ class NotificationRepository {
       return n.audience == NotificationAudience.all ||
           (n.audience == NotificationAudience.admin && isAdmin) ||
           (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
+          (n.audience == NotificationAudience.dirigentes && (canViewVisitorSummaries || canViewVisitorDetails)) ||
           (n.audience == NotificationAudience.user && n.targetUid == uid);
     }).toList();
   }
@@ -36,6 +39,8 @@ class NotificationRepository {
     required bool isAdmin,
     required String uid,
     bool canViewPrayerRequests = false,
+    bool canViewVisitorSummaries = false,
+    bool canViewVisitorDetails = false,
     int limit = 50,
   }) {
     return _notifications.orderBy('createdAt', descending: true).limit(limit).snapshots().map((snapshot) {
@@ -44,6 +49,7 @@ class NotificationRepository {
         return n.audience == NotificationAudience.all ||
             (n.audience == NotificationAudience.admin && isAdmin) ||
             (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
+            (n.audience == NotificationAudience.dirigentes && (canViewVisitorSummaries || canViewVisitorDetails)) ||
             (n.audience == NotificationAudience.user && n.targetUid == uid);
       }).toList();
     });
@@ -102,5 +108,7 @@ final notificationsProvider = StreamProvider.autoDispose<List<AppNotification>>(
         isAdmin: profile?.isAdmin ?? false,
         uid: uid,
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,
+        canViewVisitorSummaries: profile?.canViewVisitorSummaries ?? false,
+        canViewVisitorDetails: profile?.canViewVisitorDetails ?? false,
       );
 });

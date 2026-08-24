@@ -438,6 +438,112 @@ Devocionais em tempo real e flyer de devocional tocável (24/08/2026):**
   soma nome/CPF/e-mail/data de nascimento + telefone/endereço + dados
   eclesiásticos do `Member` vinculado, 12 campos no total).
 
+**Área Recepção + papéis Dirigentes/Pastor (24/08/2026, unificada numa só
+tela em 25/08/2026):** sem equivalente no nativo — feature nova, pedida
+direto pra este app. Três papéis em `UserRole`/`firestore.rules` (`recepcao`,
+`dirigentes`, `pastor`), atribuíveis em `manage_users_page.dart` igual aos
+demais papéis. Modelo em `lib/models/visitor.dart` (`Visitor` completo +
+`VisitorSummary`, recorte sem telefone), repositório em
+`lib/data/visitor_repository.dart`.
+
+Só existe **um** tile no menu Mais ("Recepção", `lib/reception/reception_page.dart`),
+visível pra quem tem qualquer um dos três papéis (ou admin) — ícone
+composto `_ReceptionIcon` em `main_shell.dart` (mesa/computador
+`Icons.desk_outlined` + boneco `Icons.person` no canto, mesma composição de
+`_SettingsMailIcon`). O que aparece **dentro** da tela depende do papel de
+quem abriu (25/08/2026, revisão pedida pelo usuário — antes eram três telas
+com três tiles separados):
+- `canRegisterVisitors` (Recepção): formulário de cadastro (nome\*, telefone
+  opcional com `PhoneInputFormatter`, igreja opcional — vazio quando o
+  visitante não frequenta nenhuma —, primeira visita como dois
+  `CheckboxListTile` mutuamente exclusivos "Sim"/"Não", não mais um switch).
+  Grava só em `visitors/{id}` — o resumo e a notificação pra Dirigentes são
+  efeito colateral da Cloud Function.
+- `canRegisterVisitors || canViewVisitorDetails` (Recepção e/ou Pastor):
+  lista completa (`visitors`, telefone incluso como link `wa.me/55<dígitos>`,
+  mesmo padrão de `PrayerPage._sendToResponsible`) — exclusão só aparece se
+  `canRegisterVisitors`.
+- Senão, `canViewVisitorSummaries` sozinho (só Dirigentes, sem Recepção nem
+  Pastor): lista resumida (`visitorSummaries`, nome/igreja/primeira visita,
+  **sem telefone**) — é o único caso que de fato só enxerga essa coleção,
+  porque `firestore.rules` só libera `read` de `visitors` pra Recepção/Pastor
+  (ver abaixo); um Dirigentes que também seja Recepção ou Pastor cai no item
+  acima, na lista completa, sem seção resumida duplicada.
+
+Decisões confirmadas com o usuário: Dirigentes e Pastor são **só leitura** —
+quem cadastra/corrige/exclui um visitante é sempre a Recepção (ou admin);
+Pastor **não** recebe push, só vê os dados dentro do app (diferente de
+Dirigentes, que é avisado na hora).
+
+Por que duas coleções em vez de uma só: Firestore não faz segurança por
+campo dentro de um documento — pra Dirigentes de fato não conseguir ler o
+telefone (não só a UI escondendo), o telefone precisa estar em outro
+documento que Dirigentes não tem `read` liberado. `visitors/{id}` (completo)
+e `visitorSummaries/{id}` (mesmo id, sem telefone) resolvem isso.
+
+Em `SIBValApp2/functions/index.js`: novo trigger `onVisitorCreated`
+(`visitors/{visitorId}`) espelha o resumo em `visitorSummaries` e notifica
+(push + central de notificações, audience `dirigentes`) admins e quem tem o
+papel Dirigentes — espelha `onPrayerRequestCreated`/
+`getAdminAndIntercessaoTokens`, com o helper novo
+`getAdminAndDirigentesTokens`. Em `firestore.rules`: funções `isRecepcao()`/
+`isDirigentes()`/`isPastor()` (mesmo padrão de `isIntercessao()`); `visitors`
+com `read` pra Recepção/Pastor e `create/update/delete` só pra Recepção;
+`visitorSummaries` com `read` pra Dirigentes/Recepção/Pastor, escrita só via
+Admin SDK (delete liberado pra Recepção acompanhar a exclusão do visitante
+completo — `VisitorRepository.deleteVisitor` apaga os dois docs num batch).
+
+**Deploy feito (25/08/2026):** diferente das outras vezes, aqui o deploy foi
+necessário pra destravar um bug real — a Recepção conseguia ver a tela (as
+permissões de UI funcionavam), mas o cadastro de visitante falhava
+silenciosamente, porque `firestore.rules`/`onVisitorCreated` só existiam no
+código-fonte, nunca publicados (`firebase functions:list` confirmou que
+`onVisitorCreated` não estava entre as functions deployadas). Usuário deu o
+aval explícito pra isso desta vez; rodei
+`firebase deploy --only firestore:rules,functions:onVisitorCreated --project
+sibval-app-project` — concluído com sucesso. `ReceptionPage._submit` também
+ganhou tratamento de erro (antes um erro do Firestore, como permission-denied,
+era engolido em silêncio pelo `try/finally` sem `catch` — o botão parecia não
+fazer nada) e o sucesso virou um `AlertDialog` com botão OK, no lugar do
+`SnackBar` anterior (pedido do usuário).
+
+**Ajustes de UX na Recepção (25/08/2026):**
+- Depois de cadastrar com sucesso, o foco volta pro campo Nome
+  (`_nameFocusNode.requestFocus()`) pra agilizar cadastros em sequência.
+- A linha do telefone (lista completa) usava `Row(mainAxisSize: MainAxisSize.min)`
+  sem nenhum `Flexible`/`Expanded` no `Text` — com fonte grande (acessibilidade,
+  comum em Samsung/OneUI) o número podia estourar a largura do card e ficar
+  cortado. Trocado por `Flexible` + `overflow: TextOverflow.ellipsis`.
+- Selo "Primeira visita"/"Já visitou" (lista resumida, papel Dirigentes): um
+  `Chip` comum encolhe pro tamanho do texto, então os dois ficavam com
+  tamanhos diferentes lado a lado. Virou `_VisitBadge`, um `Container` de
+  largura fixa (116).
+- "Sem igreja" → "Não congrega em uma igreja" (as duas listas).
+- Visitantes "arquivam" no dia seguinte: `Visitor.isFromToday`/
+  `VisitorSummary.isFromToday` (mesmo padrão de `Post.isFromToday`, fuso
+  America/Sao_Paulo) filtram `VisitorRepository.watchAll`/`watchSummaries` —
+  só quem foi cadastrado hoje aparece na lista. Puramente client-side (sem
+  Cloud Function nem exclusão): cadastros de dias anteriores continuam no
+  Firestore, só saem da tela. Como os providers são `autoDispose`, o corte
+  de "hoje" é recalculado toda vez que a tela reabre.
+- Título "Recepção" estava mais baixo/mais à direita que o das outras telas
+  porque a tela inteira (título incluso) vivia dentro de um único `ListView`
+  com `padding: EdgeInsets.all(16)`, somando com o padding interno do próprio
+  `ScreenTitle` (16,16,16,8) — dobrava o respiro. Reestruturado pro padrão do
+  resto do app: `Column(crossAxisAlignment: start, children: [ScreenTitle(...),
+  Expanded(child: ListView(...))])`, sem padding extra ao redor do título.
+
+**Aviso de atualização "não funcionava" (24/08/2026) — não era bug de
+código.** Investigado a pedido do usuário; `update_gate.dart` depende 100%
+de alguém atualizar manualmente `settings/appVersion.latestVersionCode` no
+Console do Firebase a cada publicação nova (não há automação/CI ligando o
+`pubspec.yaml` a esse documento) — o usuário confirmou que nunca chegou a
+configurar esse documento, então o aviso nunca teve motivo pra aparecer.
+Nenhuma mudança de código foi feita; ele precisa criar/editar
+`settings/appVersion` manualmente (campos: `latestVersionCode` = build atual
+do Android, ex. 25; opcionalmente `latestVersionName`, `androidUrl`,
+`iosUrl`) toda vez que publicar uma nova versão daqui pra frente.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

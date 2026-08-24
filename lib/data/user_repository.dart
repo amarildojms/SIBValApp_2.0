@@ -66,6 +66,11 @@ class CurrentUserProfile {
   bool get canManageDevotionals => isAdmin || roles.contains('publicacoes');
   bool get canManagePublications => isAdmin || roles.contains('publicacoes');
 
+  // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
+  bool get canRegisterVisitors => isAdmin || roles.contains('recepcao');
+  bool get canViewVisitorSummaries => isAdmin || roles.contains('dirigentes');
+  bool get canViewVisitorDetails => isAdmin || roles.contains('pastor');
+
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {

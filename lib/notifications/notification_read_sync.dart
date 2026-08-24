@@ -23,6 +23,8 @@ Future<void> syncNotificationsForScreen(WidgetRef ref, {required String type, St
         isAdmin: profile?.isAdmin ?? false,
         uid: uid,
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,
+        canViewVisitorSummaries: profile?.canViewVisitorSummaries ?? false,
+        canViewVisitorDetails: profile?.canViewVisitorDetails ?? false,
       );
 
   final unread = notifications.where(

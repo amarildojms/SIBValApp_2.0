@@ -99,4 +99,9 @@ abstract final class UserRole {
   static const intercessao = 'intercessao';
   static const eventos = 'eventos';
   static const publicacoes = 'publicacoes';
+
+  // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
+  static const recepcao = 'recepcao';
+  static const dirigentes = 'dirigentes';
+  static const pastor = 'pastor';
 }

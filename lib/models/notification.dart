@@ -56,6 +56,7 @@ abstract final class NotificationType {
   static const prayerRequest = 'prayer_request';
   static const message = 'message';
   static const membershipAnniversary = 'membership_anniversary';
+  static const visitor = 'visitor';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem
@@ -67,4 +68,8 @@ abstract final class NotificationAudience {
   static const admin = 'admin';
   static const user = 'user';
   static const intercessao = 'intercessao';
+
+  /// Admin ou papel Dirigentes — novo visitante cadastrado pela Recepção
+  /// (24/08/2026, ver lib/models/visitor.dart).
+  static const dirigentes = 'dirigentes';
 }
