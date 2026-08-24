@@ -34,6 +34,16 @@ class EventRepository {
     return snapshot.docs.map(Event.fromFirestore).toList();
   }
 
+  /// Tempo real — evita depender de sair/voltar da tela pra ver um evento
+  /// importado por e-mail assim que ele é criado como pendente.
+  Stream<List<Event>> watchPending() {
+    return _events
+        .where('status', isEqualTo: EventStatus.pending)
+        .orderBy('dateTimeMillis')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Event.fromFirestore).toList());
+  }
+
   Future<Event?> getById(String id) async {
     final doc = await _events.doc(id).get();
     return doc.exists ? Event.fromFirestore(doc) : null;
@@ -124,8 +134,8 @@ final eventsProvider = FutureProvider.autoDispose<List<Event>>((ref) {
   return ref.watch(eventRepositoryProvider).getPublishedUpcoming();
 });
 
-final eventPendingProvider = FutureProvider.autoDispose<List<Event>>((ref) {
-  return ref.watch(eventRepositoryProvider).getPending();
+final eventPendingProvider = StreamProvider.autoDispose<List<Event>>((ref) {
+  return ref.watch(eventRepositoryProvider).watchPending();
 });
 
 enum EventsTab { pontual, recorrente }

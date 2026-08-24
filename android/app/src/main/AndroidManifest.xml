@@ -69,5 +69,18 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Sem isso, url_launcher (usado no link do local do evento, inscrição, parceiros,
+             atualização da loja e envio de pedido de oração por WhatsApp) não encontra
+             navegador/app pra abrir a URL no Android 11+ (regra de visibilidade de pacotes). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="http"/>
+        </intent>
     </queries>
 </manifest>

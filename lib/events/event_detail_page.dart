@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -159,7 +160,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                   Text(event.description, style: TextStyle(color: context.textPrimary, fontSize: 16, height: 1.4)),
                 ],
                 const SizedBox(height: 16),
-                Text('Local: ${event.location}', style: TextStyle(color: context.textSecondary, fontSize: 14)),
+                _LocationText(location: event.location, textColor: context.textSecondary),
                 const SizedBox(height: 4),
                 Text(
                   '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)}',
@@ -177,6 +178,42 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Exibe "Local: <valor>", tornando o valor clicável (abrindo o app de mapas/GPS)
+/// quando ele é um link (ex.: evento importado por e-mail com um link do Google Maps
+/// em vez de um endereço em texto).
+class _LocationText extends StatelessWidget {
+  const _LocationText({required this.location, required this.textColor});
+
+  final String location;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = Uri.tryParse(location);
+    final isLink = uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+    if (!isLink) {
+      return Text('Local: $location', style: TextStyle(color: textColor, fontSize: 14));
+    }
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: textColor, fontSize: 14),
+        children: [
+          const TextSpan(text: 'Local: '),
+          TextSpan(
+            text: location,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () => launchUrl(uri, mode: LaunchMode.externalApplication),
           ),
         ],
       ),
