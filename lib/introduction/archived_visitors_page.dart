@@ -82,17 +82,18 @@ class _FullArchive extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           children: [
-            for (final entry in byDay.entries) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: Text(_dayHeader(entry.key), style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+            for (final entry in byDay.entries)
+              _DayGroup(
+                header: _dayHeader(entry.key),
+                count: entry.value.length,
+                children: [
+                  for (final visitor in entry.value)
+                    VisitorFullTile(
+                      visitor: visitor,
+                      onDelete: canDelete ? (id) => ref.read(visitorRepositoryProvider).deleteVisitor(id) : null,
+                    ),
+                ],
               ),
-              for (final visitor in entry.value)
-                VisitorFullTile(
-                  visitor: visitor,
-                  onDelete: canDelete ? (id) => ref.read(visitorRepositoryProvider).deleteVisitor(id) : null,
-                ),
-            ],
           ],
         );
       },
@@ -119,16 +120,47 @@ class _SummaryArchive extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           children: [
-            for (final entry in byDay.entries) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: Text(_dayHeader(entry.key), style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+            for (final entry in byDay.entries)
+              _DayGroup(
+                header: _dayHeader(entry.key),
+                count: entry.value.length,
+                children: [for (final summary in entry.value) VisitorSummaryTile(summary: summary)],
               ),
-              for (final summary in entry.value) VisitorSummaryTile(summary: summary),
-            ],
           ],
         );
       },
+    );
+  }
+}
+
+/// Cada dia arquivado vira uma linha compacta (data + contagem), expandindo
+/// só ao tocar — antes a lista mostrava todo mundo de todos os dias já de
+/// cara, o que ficava longo demais pra navegar (pedido do usuário,
+/// 25/08/2026). Fechado por padrão.
+class _DayGroup extends StatelessWidget {
+  const _DayGroup({required this.header, required this.count, required this.children});
+
+  final String header;
+  final int count;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text(header, style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+          subtitle: Text(
+            count == 1 ? '1 visitante' : '$count visitantes',
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          children: children,
+        ),
+      ),
     );
   }
 }

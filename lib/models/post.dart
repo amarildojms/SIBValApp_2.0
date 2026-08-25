@@ -91,9 +91,12 @@ abstract final class PostType {
   static const event = 'event';
   static const birthday = 'birthday';
 
-  /// Post fixado (24/08/2026) — `targetId` é o uid de quem faz aniversário de
-  /// MEMBRESIA hoje, e o feed (`home_feed_page.dart`) só mostra esse post,
-  /// fixado no topo, pro dono desse uid; todo mundo mais nem vê, mesmo a
-  /// coleção `posts` sendo de leitura pública (filtro é só no cliente).
+  /// `targetId` é o uid de quem faz aniversário de MEMBRESIA hoje. Não
+  /// aparece na lista do feed — `home_feed_page.dart` usa esse documento só
+  /// como fonte de dado em tempo real pro banner fixo acima da lista
+  /// (`_MembershipAnniversaryBanner`, espelha `ownBirthdayBanner` do
+  /// `HomeFragment.kt` nativo), visível só pro dono desse uid; todo mundo
+  /// mais nem sabe que ele existe, mesmo a coleção `posts` sendo de leitura
+  /// pública (filtro é só no cliente, 25/08/2026).
   static const membershipAnniversary = 'membership_anniversary';
 }

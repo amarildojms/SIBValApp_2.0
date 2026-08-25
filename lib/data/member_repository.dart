@@ -228,10 +228,22 @@ class MemberRepository {
 
     final canonicalId = _canonicalId(cpf: normalizedCpf, email: normalizedEmail) ?? member.id;
     if (canonicalId != member.id) {
-      await _members.doc(canonicalId).set(data);
+      await _members.doc(canonicalId).set(data, SetOptions(merge: true));
       await _members.doc(member.id).delete();
     } else {
-      await _members.doc(member.id).set(data);
+      // `merge: true` (25/08/2026, corrigindo bug pré-existente): sem isso,
+      // esse `set` sobrescrevia o documento inteiro e apagava em silêncio os
+      // campos que só a Cloud Function escreve
+      // (`lastMembershipAnniversaryFeedPostDate`, `membershipAnniversaryFeedPostId`,
+      // `lastBirthdayFeedPostDate`) a cada edição pela Secretaria — inclusive a
+      // própria edição de `membershipDate` que devia disparar a retratação do
+      // post fixado (`removeMembershipAnniversaryFromFeed`,
+      // SIBValApp2/functions/index.js), que não achava mais o post pra
+      // apagar porque o campo já tinha sumido antes da function rodar. Os
+      // campos explícitos em `data` (inclusive os `null`) continuam
+      // sobrescrevendo normalmente — merge só preserva o que não está listado
+      // aqui.
+      await _members.doc(member.id).set(data, SetOptions(merge: true));
     }
   }
 

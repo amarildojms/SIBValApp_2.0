@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../admin/manage_users_page.dart';
 import '../birthdays/birthdays_page.dart';
@@ -7,6 +8,7 @@ import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
 import '../home/post_comments_page.dart';
 import '../introduction/introduction_page.dart';
+import '../main_shell.dart' show homeTabIndex, mainShellTabIndexProvider;
 import '../messages/message_detail_page.dart';
 import '../models/notification.dart';
 import '../prayer/prayer_page.dart';
@@ -34,10 +36,16 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.postLike:
     case NotificationType.postComment:
-    case NotificationType.membershipAnniversary:
       if (targetId.isNotEmpty) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => PostCommentsPage(postId: targetId)));
       }
+    case NotificationType.membershipAnniversary:
+      // Não abre mais PostCommentsPage — a mensagem de aniversário de
+      // MEMBRESIA virou um banner fixo em HomeFeedPage (25/08/2026, ver
+      // doc comment de `PostType.membershipAnniversary`), não um post
+      // comentável. Volta pra raiz da navegação e troca pra aba Início.
+      ProviderScope.containerOf(context, listen: false).read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
+      Navigator.of(context).popUntil((route) => route.isFirst);
     case NotificationType.prayerRequest:
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage()));
     case NotificationType.message:

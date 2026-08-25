@@ -35,7 +35,6 @@ class _PostCommentsPageState extends ConsumerState<PostCommentsPage> {
     _load();
     syncNotificationsForScreen(ref, type: NotificationType.postLike, targetId: widget.postId);
     syncNotificationsForScreen(ref, type: NotificationType.postComment, targetId: widget.postId);
-    syncNotificationsForScreen(ref, type: NotificationType.membershipAnniversary, targetId: widget.postId);
   }
 
   @override

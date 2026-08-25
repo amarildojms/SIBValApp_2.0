@@ -50,9 +50,6 @@ class PostCard extends StatelessWidget {
     if (post.postType == PostType.birthday) {
       return _buildBirthdayCard(context);
     }
-    if (post.postType == PostType.membershipAnniversary) {
-      return _buildMembershipAnniversaryCard(context);
-    }
 
     final isEvent = post.postType == PostType.event;
     final isDevotional = post.postType == PostType.devotional;
@@ -182,72 +179,6 @@ class PostCard extends StatelessWidget {
                   backgroundImage: post.imageUrl.isNotEmpty ? NetworkImage(post.imageUrl) : null,
                   child: post.imageUrl.isEmpty
                       ? Icon(Icons.cake_outlined, color: context.textSecondary)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(post.text, style: TextStyle(color: context.textPrimary)),
-                      if (post.createdAt != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _dateFormat.format(post.createdAt!),
-                          style: TextStyle(color: context.textSecondary, fontSize: 12),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _buildLikeCommentBar(context),
-        ],
-      ),
-    );
-  }
-
-  /// Post fixado de aniversário de MEMBRESIA (24/08/2026, só aparece pro
-  /// próprio aniversariante — filtro em `home_feed_page.dart`): mesmo layout
-  /// compacto do card de aniversário de nascimento, com um selo "Fixado para
-  /// você" em destaque em vez do nome do autor.
-  Widget _buildMembershipAnniversaryCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: SibValColors.goldAccent, width: 1.2),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Row(
-              children: [
-                const Icon(Icons.push_pin, size: 14, color: SibValColors.goldAccent),
-                const SizedBox(width: 4),
-                const Text(
-                  'Fixado para você',
-                  style: TextStyle(color: SibValColors.goldAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  backgroundImage: post.imageUrl.isNotEmpty ? NetworkImage(post.imageUrl) : null,
-                  child: post.imageUrl.isEmpty
-                      ? const Icon(Icons.workspace_premium_outlined, color: SibValColors.goldAccent)
                       : null,
                 ),
                 const SizedBox(width: 12),

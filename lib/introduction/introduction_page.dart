@@ -5,6 +5,7 @@ import '../data/member_repository.dart' show membersProvider;
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../data/visitor_repository.dart';
+import '../models/member.dart';
 import '../models/notification.dart';
 import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
@@ -403,29 +404,92 @@ class _SummaryVisitorList extends ConsumerWidget {
 /// vira também um `Member`, ver `MemberRepository.upsertFromUser`). Só
 /// aparece quando o detalhe de "Como conheceu a igreja" é "Membro da
 /// Igreja" (`howFoundChurchInvitedByDetail`).
-class _InvitedByField extends ConsumerWidget {
+///
+/// Lista de sugestões embutida no layout, acima do campo (25/08/2026, pedido
+/// do usuário) — não um overlay/`Autocomplete`. A primeira versão usava um
+/// `OverlayEntry` próprio ancorado via `CompositedTransformFollower`, mas na
+/// prática as sugestões simplesmente não apareciam (relatado pelo usuário
+/// depois de testar no aparelho) — provavelmente uma corrida entre o
+/// `LayerLink` do `CompositedTransformTarget` (só linkado depois do primeiro
+/// layout do campo) e a inserção do overlay ao ganhar foco. Em vez de caçar
+/// esse bug de timing, a lista virou parte normal da árvore de widgets,
+/// dentro do mesmo `Column` do campo — sem overlay, sem `LayerLink`, sem
+/// jeito de "não aparecer": ou tem `matches`, e a lista desenha, ou não tem.
+class _InvitedByField extends ConsumerStatefulWidget {
   const _InvitedByField({required this.controller, required this.focusNode});
 
   final TextEditingController controller;
   final FocusNode focusNode;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final members = ref.watch(membersProvider).asData?.value ?? const [];
-    final names = members.map((m) => m.name.trim()).where((n) => n.isNotEmpty).toSet().toList()..sort();
+  ConsumerState<_InvitedByField> createState() => _InvitedByFieldState();
+}
 
-    return Autocomplete<String>(
-      textEditingController: controller,
-      focusNode: focusNode,
-      optionsBuilder: (textEditingValue) {
-        final query = _normalizeName(textEditingValue.text);
-        if (query.isEmpty) return const Iterable<String>.empty();
-        return names.where((name) => _normalizeName(name).contains(query)).take(8);
-      },
-      fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
-        return TextField(
-          controller: fieldController,
-          focusNode: focusNode,
+class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+    widget.focusNode.addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    widget.focusNode.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() => setState(() {});
+
+  List<String> _matches(List<Member> members) {
+    final query = _normalizeName(widget.controller.text);
+    if (query.isEmpty) return const [];
+    final names = members.map((m) => m.name.trim()).where((n) => n.isNotEmpty).toSet().toList()..sort();
+    return names.where((name) => _normalizeName(name).contains(query)).take(8).toList();
+  }
+
+  void _selectName(String name) {
+    widget.controller.text = name;
+    widget.controller.selection = TextSelection.collapsed(offset: name.length);
+    widget.focusNode.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final members = ref.watch(membersProvider).asData?.value ?? const [];
+    final matches = widget.focusNode.hasFocus ? _matches(members) : const <String>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (matches.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 4),
+            constraints: const BoxConstraints(maxHeight: 200),
+            decoration: BoxDecoration(
+              color: SibValColors.navyBlue,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: SibValColors.goldAccent, width: 0.6),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: matches.length,
+              itemBuilder: (context, index) {
+                final name = matches[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(name, style: const TextStyle(color: Colors.white)),
+                  onTap: () => _selectName(name),
+                );
+              },
+            ),
+          ),
+        TextField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
           decoration: InputDecoration(
             labelText: 'Convidado por (opcional)',
             hintText: 'Nome de quem convidou',
@@ -433,8 +497,8 @@ class _InvitedByField extends ConsumerWidget {
             filled: true,
             fillColor: Theme.of(context).cardColor,
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

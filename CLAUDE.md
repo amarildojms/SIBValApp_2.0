@@ -728,6 +728,113 @@ o papel `'recepcao'` gravado no próprio usuário precisa ser marcado de novo
 com o chip "Introdução" em Gerenciar Usuários — o valor antigo no banco não
 foi migrado.
 
+**Banner de aniversário de membresia (fixo, não mais post) + retratação em
+tempo real (25/08/2026):** revisão do que tinha entrado em 24/08/2026 — o
+usuário pediu pra não ser mais um post fixado dentro da lista rolável do
+feed, e sim uma faixa fixa **fora** da lista, igual ao `ownBirthdayBanner`
+original do `HomeFragment.kt`/`fragment_home.xml` nativo (TextView fora do
+RecyclerView, sem curtir/comentar). `HomeFeedPage` virou
+`ConsumerStatefulWidget` (era `ConsumerWidget`) só pra ter `initState` e
+chamar `syncNotificationsForScreen(type: membershipAnniversary)` sem
+`targetId` (mesmo padrão do tipo `birthday`) — a tela em si já basta pra
+marcar como lida/cancelar da barra, sem precisar abrir `PostCommentsPage`.
+`_MembershipAnniversaryBanner` (novo widget privado em `home_feed_page.dart`)
+continua lendo do mesmo documento em `posts` (`postType:
+membership_anniversary`, criado pela Cloud Function) via `postsProvider`
+(`StreamProvider`) — só que agora filtrado pra fora da lista renderizada, não
+dentro dela; `PostCard._buildMembershipAnniversaryCard` foi removido.
+Depois, a pedido do usuário, o banner ficou mais compacto (padding vertical
+16→8, fonte 13, `maxLines: 2` com reticências).
+
+Notificação desse tipo passou a levar pro Início (antes abria
+`PostCommentsPage`, que não faz mais sentido pra uma mensagem sem
+curtir/comentar) — `NotificationType.membershipAnniversary` virou um `case`
+próprio em `notification_navigation.dart` (separado de
+`postLike`/`postComment`): dá `popUntil(isFirst)` e troca a aba do
+`MainShell` pra Início via `ref.read(mainShellTabIndexProvider.notifier)`.
+Isso exigiu abrir mão do campo `_index` local (era um `int` dentro de
+`_MainShellState`) em favor de um `StateProvider<int>` de verdade
+(`mainShellTabIndexProvider`, `homeTabIndex = 2`, ambos top-level em
+`main_shell.dart`) — só assim dava pra trocar a aba de fora da árvore de
+widgets do `MainShell` (de dentro de `navigateForNotificationType`, chamada
+tanto pelo toque na Central quanto pelo toque na notificação do sistema).
+`MainShell` virou `ConsumerWidget` (era `StatefulWidget` com um `Consumer`
+aninhado por dentro) nesse mesmo pente-fino, eliminando o aninhamento
+redundante. Precisa de `import 'package:flutter_riverpod/legacy.dart' show
+StateProvider;` — `StateProvider` não é mais exportado por
+`flutter_riverpod.dart` direto no Riverpod 3.x usado aqui (mesmo padrão já
+usado em `event_filter.dart`/`eventFilterProvider`).
+
+**Retratação em tempo real quando a Secretaria corrige/edita a data de
+membresia** — pedido explícito do usuário ("se alterar a data de membresia
+deve atualizar a mensagem instantaneamente"), com uma investigação em duas
+camadas:
+
+1. Criação (data passa a ser hoje) já funcionava em tempo real — os
+   gatilhos `onMemberCreatedMembershipAnniversaryFeedSync`/
+   `onMemberUpdatedMembershipAnniversaryFeedSync` (`SIBValApp2/functions/index.js`)
+   já estavam deployados desde a sessão de 24/08/2026 (confirmado via
+   `firebase functions:list`, apesar do texto daquela entrada dizer "não fiz
+   deploy" — a nota ficou desatualizada, o deploy aconteceu em algum momento
+   não documentado). `postsProvider` sendo `StreamProvider` já bastava pro
+   cliente refletir na hora.
+2. **Faltava o caminho inverso** (data corrigida pra deixar de ser hoje):
+   nada retratava o post já fixado mais cedo no mesmo dia. Nova
+   `removeMembershipAnniversaryFromFeed(db, memberDoc, birthdayUid)` (espelha
+   `removeEventFromFeed`), chamada de `syncMemberMembershipAnniversaryFeed`
+   quando a data deixa de bater com hoje (ou é removida).
+
+   A primeira versão dessa function confiava só no ponteiro salvo no membro
+   (`membershipAnniversaryFeedPostId`) pra achar o post a apagar — e não
+   funcionou no teste do usuário. Causa raiz, achada por inspeção de código
+   (não pelos logs — `firebase functions:log` se mostrou não-confiável neste
+   ambiente, devolvendo recortes diferentes/incompletos a cada chamada, até
+   pra janelas de tempo idênticas): `MemberRepository.update()`
+   (`lib/data/member_repository.dart`) salvava a edição com `.set(data)`
+   **sem `SetOptions(merge: true)`** — um `set` sem merge sobrescreve o
+   documento inteiro, apagando em silêncio qualquer campo que só a Cloud
+   Function escreve e que não está no mapa `data` do Flutter
+   (`lastMembershipAnniversaryFeedPostDate`, `membershipAnniversaryFeedPostId`,
+   e também `lastBirthdayFeedPostDate` do aniversário de nascimento). Esse
+   bug pré-existia (não foi introduzido nesta sessão) e half-orfanzinhou o
+   post assim que a primeira edição de teste rodou, antes mesmo da function
+   de retratação existir — o ponteiro já tinha sumido do membro quando a
+   function nova foi rodar. Corrigido adicionando `SetOptions(merge: true)`
+   nas duas chamadas de `.set(data)` dentro de `update()` (branch normal e
+   branch de migração de id canônico) — campos explícitos no mapa (inclusive
+   `null`) continuam sobrescrevendo normalmente, merge só preserva o que não
+   está listado.
+
+   Como o ponteiro já podia estar perdido (e podia haver outros órfãos
+   pré-existentes de testes anteriores), `removeMembershipAnniversaryFromFeed`
+   foi reescrita pra **não depender do ponteiro**: consulta `posts` direto
+   por `postType == "membership_anniversary" && targetId == birthdayUid` e
+   apaga qualquer resultado — autorrecuperável, limpa órfãos de qualquer
+   origem, não só os futuros.
+
+**Deploy feito (mesma sessão, duas rodadas — a segunda corrigindo a
+primeira):** aval explícito do usuário nas duas vezes — `firebase deploy
+--only functions:onMemberCreatedMembershipAnniversaryFeedSync,functions:onMemberUpdatedMembershipAnniversaryFeedSync
+--project sibval-app-project`. Como o gatilho só reage a escritas novas, a
+edição de teste que o usuário já tinha feito antes do segundo deploy não
+reprocessou sozinha — precisou salvar o mesmo membro de novo pra function
+atualizada rodar e limpar o órfão. Confirmado funcionando pelo usuário depois
+disso.
+
+**Fluxo de instalação de build de debug no celular físico (mesma sessão) —
+ver `[[feedback_debug_apk_install_workflow]]` na memória automática do
+Claude Code:** `flutter install` reaproveita silenciosamente o APK antigo em
+`build\app\outputs\flutter-apk\app-debug.apk` sem recompilar, mesmo com
+código-fonte mais novo — já causou um "não funcionou" que na verdade era
+build velha. `flutter run` funciona, mas se o celular já tinha o app de
+produção instalado (assinatura de release), o Android exige desinstalar
+antes de instalar a build de debug (assinatura diferente), o que apaga os
+dados locais e desloga a conta. Fluxo usado a partir de então: `flutter
+build apk --debug` (confirma pelo timestamp do `.apk` que é mais novo que os
+`.dart` editados) seguido de `adb install -r` direto — reinstala no lugar,
+sem apagar dados, contanto que a build anterior já fosse debug (mesma chave
+de assinatura entre builds debug).
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

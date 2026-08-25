@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
 import 'admin/event_email_senders_page.dart';
 import 'admin/manage_ministries_page.dart';
@@ -39,18 +40,22 @@ import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
 import 'widgets/update_gate.dart';
 
+/// Início é a aba central (índice 2), igual ao app original — usado tanto
+/// pelo `NavigationBar` quanto por quem precisa levar o usuário pra lá de
+/// fora da árvore de widgets do `MainShell` (ex.: toque numa notificação de
+/// aniversário de MEMBRESIA, ver `notification_navigation.dart`).
+const homeTabIndex = 2;
+
+/// Aba selecionada do `MainShell` — vira `StateProvider` (em vez de um campo
+/// local em `_MainShellState`) justamente pra permitir essa troca de aba
+/// vinda de fora, via `ref.read(mainShellTabIndexProvider.notifier).state`.
+final mainShellTabIndexProvider = StateProvider<int>((ref) => homeTabIndex);
+
 /// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
 /// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
 /// placeholders "em breve" até as próximas fases da migração.
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerWidget {
   const MainShell({super.key});
-
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int _index = _homeIndex; // Início é a aba central, igual ao app original.
 
   static const _pages = [
     DevotionalsListPage(),
@@ -60,86 +65,86 @@ class _MainShellState extends State<MainShell> {
     _MaisPage(),
   ];
 
-  static const _homeIndex = 2;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final index = ref.watch(mainShellTabIndexProvider);
+    final uid = ref.watch(currentUidProvider);
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    final unreadDevotionalsAsync =
+        uid != null ? ref.watch(unreadDevotionalsCountProvider) : const AsyncValue.data(0);
+    final unreadDevotionals = unreadDevotionalsAsync.asData?.value ?? 0;
+    // Espelha HomeFragment.kt `setUpNotifications()`: pede permissão de
+    // notificação e registra o token FCM assim que há um uid logado. O
+    // próprio serviço deduplica por uid, então chamar em todo build é
+    // seguro.
+    if (uid != null) {
+      ref.read(pushNotificationServiceProvider).requestPermissionAndRegisterToken(uid);
+    }
+    // Bloqueio obrigatório de atualização (21/08/2026) — vale pra qualquer
+    // um, logado ou não, ver `update_gate.dart`.
+    final updateStatus = ref.watch(updateStatusProvider).asData?.value;
+    final versionConfig = ref.watch(appVersionConfigProvider).asData?.value;
+
+    Widget child;
+    if (updateStatus == UpdateStatus.forceBlocked && versionConfig != null) {
+      child = UpdateRequiredPage(config: versionConfig);
+    } else if (uid != null &&
+        profile != null &&
+        (!profile.acceptedTermsOfUse || !profile.acceptedPrivacyPolicy)) {
+      // Contas logadas criadas antes dos Termos de Uso/checkbox de
+      // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
+      // aceitarem — ver `RequiredConsentGatePage`.
+      child = RequiredConsentGatePage(uid: uid, communicationsConsent: profile.communicationsConsent);
+    } else {
+      child = Scaffold(
+        body: Column(
+          children: [
+            const CommunicationsConsentBanner(),
+            const NotificationPermissionBanner(),
+            if (updateStatus == UpdateStatus.graceWarning && versionConfig != null)
+              UpdateAvailableBanner(config: versionConfig),
+            Expanded(
+              child: IndexedStack(index: index, children: _pages),
+            ),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: index,
+          onDestinationSelected: (newIndex) => ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
+          backgroundColor: SibValColors.navyBlue,
+          destinations: [
+            NavigationDestination(
+              icon: Badge(
+                label: Text('$unreadDevotionals'),
+                isLabelVisible: unreadDevotionals > 0,
+                child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
+              ),
+              selectedIcon: Badge(
+                label: Text('$unreadDevotionals'),
+                isLabelVisible: unreadDevotionals > 0,
+                child: const _BoldAssetIcon(
+                  'assets/icons/ic_devocional.png',
+                  size: 26,
+                  color: SibValColors.navyBlueDark,
+                ),
+              ),
+              label: 'Devocionais',
+            ),
+            const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
+            const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
+            const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
+            const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+          ],
+        ),
+      );
+    }
+
     return PopScope(
-      canPop: _index == _homeIndex,
+      canPop: index == homeTabIndex,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) setState(() => _index = _homeIndex);
+        if (!didPop) ref.read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
       },
-      child: Consumer(
-        builder: (context, ref, _) {
-          final uid = ref.watch(currentUidProvider);
-          final profile = ref.watch(currentUserProfileProvider).asData?.value;
-          final unreadDevotionalsAsync = uid != null
-              ? ref.watch(unreadDevotionalsCountProvider)
-              : const AsyncValue.data(0);
-          final unreadDevotionals = unreadDevotionalsAsync.asData?.value ?? 0;
-          // Espelha HomeFragment.kt `setUpNotifications()`: pede permissão de
-          // notificação e registra o token FCM assim que há um uid logado. O
-          // próprio serviço deduplica por uid, então chamar em todo build é
-          // seguro.
-          if (uid != null) {
-            ref.read(pushNotificationServiceProvider).requestPermissionAndRegisterToken(uid);
-          }
-          // Bloqueio obrigatório de atualização (21/08/2026) — vale pra
-          // qualquer um, logado ou não, ver `update_gate.dart`.
-          final updateStatus = ref.watch(updateStatusProvider).asData?.value;
-          final versionConfig = ref.watch(appVersionConfigProvider).asData?.value;
-          if (updateStatus == UpdateStatus.forceBlocked && versionConfig != null) {
-            return UpdateRequiredPage(config: versionConfig);
-          }
-          // Contas logadas criadas antes dos Termos de Uso/checkbox de
-          // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
-          // aceitarem — ver `RequiredConsentGatePage`.
-          if (uid != null && profile != null && (!profile.acceptedTermsOfUse || !profile.acceptedPrivacyPolicy)) {
-            return RequiredConsentGatePage(uid: uid, communicationsConsent: profile.communicationsConsent);
-          }
-          return Scaffold(
-            body: Column(
-              children: [
-                const CommunicationsConsentBanner(),
-                const NotificationPermissionBanner(),
-                if (updateStatus == UpdateStatus.graceWarning && versionConfig != null)
-                  UpdateAvailableBanner(config: versionConfig),
-                Expanded(
-                  child: IndexedStack(index: _index, children: _pages),
-                ),
-              ],
-            ),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (index) => setState(() => _index = index),
-              backgroundColor: SibValColors.navyBlue,
-              destinations: [
-                NavigationDestination(
-                  icon: Badge(
-                    label: Text('$unreadDevotionals'),
-                    isLabelVisible: unreadDevotionals > 0,
-                    child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
-                  ),
-                  selectedIcon: Badge(
-                    label: Text('$unreadDevotionals'),
-                    isLabelVisible: unreadDevotionals > 0,
-                    child: const _BoldAssetIcon(
-                      'assets/icons/ic_devocional.png',
-                      size: 26,
-                      color: SibValColors.navyBlueDark,
-                    ),
-                  ),
-                  label: 'Devocionais',
-                ),
-                const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
-                const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-                const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
-                const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
-              ],
-            ),
-          );
-        },
-      ),
+      child: child,
     );
   }
 }
