@@ -65,9 +65,9 @@ class RecurringEventRepository {
   /// uma futura). Retorna `false` quando ainda não há instância gerada — quem
   /// chamar decide o que fazer (ex.: cair para [update]).
   Future<bool> applyEditToUpcomingInstance(RecurringEvent event) async {
-    final instanceId = await _findUpcomingInstanceId(event.id);
-    if (instanceId == null) return false;
-    await _events.doc(instanceId).update({
+    final doc = await _findUpcomingInstance(event.id);
+    if (doc == null) return false;
+    await doc.reference.update({
       'title': event.title,
       'description': event.description,
       'location': event.location,
@@ -93,20 +93,39 @@ class RecurringEventRepository {
     return _cancelUpcomingInstance(id);
   }
 
-  Future<void> _cancelUpcomingInstance(String recurringEventId) async {
-    final instanceId = await _findUpcomingInstanceId(recurringEventId);
-    if (instanceId == null) return;
-    await _events.doc(instanceId).update({'status': EventStatus.cancelled});
+  /// Instância publicada mais próxima da série, qualquer status — usada pra
+  /// mostrar na lista quando a ocorrência desta semana foi cancelada
+  /// avulsamente (ver [cancelNextOccurrenceOnly]) e oferecer o botão de
+  /// remarcar ([reactivateUpcomingInstance]).
+  Future<Event?> getUpcomingInstance(String recurringEventId) async {
+    final doc = await _findUpcomingInstance(recurringEventId);
+    return doc == null ? null : Event.fromFirestore(doc);
   }
 
-  Future<String?> _findUpcomingInstanceId(String recurringEventId) async {
+  /// Desfaz o cancelamento avulso da próxima ocorrência: volta o `status`
+  /// para `published`. O post some/volta ao feed em tempo real sozinho —
+  /// quem cuida disso é a Cloud Function `onEventUpdatedFeedSync`, que reage
+  /// a qualquer mudança de status no documento do evento.
+  Future<void> reactivateUpcomingInstance(String recurringEventId) async {
+    final doc = await _findUpcomingInstance(recurringEventId);
+    if (doc == null) return;
+    await doc.reference.update({'status': EventStatus.published});
+  }
+
+  Future<void> _cancelUpcomingInstance(String recurringEventId) async {
+    final doc = await _findUpcomingInstance(recurringEventId);
+    if (doc == null) return;
+    await doc.reference.update({'status': EventStatus.cancelled});
+  }
+
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _findUpcomingInstance(String recurringEventId) async {
     final snapshot = await _events
         .where('recurringEventId', isEqualTo: recurringEventId)
         .where('dateTimeMillis', isGreaterThanOrEqualTo: DateTime.now().millisecondsSinceEpoch)
         .orderBy('dateTimeMillis')
         .limit(1)
         .get();
-    return snapshot.docs.firstOrNull?.id;
+    return snapshot.docs.firstOrNull;
   }
 
   /// Exclui a série e também qualquer instância já publicada em `events` para
@@ -132,4 +151,11 @@ final recurringEventRepositoryProvider = Provider<RecurringEventRepository>((ref
 
 final recurringEventsProvider = FutureProvider.autoDispose<List<RecurringEvent>>((ref) {
   return ref.watch(recurringEventRepositoryProvider).getAll();
+});
+
+/// Instância mais próxima de uma série (qualquer status) — usada na lista
+/// pra saber se a ocorrência desta semana está cancelada e mostrar o botão
+/// de remarcar.
+final upcomingRecurringInstanceProvider = FutureProvider.autoDispose.family<Event?, String>((ref, recurringEventId) {
+  return ref.watch(recurringEventRepositoryProvider).getUpcomingInstance(recurringEventId);
 });

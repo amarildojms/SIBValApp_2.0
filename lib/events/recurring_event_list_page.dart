@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../admin/recurring_event_flyer_repository_page.dart';
 import '../data/recurring_event_repository.dart';
 import '../data/user_repository.dart';
+import '../models/event.dart';
 import '../models/recurring_event.dart';
 import '../models/recurring_event_flyer.dart' show recurringEventFlyerCategoryLabel;
 import '../theme/app_theme.dart';
@@ -104,53 +105,90 @@ class _RecurringEventTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hour = event.hour.toString().padLeft(2, '0');
     final minute = event.minute.toString().padLeft(2, '0');
+    final upcomingAsync = ref.watch(upcomingRecurringInstanceProvider(event.id));
+    final upcoming = upcomingAsync.asData?.value;
+    final isCancelledThisWeek = upcoming != null && upcoming.status == EventStatus.cancelled;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () async {
-          await Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => RecurringEventFormPage(recurringEventId: event.id)));
-          ref.invalidate(recurringEventsProvider);
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      event.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () async {
+              await Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => RecurringEventFormPage(recurringEventId: event.id)));
+              ref.invalidate(recurringEventsProvider);
+              ref.invalidate(upcomingRecurringInstanceProvider(event.id));
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${weekdayLabel(event.weekday)}, $hour:$minute',
+                          style: TextStyle(color: context.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          recurringEventFlyerCategoryLabel(event.category),
+                          style: TextStyle(color: context.textTertiary, fontSize: 12),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${weekdayLabel(event.weekday)}, $hour:$minute',
-                      style: TextStyle(color: context.textSecondary, fontSize: 12),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      recurringEventFlyerCategoryLabel(event.category),
-                      style: TextStyle(color: context.textTertiary, fontSize: 12),
-                    ),
-                  ],
-                ),
+                  ),
+                  Switch(
+                    value: event.active,
+                    onChanged: (value) => _onActiveChanged(context, ref, value),
+                  ),
+                ],
               ),
-              Switch(
-                value: event.active,
-                onChanged: (value) => _onActiveChanged(context, ref, value),
-              ),
-            ],
+            ),
           ),
-        ),
+          if (isCancelledThisWeek)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Próxima data cancelada',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _onReactivate(context, ref),
+                    child: const Text('Remarcar'),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
+  }
+
+  Future<void> _onReactivate(BuildContext context, WidgetRef ref) async {
+    await ref.read(recurringEventRepositoryProvider).reactivateUpcomingInstance(event.id);
+    ref.invalidate(upcomingRecurringInstanceProvider(event.id));
   }
 
   Future<void> _onActiveChanged(BuildContext context, WidgetRef ref, bool active) async {
@@ -193,6 +231,7 @@ class _RecurringEventTile extends ConsumerWidget {
         break;
     }
     ref.invalidate(recurringEventsProvider);
+    ref.invalidate(upcomingRecurringInstanceProvider(event.id));
   }
 }
 
