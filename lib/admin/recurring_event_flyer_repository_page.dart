@@ -255,7 +255,19 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: _pickedFlyer != null
                       ? Image.file(_pickedFlyer!, fit: BoxFit.cover)
-                      : Icon(Icons.add_photo_alternate_outlined, color: context.textSecondary, size: 40),
+                      : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add_photo_alternate_outlined, color: context.textSecondary, size: 40),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Proporção recomendada: 16:9',
+                                style: TextStyle(color: context.textSecondary, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
               ),
             ),

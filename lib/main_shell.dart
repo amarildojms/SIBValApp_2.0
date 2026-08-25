@@ -108,33 +108,40 @@ class MainShell extends ConsumerWidget {
             ),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (newIndex) => ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
-          backgroundColor: SibValColors.navyBlue,
-          destinations: [
-            NavigationDestination(
-              icon: Badge(
-                label: Text('$unreadDevotionals'),
-                isLabelVisible: unreadDevotionals > 0,
-                child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
-              ),
-              selectedIcon: Badge(
-                label: Text('$unreadDevotionals'),
-                isLabelVisible: unreadDevotionals > 0,
-                child: const _BoldAssetIcon(
-                  'assets/icons/ic_devocional.png',
-                  size: 26,
-                  color: SibValColors.navyBlueDark,
+        bottomNavigationBar: MediaQuery.withClampedTextScaling(
+          // Telas menores + "Fonte grande" (comum em Samsung/OneUI, já viu
+          // esse tipo de estouro antes no telefone da Recepção) cortavam o
+          // rótulo "Devocionais", o mais longo dos cinco — trava o quanto o
+          // texto da barra pode crescer além do que o layout fixo comporta.
+          maxScaleFactor: 1.15,
+          child: NavigationBar(
+            selectedIndex: index,
+            onDestinationSelected: (newIndex) => ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
+            backgroundColor: SibValColors.navyBlue,
+            destinations: [
+              NavigationDestination(
+                icon: Badge(
+                  label: Text('$unreadDevotionals'),
+                  isLabelVisible: unreadDevotionals > 0,
+                  child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
                 ),
+                selectedIcon: Badge(
+                  label: Text('$unreadDevotionals'),
+                  isLabelVisible: unreadDevotionals > 0,
+                  child: const _BoldAssetIcon(
+                    'assets/icons/ic_devocional.png',
+                    size: 26,
+                    color: SibValColors.navyBlueDark,
+                  ),
+                ),
+                label: 'Devocionais',
               ),
-              label: 'Devocionais',
-            ),
-            const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
-            const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-            const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
-            const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
-          ],
+              const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
+              const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
+              const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
+              const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+            ],
+          ),
         ),
       );
     }
@@ -555,6 +562,22 @@ String? _membershipDurationLabel(DateTime? membershipDate) {
 
 /// Tile em grade (ícone em cima, rótulo embaixo) — espelha o
 /// GridLayoutManager(3) do MoreFragment.kt nativo, estilo "app de banco".
+/// Insere uma quebra de linha manual no espaço mais próximo do meio do
+/// texto, em vez de deixar o `Text` decidir sozinho onde quebrar — assim um
+/// rótulo de duas ou mais palavras (ex.: "Ministérios e Cargos") sempre cai
+/// em duas linhas balanceadas, em vez de ficar numa linha só quando cabe e
+/// quebrar torto quando não cabe. Rótulo de uma palavra só volta inalterado.
+String _forceTwoLineLabel(String label) {
+  final spaceIndexes = [
+    for (var i = 0; i < label.length; i++)
+      if (label[i] == ' ') i,
+  ];
+  if (spaceIndexes.isEmpty) return label;
+  final middle = label.length / 2;
+  final splitAt = spaceIndexes.reduce((a, b) => (a - middle).abs() <= (b - middle).abs() ? a : b);
+  return label.replaceRange(splitAt, splitAt + 1, '\n');
+}
+
 class _MoreTile extends StatelessWidget {
   const _MoreTile({
     this.icon,
@@ -620,7 +643,7 @@ class _MoreTile extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              label,
+              _forceTwoLineLabel(label),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

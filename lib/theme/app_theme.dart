@@ -73,7 +73,8 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             color: Colors.white,
-            fontSize: 12,
+            fontSize: 10.5,
+            letterSpacing: -0.2,
             fontWeight: states.contains(WidgetState.selected) ? FontWeight.bold : FontWeight.normal,
           ),
         ),

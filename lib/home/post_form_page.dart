@@ -128,6 +128,11 @@ class _PostFormPageState extends ConsumerState<PostFormPage> {
                               Icon(Icons.add_photo_alternate_outlined, color: context.textSecondary, size: 32),
                               const SizedBox(height: 8),
                               Text('Adicionar imagem (opcional)', style: TextStyle(color: context.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Proporção recomendada: 16:9',
+                                style: TextStyle(color: context.textSecondary, fontSize: 12),
+                              ),
                             ],
                           ),
                         )

@@ -384,7 +384,16 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
               ? Image.file(_pickedFlyer!, fit: BoxFit.cover)
               : _existingFlyerUrl.isNotEmpty
               ? Image.network(_existingFlyerUrl, fit: BoxFit.cover)
-              : Icon(Icons.add_photo_alternate_outlined, color: context.textSecondary, size: 40),
+              : Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_photo_alternate_outlined, color: context.textSecondary, size: 40),
+                      const SizedBox(height: 4),
+                      Text('Proporção recomendada: 16:9', style: TextStyle(color: context.textSecondary, fontSize: 12)),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
