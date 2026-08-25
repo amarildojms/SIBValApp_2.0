@@ -69,7 +69,7 @@ abstract final class NotificationAudience {
   static const user = 'user';
   static const intercessao = 'intercessao';
 
-  /// Admin ou papel Dirigentes — novo visitante cadastrado pela Recepção
+  /// Admin ou papel Dirigentes — novo visitante cadastrado pela Introdução
   /// (24/08/2026, ver lib/models/visitor.dart).
   static const dirigentes = 'dirigentes';
 }

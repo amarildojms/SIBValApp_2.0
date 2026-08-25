@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/visitor.dart';
 import '../theme/app_theme.dart';
 
-/// Cartões/selo reaproveitados entre `ReceptionPage` (lista de hoje) e
+/// Cartões/selo reaproveitados entre `IntroductionPage` (lista de hoje) e
 /// `ArchivedVisitorsPage` (dias anteriores, agrupados por data) —
 /// 25/08/2026, extraído pra não duplicar a UI entre as duas telas.
 final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
@@ -18,7 +18,7 @@ Future<void> _openWhatsApp(String phone) async {
   await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
-/// Card com dados completos (Recepção/Pastor) — telefone, quando houver,
+/// Card com dados completos (Introdução/Pastor) — telefone, quando houver,
 /// vira link de WhatsApp. Sem `TextDecoration.underline` (25/08/2026: em
 /// algumas fontes/aparelhos — relatado num Samsung — o sublinhado renderizava
 /// alto o bastante pra parecer um traço cortando os dígitos); o ícone de
@@ -40,6 +40,11 @@ class VisitorFullTile extends StatelessWidget {
           children: [
             Text(visitor.church.isEmpty ? 'Não congrega em uma igreja' : visitor.church),
             Text(visitor.firstVisit ? 'Primeira visita' : 'Já visitou antes'),
+            if (visitor.howFoundDetail.isNotEmpty)
+              Text('Como conheceu: ${visitor.howFoundDetail}')
+            else if (visitor.howFoundCategory.isNotEmpty)
+              Text('Como conheceu: ${visitor.howFoundCategory}'),
+            if (visitor.invitedByName.isNotEmpty) Text('Convidado por: ${visitor.invitedByName}'),
             if (visitor.phone.isNotEmpty)
               InkWell(
                 onTap: () => _openWhatsApp(visitor.phone),

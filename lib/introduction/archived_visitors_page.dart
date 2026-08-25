@@ -29,10 +29,11 @@ Map<DateTime, List<T>> _groupByDay<T>(List<T> items, DateTime? Function(T) creat
 }
 
 /// Sem equivalente no app nativo — feature nova (25/08/2026): visitantes de
-/// dias anteriores a hoje (ver `Visitor.isFromToday`/`ReceptionPage`, que só
-/// mostra os do dia), agrupados por data (pedido do usuário). Mesmas regras
-/// de visibilidade/exclusão de `ReceptionPage` — Recepção/Pastor veem dados
-/// completos (Recepção também apaga), Dirigentes só o resumo sem telefone.
+/// dias anteriores a hoje (ver `Visitor.isFromToday`/`IntroductionPage`, que
+/// só mostra os do dia), agrupados por data (pedido do usuário). Mesmas
+/// regras de visibilidade/exclusão de `IntroductionPage` — Introdução/Pastor
+/// veem dados completos (Introdução também apaga), Dirigentes só o resumo
+/// sem telefone.
 class ArchivedVisitorsPage extends ConsumerWidget {
   const ArchivedVisitorsPage({super.key});
 

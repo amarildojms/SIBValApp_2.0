@@ -26,13 +26,13 @@ import 'gallery/album_list_page.dart';
 import 'data/message_repository.dart';
 import 'home/home_feed_page.dart';
 import 'hymnal/hymn_list_page.dart';
+import 'introduction/introduction_page.dart';
 import 'messages/messages_page.dart';
 import 'models/hymn.dart';
 import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
 import 'partners/partners_page.dart';
 import 'prayer/prayer_page.dart';
-import 'reception/reception_page.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_settings_page.dart';
 import 'util/cache_busted_image.dart';
@@ -215,8 +215,10 @@ class _SettingsMailIcon extends StatelessWidget {
 /// Mesa de recepção (ícone `desk_outlined`, que já traz um monitor
 /// embutido no desenho) com um boneco (pessoa) no canto — mesma composição
 /// de `_SettingsMailIcon` acima, só trocando os dois ícones combinados.
-class _ReceptionIcon extends StatelessWidget {
-  const _ReceptionIcon({required this.color});
+/// Nome da classe mantido (ícone continua sendo a "mesa"), só o papel/rótulo
+/// visível virou "Introdução".
+class _IntroductionIcon extends StatelessWidget {
+  const _IntroductionIcon({required this.color});
 
   final Color color;
 
@@ -258,11 +260,11 @@ class _MaisPage extends ConsumerWidget {
     final isAdmin = profile?.isAdmin ?? false;
     final canManageEventos = profile?.canManageEventos ?? false;
     final canViewPrayerRequests = profile?.canViewPrayerRequests ?? false;
-    // NOVO (24/08/2026, unificado numa só tela em 25/08/2026): área
-    // Recepção — o que cada um vê dentro dela depende do papel, ver
-    // reception_page.dart. Um tile só, visível pra quem tem qualquer um dos
-    // três papéis (ou admin).
-    final canAccessReception = (profile?.canRegisterVisitors ?? false) ||
+    // NOVO (24/08/2026, unificado numa só tela em 25/08/2026, papel
+    // renomeado de "Recepção" pra "Introdução" depois): área Introdução — o
+    // que cada um vê dentro dela depende do papel, ver introduction_page.dart.
+    // Um tile só, visível pra quem tem qualquer um dos três papéis (ou admin).
+    final canAccessIntroduction = (profile?.canRegisterVisitors ?? false) ||
         (profile?.canViewVisitorSummaries ?? false) ||
         (profile?.canViewVisitorDetails ?? false);
     final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
@@ -368,12 +370,12 @@ class _MaisPage extends ConsumerWidget {
           label: 'E-mails de eventos',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventEmailSendersPage())),
         ),
-      // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
-      if (canAccessReception)
+      // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
+      if (canAccessIntroduction)
         _MoreTile(
-          customIcon: _ReceptionIcon(color: context.textPrimary),
-          label: 'Recepção',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReceptionPage())),
+          customIcon: _IntroductionIcon(color: context.textPrimary),
+          label: 'Introdução',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IntroductionPage())),
         ),
       // Tier 4 — recursos ainda não implementados.
       const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto', enabled: false, comingSoon: true),

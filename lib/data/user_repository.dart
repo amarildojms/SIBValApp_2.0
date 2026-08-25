@@ -66,8 +66,8 @@ class CurrentUserProfile {
   bool get canManageDevotionals => isAdmin || roles.contains('publicacoes');
   bool get canManagePublications => isAdmin || roles.contains('publicacoes');
 
-  // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
-  bool get canRegisterVisitors => isAdmin || roles.contains('recepcao');
+  // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
+  bool get canRegisterVisitors => isAdmin || roles.contains('introducao');
   bool get canViewVisitorSummaries => isAdmin || roles.contains('dirigentes');
   bool get canViewVisitorDetails => isAdmin || roles.contains('pastor');
 

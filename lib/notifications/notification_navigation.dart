@@ -6,10 +6,10 @@ import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
 import '../home/post_comments_page.dart';
+import '../introduction/introduction_page.dart';
 import '../messages/message_detail_page.dart';
 import '../models/notification.dart';
 import '../prayer/prayer_page.dart';
-import '../reception/reception_page.dart';
 
 /// Roteamento por `type`/`targetId` compartilhado entre o toque num item da
 /// Central de notificações (`NotificationsPage._onTap`) e o toque numa
@@ -45,6 +45,6 @@ void navigateForNotificationType(BuildContext context, {required String type, re
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => MessageDetailPage(messageId: targetId)));
       }
     case NotificationType.visitor:
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReceptionPage()));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IntroductionPage()));
   }
 }

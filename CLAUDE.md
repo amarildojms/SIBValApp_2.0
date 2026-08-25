@@ -544,6 +544,190 @@ Nenhuma mudança de código foi feita; ele precisa criar/editar
 do Android, ex. 25; opcionalmente `latestVersionName`, `androidUrl`,
 `iosUrl`) toda vez que publicar uma nova versão daqui pra frente.
 
+**Post de evento some do feed em tempo real ao ser excluído/cancelado
+(24/08/2026):** simétrico ao `onEventCreatedFeedSync`/`onEventUpdatedFeedSync`
+que já postava em tempo real (reforma de 24/08/2026 acima) — faltava o
+caminho inverso. Só em `SIBValApp2/functions/index.js` (só editei o
+código-fonte — **não fiz `firebase deploy`**, mesma cautela de sempre):
+- Novo helper `removeEventFromFeed(db, eventDoc, evt)` apaga
+  `posts/{evt.feedPostId}` via `recursiveDelete` (post + comentários) e, se
+  `eventDoc` foi passado, limpa `postedToFeed`/`feedPostId` nele.
+- Nova `onEventDeletedFeedSync` (`onDocumentDeleted("events/{eventId}")`):
+  cobre exclusão de evento pontual (`EventRepository.delete`), de série
+  recorrente inteira (`RecurringEventRepository.delete`, que apaga cada
+  instância em `events` antes de apagar o molde) e de qualquer instância
+  apagada avulsa — em todos os casos o documento em `events` some de
+  verdade, o gatilho dispara e remove o post associado, se houver.
+- `syncEventFeedOnWrite` (usada por `onEventUpdatedFeedSync`) ganhou o
+  caminho inverso: antes só tratava `status !== "published"` como "nada a
+  fazer"; agora, se o evento já estava postado (`postedToFeed && feedPostId`)
+  e deixou de ser `"published"`, remove o post do feed. Cobre o pedido
+  específico do usuário — instância recorrente desabilitada só pra aquela
+  semana via `RecurringEventRepository.cancelNextOccurrenceOnly`/
+  `deactivateSeries` (que só faz `status: 'cancelled'` na instância, sem
+  apagar o documento) também tira o post na hora, não só a exclusão de
+  verdade.
+- Como a remoção zera `postedToFeed`, o job `repostUpcomingEventFeedPosts`
+  (roda a cada 15min, filtra `postedToFeed == true`) automaticamente para de
+  tentar repostar um evento cancelado, sem precisar de filtro extra por
+  `status` nele.
+- **Deploy feito na mesma sessão (24/08/2026):** `onEventDeletedFeedSync`
+  (criada) e `onEventUpdatedFeedSync` (atualizada) — aval explícito do
+  usuário pra esse deploy específico, mesmo padrão do caso Recepção
+  (25/08/2026 abaixo). `firebase deploy --only
+  functions:onEventDeletedFeedSync,functions:onEventUpdatedFeedSync
+  --project sibval-app-project`.
+
+**Botão "Remarcar" pra ocorrência recorrente cancelada avulsamente
+(24/08/2026):** o usuário testou o item acima e percebeu a lacuna simétrica —
+`cancelNextOccurrenceOnly`/`deactivateSeries` já existiam (marcam `status:
+'cancelled'` na instância de `events`, sem apagar o documento), mas nada no
+app fazia o caminho inverso: não havia jeito de voltar aquela instância pra
+`published` depois de cancelada. O switch da lista de recorrentes não serve
+pra isso (controla `active` do molde em `recurringEvents`, não o `status` da
+instância — depois de um `cancelNextOccurrenceOnly` ele continua mostrando
+ligado). Perguntado ao usuário como deveria funcionar; escolhida a opção
+"botão dedicado na lista".
+
+- `RecurringEventRepository` (`lib/data/recurring_event_repository.dart`):
+  helper interno renomeado de `_findUpcomingInstanceId` pra
+  `_findUpcomingInstance` (devolve o `QueryDocumentSnapshot`, não só o id,
+  reaproveitado por `applyEditToUpcomingInstance`,
+  `_cancelUpcomingInstance` e os dois métodos novos). Novo
+  `getUpcomingInstance(recurringEventId)` devolve o `Event` da instância mais
+  próxima independente do status; novo `reactivateUpcomingInstance` volta o
+  `status` dela pra `published` — a Cloud Function `onEventUpdatedFeedSync`
+  (já existente, ver item acima) cuida sozinha de repostar no feed em tempo
+  real, sem precisar de nenhum código extra pro caminho de volta. Novo
+  provider `upcomingRecurringInstanceProvider` (`FutureProvider.autoDispose
+  .family<Event?, String>`).
+- `recurring_event_list_page.dart` (`_RecurringEventTile`): quando a
+  instância mais próxima da série está com `status == cancelled`, mostra uma
+  faixa "Próxima data cancelada" com botão "Remarcar" abaixo do card — chama
+  `reactivateUpcomingInstance` e invalida o provider. O mesmo provider é
+  invalidado depois de cancelar (`_onActiveChanged`) e depois de editar via
+  `RecurringEventFormPage` (o `onTap` do card já invalidava
+  `recurringEventsProvider`; ganhou a invalidação do novo provider junto).
+
+**Papel/área "Recepção" renomeada pra "Introdução"; papéis Introdução e
+Dirigentes agora também concedidos automaticamente por ministério; campo
+"Como conheceu a igreja" e sugestão de nome de quem convidou (mesma sessão,
+pedido do usuário):**
+
+- **Rename mecânico "Recepção" → "Introdução", inclusive o papel** (não é só
+  rótulo): `UserRole.recepcao` virou `UserRole.introducao` (valor Firestore
+  também mudou de `'recepcao'` pra `'introducao'` — contas que já tinham o
+  papel antigo perdem o acesso até alguém marcar o chip "Introdução" de novo
+  em `manage_users_page.dart`; não existe migração automática do valor
+  antigo). Pasta `lib/reception/` virou `lib/introduction/` (`git mv`),
+  `reception_page.dart` virou `introduction_page.dart`,
+  `ReceptionPage`/`_ReceptionPageState` viraram `IntroductionPage`/
+  `_IntroductionPageState`. Em `main_shell.dart`: `_ReceptionIcon` virou
+  `_IntroductionIcon` (mesmo desenho — mesa + boneco —, só o nome da classe e
+  o rótulo do tile mudaram), `canAccessReception` virou
+  `canAccessIntroduction`. `SIBValApp2/firestore.rules`: `isRecepcao()` virou
+  `isIntroducao()` (`hasRole('introducao')`), usada em `visitors`/
+  `visitorSummaries`. **Editei só o código-fonte das regras — não fiz
+  `firebase deploy`**, mesma cautela de sempre; até o deploy, as regras em
+  produção ainda checam `'recepcao'` (então o rename fica incompleto em
+  produção — ver decisão de deploy pendente no fim desta entrada).
+
+- **Papéis Introdução e Dirigentes concedidos/revogados automaticamente por
+  ministério** (`SIBValApp2/functions/index.js`, só código-fonte, sem
+  deploy): novo `MINISTRY_ROLE_SYNC` (`introducao` ⟵ ministério "Introdução";
+  `dirigentes` ⟵ ministério "Dirigente" ou "Dirigentes", singular/plural
+  aceitos) e `syncMemberMinistryRoles`, chamada por dois novos triggers
+  (`onMemberCreatedMinistryRoleSync`/`onMemberUpdatedMinistryRoleSync`, mesmo
+  padrão dos outros pares create/update em `members/{memberId}`). Recalcula
+  do zero a cada escrita no membro (não diffa antes/depois) comparando os
+  nomes em `member.ministries[].ministryName` — normalizado via `normalizeKey`
+  (helper já existente no arquivo, reaproveitado em vez de duplicado) — contra
+  a lista acima; ganha o papel quem entra no ministério, perde quem sai,
+  idempotente nas demais escritas. O nome do ministério é texto livre
+  (`ManageMinistriesPage`) — o sync só funciona se o admin/Secretaria criar
+  literalmente um ministério chamado "Introdução" e outro "Dirigente(s)" e
+  atribuir os membros a ele em `members_page.dart`; não há vínculo
+  estrutural, só comparação de string normalizada.
+  `findLinkedUserUid` (já existente, usada pelo aniversário de membresia)
+  ganhou prioridade pro campo `member.linkedUid` antes de cair pro match por
+  e-mail — mais confiável, e é o que faz o sync funcionar mesmo pra um membro
+  que só ganhou `linkedUid` depois de já estar no ministério (aprovação de
+  cadastro posterior ao cadastro manual pela Secretaria), já que a função
+  recalcula do zero a cada escrita.
+  **Sem backfill**: quem já estava num desses ministérios antes desta
+  mudança só ganha o papel na próxima vez que o documento do membro for
+  escrito de novo (reatribuir o ministério, editar o membro, etc.) — não
+  rodei nenhum script de migração one-off pros já cadastrados.
+
+- **Campo "Como conheceu a igreja" no cadastro de visitante**
+  (`introduction_page.dart`), **revisado três vezes na mesma sessão**:
+  1. Versão original: categoria→detalhe em dois `DropdownButtonFormField`
+     em cascata, campo opcional.
+  2. Virou **um dropdown só** (`DropdownButtonFormField<String>`,
+     `isExpanded: true`), **obrigatório** (`_howFoundError`, mesmo padrão do
+     campo Nome), com todas as opções agrupadas por categoria via
+     `DropdownMenuItem` com `enabled: false` fazendo de cabeçalho não
+     selecionável — "Membro da Igreja" destacado em primeiro lugar, antes
+     de qualquer cabeçalho (pedido do usuário — é o caso mais comum), com
+     o emblema da igreja (`assets/images/icon_sibval.png`, mesmo ícone da
+     tela de login) ao lado do texto.
+  3. Cabeçalhos de categoria removidos a pedido do usuário — virou lista
+     plana única, sem agrupamento visual (`howFoundChurchOptions` direto,
+     sem `howFoundChurchCategoryOrder`, que foi removido do catálogo por
+     ter ficado sem uso).
+  Em todas as versões, `howFoundCategory` continua gravado a partir de
+  `HowFoundChurchOption.category` (`lib/util/how_found_church_options.dart`)
+  mesmo sem aparecer mais na UI — "Membro da Igreja" grava
+  `howFoundCategory: 'Indicação'` por baixo. Categorias/opções: Internet
+  (Instagram/Google), Indicação (Membro da Igreja/Familiar/Amigo),
+  Comunidade (Evento/Convite/Culto/Evangelismo), Outros (item único, sem
+  sub-detalhe). `Visitor` (`lib/models/visitor.dart`) tem
+  `howFoundCategory`/`howFoundDetail`/`invitedByName` — os dois primeiros
+  são campos String simples no model (obrigatoriedade é só de UI, o model
+  não força). `VisitorRepository.registerVisitor` e `VisitorFullTile`
+  (`visitor_tiles.dart`) inalterados desde a primeira versão. Não entrou em
+  `VisitorSummary`/`visitorSummaries` (papel Dirigentes) — fora do pedido,
+  mantido igual.
+
+- **Sugestão de nomes em "Convidado por"**: campo só aparece quando a opção
+  escolhida é "Membro da Igreja" (`howFoundChurchInvitedByDetail`) —
+  `_InvitedByField`, um `Autocomplete<String>` (`textEditingController`
+  externo, pra poder ler `.text` no `_submit` igual aos outros campos).
+  **Bug real relatado pelo usuário** (o "erro ao selecionar Membro da
+  Igreja" — a suspeita inicial de `DropdownButtonFormField` acima estava
+  errada): `Autocomplete`/`RawAutocomplete` exige que, se
+  `textEditingController` for passado, um `focusNode` também seja — doc
+  do `RawAutocomplete`: "the main purpose... is to allow the use of a
+  separate text field..." — faltava o `focusNode`, e o widget quebrava
+  (`assert((focusNode == null) == (textEditingController == null))` em
+  `flutter/src/widgets/autocomplete.dart`, exatamente o arquivo que apareceu
+  no erro). Corrigido adicionando `_invitedByFocusNode` (`FocusNode`,
+  mesmo padrão de `_nameFocusNode`) em `_IntroductionPageState`, passado
+  pra `_InvitedByField` junto do controller e repassado pro `Autocomplete`.
+  Fonte das sugestões: `membersProvider` (`lib/data/member_repository.dart`,
+  já existente, `StreamProvider` em tempo real sobre `members`) — **não**
+  criei coleção/Cloud Function nova pra isso. Decisão: a coleção `members`
+  sozinha já cobre "membros/usuários cadastrados" (pedido literal do
+  usuário), porque todo cadastro de usuário aprovado também vira um `Member`
+  (`MemberRepository.upsertFromUser`, chamado em `ManageUsersViewModel`/
+  `manage_users_page.dart` ao aprovar) — e `members` já tem `read` liberado
+  a qualquer autenticado em `firestore.rules`, ao contrário de `users`
+  (`list` é admin-only, então uma sugestão baseada em `users` exigiria afrouxar
+  essa regra ou criar uma Cloud Function/coleção espelho só pra nomes —
+  evitado por ser desproporcional ao pedido). Comparação case/acento-
+  insensível via `_normalizeName` (helper local no arquivo, só troca as
+  vogais acentuadas/ç/ñ mais comuns em português — sem pacote novo).
+
+**Deploy feito (mesma sessão):** aval explícito do usuário —
+`firebase deploy --only
+firestore:rules,functions:onMemberCreatedMinistryRoleSync,functions:onMemberUpdatedMinistryRoleSync
+--project sibval-app-project`. As regras em produção já checam
+`'introducao'` (não mais `'recepcao'`) e os dois triggers de sincronização
+por ministério já estão ativos. Continua valendo o aviso acima: quem tinha
+o papel `'recepcao'` gravado no próprio usuário precisa ser marcado de novo
+com o chip "Introdução" em Gerenciar Usuários — o valor antigo no banco não
+foi migrado.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

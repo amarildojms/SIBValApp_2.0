@@ -215,8 +215,12 @@ class _UserCard extends ConsumerWidget {
                   _RoleChip(label: 'Intercessão', role: UserRole.intercessao, user: user),
                   _RoleChip(label: 'Eventos', role: UserRole.eventos, user: user),
                   _RoleChip(label: 'Publicações', role: UserRole.publicacoes, user: user),
-                  // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
-                  _RoleChip(label: 'Recepção', role: UserRole.recepcao, user: user),
+                  // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
+                  // Também obtido automaticamente por quem entra no ministério
+                  // Introdução (ver functions/index.js: onMemberMinistryRoleSync).
+                  _RoleChip(label: 'Introdução', role: UserRole.introducao, user: user),
+                  // Também obtido automaticamente por quem entra no ministério
+                  // Dirigente(s) (ver functions/index.js: onMemberMinistryRoleSync).
                   _RoleChip(label: 'Dirigentes', role: UserRole.dirigentes, user: user),
                   _RoleChip(label: 'Pastor', role: UserRole.pastor, user: user),
                 ],

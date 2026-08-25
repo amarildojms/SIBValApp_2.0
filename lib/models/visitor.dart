@@ -2,13 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'event.dart' show toSaoPauloTime, toSaoPauloTimeNow;
 
-/// Sem equivalente no app nativo — feature nova (24/08/2026): a Recepção
-/// cadastra o visitante com dados completos em `visitors/{id}`, restrito a
-/// quem tem o papel Recepção (ou admin) e ao papel Pastor (dados completos,
-/// telefone incluso). A Cloud Function `onVisitorCreated`
-/// (`SIBValApp2/functions/index.js`) espelha um subconjunto sem telefone em
-/// `visitorSummaries/{id}` (mesmo id) — é o que o papel Dirigentes lê, além
-/// de notificar Dirigentes/admin imediatamente. Ver `VisitorSummary` abaixo.
+/// Sem equivalente no app nativo — feature nova (24/08/2026): a Introdução
+/// (papel renomeado de "Recepção") cadastra o visitante com dados completos
+/// em `visitors/{id}`, restrito a quem tem o papel Introdução (ou admin) e
+/// ao papel Pastor (dados completos, telefone incluso). A Cloud Function
+/// `onVisitorCreated` (`SIBValApp2/functions/index.js`) espelha um
+/// subconjunto sem telefone em `visitorSummaries/{id}` (mesmo id) — é o que
+/// o papel Dirigentes lê, além de notificar Dirigentes/admin imediatamente.
+/// Ver `VisitorSummary` abaixo. `howFoundCategory`/`howFoundDetail`
+/// (catálogo em `lib/util/how_found_church_options.dart`) e `invitedByName`
+/// (autocompletado contra `members`, só quando o detalhe é "Membro da
+/// Igreja") são opcionais, adicionados depois.
 class Visitor {
   final String id;
   final String name;
@@ -17,6 +21,9 @@ class Visitor {
   final bool firstVisit;
   final DateTime? createdAt;
   final String createdByUid;
+  final String howFoundCategory;
+  final String howFoundDetail;
+  final String invitedByName;
 
   const Visitor({
     required this.id,
@@ -26,6 +33,9 @@ class Visitor {
     required this.firstVisit,
     required this.createdAt,
     required this.createdByUid,
+    this.howFoundCategory = '',
+    this.howFoundDetail = '',
+    this.invitedByName = '',
   });
 
   factory Visitor.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -38,6 +48,9 @@ class Visitor {
       firstVisit: data['firstVisit'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       createdByUid: data['createdByUid'] as String? ?? '',
+      howFoundCategory: data['howFoundCategory'] as String? ?? '',
+      howFoundDetail: data['howFoundDetail'] as String? ?? '',
+      invitedByName: data['invitedByName'] as String? ?? '',
     );
   }
 

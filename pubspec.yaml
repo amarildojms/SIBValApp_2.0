@@ -27,7 +27,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # "arquivam" no dia seguinte (lista só mostra os de hoje, arquivados
 # agrupados por data numa tela própria), bloqueio/aviso de atualização
 # obrigatória agora configurado via settings/appVersion no Firestore.
-version: 1.4.0+26
+version: 1.5.0+27
 
 environment:
   sdk: ^3.13.0

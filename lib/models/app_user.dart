@@ -100,8 +100,11 @@ abstract final class UserRole {
   static const eventos = 'eventos';
   static const publicacoes = 'publicacoes';
 
-  // NOVO (24/08/2026): área Recepção — ver lib/models/visitor.dart.
-  static const recepcao = 'recepcao';
+  // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
+  // Renomeado de "recepcao" pra "introducao" (pedido do usuário, mesma sessão
+  // da sincronização automática de papéis por ministério, ver
+  // functions/index.js: onMemberMinistryRoleSync).
+  static const introducao = 'introducao';
   static const dirigentes = 'dirigentes';
   static const pastor = 'pastor';
 }

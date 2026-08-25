@@ -24,6 +24,9 @@ class VisitorRepository {
     required String church,
     required bool firstVisit,
     required String createdByUid,
+    String howFoundCategory = '',
+    String howFoundDetail = '',
+    String invitedByName = '',
   }) {
     return _visitors.add({
       'name': name,
@@ -32,10 +35,13 @@ class VisitorRepository {
       'firstVisit': firstVisit,
       'createdByUid': createdByUid,
       'createdAt': FieldValue.serverTimestamp(),
+      'howFoundCategory': howFoundCategory,
+      'howFoundDetail': howFoundDetail,
+      'invitedByName': invitedByName,
     });
   }
 
-  /// Lista completa (Recepção corrigindo o que ela mesma cadastrou, e
+  /// Lista completa (Introdução corrigindo o que ela mesma cadastrou, e
   /// Pastor com acesso de leitura aos dados completos) — só os visitantes de
   /// hoje (25/08/2026, pedido do usuário: "arquivar" no dia seguinte, ver
   /// `Visitor.isFromToday`). Os cadastros de dias anteriores continuam no
@@ -78,8 +84,8 @@ class VisitorRepository {
         .map((s) => s.docs.map(VisitorSummary.fromFirestore).where((v) => !v.isFromToday).toList());
   }
 
-  /// Apaga os dois docs (completo + resumo) — só a Recepção corrige/remove
-  /// um cadastro feito por engano; ver `firestore.rules` (`isRecepcao()`
+  /// Apaga os dois docs (completo + resumo) — só a Introdução corrige/remove
+  /// um cadastro feito por engano; ver `firestore.rules` (`isIntroducao()`
   /// também libera `delete` em `visitorSummaries`, exclusivamente pra isso).
   Future<void> deleteVisitor(String id) async {
     final batch = _firestore.batch();
