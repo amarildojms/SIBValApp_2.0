@@ -57,6 +57,7 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
   String? _nameError;
   String? _howFoundValue;
   String? _howFoundError;
+  String? _invitedByError;
 
   @override
   void initState() {
@@ -85,10 +86,16 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
     if (_howFoundValue == null) {
       hasError = true;
     }
+    final invitedByRequired =
+        _howFoundValue == howFoundChurchInvitedByDetail && _invitedByController.text.trim().isEmpty;
+    if (invitedByRequired) {
+      hasError = true;
+    }
     if (hasError) {
       setState(() {
         _nameError = name.isEmpty ? 'Informe o nome do visitante.' : null;
         _howFoundError = _howFoundValue == null ? 'Selecione como conheceu a igreja.' : null;
+        _invitedByError = invitedByRequired ? 'Informe o nome de quem convidou.' : null;
       });
       return;
     }
@@ -99,6 +106,7 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
       _sending = true;
       _nameError = null;
       _howFoundError = null;
+      _invitedByError = null;
     });
     _scrollController.scrollToSaveButton();
     try {
@@ -260,12 +268,22 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
                       onChanged: (value) => setState(() {
                         _howFoundValue = value;
                         _howFoundError = null;
-                        if (value != howFoundChurchInvitedByDetail) _invitedByController.clear();
+                        if (value != howFoundChurchInvitedByDetail) {
+                          _invitedByController.clear();
+                          _invitedByError = null;
+                        }
                       }),
                     ),
                     if (_howFoundValue == howFoundChurchInvitedByDetail) ...[
                       const SizedBox(height: 12),
-                      _InvitedByField(controller: _invitedByController, focusNode: _invitedByFocusNode),
+                      _InvitedByField(
+                        controller: _invitedByController,
+                        focusNode: _invitedByFocusNode,
+                        errorText: _invitedByError,
+                        onChanged: () {
+                          if (_invitedByError != null) setState(() => _invitedByError = null);
+                        },
+                      ),
                     ],
                     const SizedBox(height: 12),
                     Text('Primeira visita', style: TextStyle(color: context.textPrimary)),
@@ -416,10 +434,17 @@ class _SummaryVisitorList extends ConsumerWidget {
 /// dentro do mesmo `Column` do campo — sem overlay, sem `LayerLink`, sem
 /// jeito de "não aparecer": ou tem `matches`, e a lista desenha, ou não tem.
 class _InvitedByField extends ConsumerStatefulWidget {
-  const _InvitedByField({required this.controller, required this.focusNode});
+  const _InvitedByField({
+    required this.controller,
+    required this.focusNode,
+    this.errorText,
+    this.onChanged,
+  });
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final String? errorText;
+  final VoidCallback? onChanged;
 
   @override
   ConsumerState<_InvitedByField> createState() => _InvitedByFieldState();
@@ -440,7 +465,10 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
     super.dispose();
   }
 
-  void _onChanged() => setState(() {});
+  void _onChanged() {
+    setState(() {});
+    widget.onChanged?.call();
+  }
 
   List<String> _matches(List<Member> members) {
     final query = _normalizeName(widget.controller.text);
@@ -491,8 +519,9 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
           controller: widget.controller,
           focusNode: widget.focusNode,
           decoration: InputDecoration(
-            labelText: 'Convidado por (opcional)',
+            labelText: 'Convidado por',
             hintText: 'Nome de quem convidou',
+            errorText: widget.errorText,
             border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
             filled: true,
             fillColor: Theme.of(context).cardColor,
