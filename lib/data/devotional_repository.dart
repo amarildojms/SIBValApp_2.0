@@ -51,6 +51,11 @@ class DevotionalRepository {
     required DateTime date,
     required String text,
     required String author,
+    int? baseBookId,
+    String baseBookName = '',
+    int? baseChapter,
+    int? baseVerseStart,
+    int? baseVerseEnd,
   }) {
     final doc = _devotionals.doc();
     return doc.set({
@@ -60,6 +65,11 @@ class DevotionalRepository {
       'text': text,
       'author': author,
       'readBy': <String>[],
+      'baseBookId': baseBookId,
+      'baseBookName': baseBookName,
+      'baseChapter': baseChapter,
+      'baseVerseStart': baseVerseStart,
+      'baseVerseEnd': baseVerseEnd,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -70,6 +80,11 @@ class DevotionalRepository {
     required DateTime date,
     required String text,
     required String author,
+    int? baseBookId,
+    String baseBookName = '',
+    int? baseChapter,
+    int? baseVerseStart,
+    int? baseVerseEnd,
   }) {
     return _devotionals.doc(id).update({
       'title': title,
@@ -77,6 +92,11 @@ class DevotionalRepository {
       'dateMillis': date.millisecondsSinceEpoch,
       'text': text,
       'author': author,
+      'baseBookId': baseBookId,
+      'baseBookName': baseBookName,
+      'baseChapter': baseChapter,
+      'baseVerseStart': baseVerseStart,
+      'baseVerseEnd': baseVerseEnd,
     });
   }
 

@@ -80,7 +80,9 @@ class DevotionalsListPage extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     title: Text(
-                      devotional.title,
+                      devotional.baseReference == null
+                          ? devotional.title
+                          : '${devotional.title} (${devotional.baseReference})',
                       style: TextStyle(color: color, fontWeight: isUnread ? FontWeight.bold : FontWeight.normal),
                     ),
                     subtitle: Text(

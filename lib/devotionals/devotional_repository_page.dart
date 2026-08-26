@@ -84,7 +84,12 @@ class DevotionalRepositoryPage extends ConsumerWidget {
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
-                          title: Text(devotional.title, style: TextStyle(color: context.textPrimary)),
+                          title: Text(
+                            devotional.baseReference == null
+                                ? devotional.title
+                                : '${devotional.title} (${devotional.baseReference})',
+                            style: TextStyle(color: context.textPrimary),
+                          ),
                           subtitle: Text(
                             '${_dateFormat.format(DateTime.fromMillisecondsSinceEpoch(devotional.dateMillis))} — ${devotional.author}',
                             style: TextStyle(color: context.textSecondary),

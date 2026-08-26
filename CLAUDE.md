@@ -835,6 +835,69 @@ build apk --debug` (confirma pelo timestamp do `.apk` que é mais novo que os
 sem apagar dados, contanto que a build anterior já fosse debug (mesma chave
 de assinatura entre builds debug).
 
+**Campo "Texto base" (livro/capítulo/versículo) no cadastro de devocional
+(26/08/2026):** sem equivalente no `Devotional.kt` nativo — feature nova,
+pedida direto pra este app. `Devotional` (`lib/models/devotional.dart`)
+ganhou `baseBookId`/`baseBookName`/`baseChapter`/`baseVerse` (todos
+opcionais/nulos) e o getter `baseReference` ("Livro capítulo:versículo",
+`null` se algum dos três não foi preenchido). `DevotionalRepository.create`/
+`update` (`lib/data/devotional_repository.dart`) gravam os quatro campos —
+`update` já usava `.update()` (merge automático por campo, sem o risco do
+bug de `.set()` sem `SetOptions(merge: true)` já documentado em
+`members`/`MemberRepository`, ver `[[feedback_firestore_set_merge_and_log_verification]]`
+na memória automática).
+
+`DevotionalFormPage` (`lib/devotionals/devotional_form_page.dart`) ganhou o
+campo "Texto base" logo abaixo do Título: `_BaseBookField` (livro digitável
+com sugestões — mesmo padrão embutido-na-árvore de `_InvitedByField` em
+`introduction_page.dart`, escolhido de propósito em vez de `Autocomplete`,
+que já causou um bug de assert nesta base) alimentado por
+`bibleBooksProvider`; `_ChapterDropdown`/`_VerseDropdown` (dropdowns comuns)
+alimentados por `bibleChapterCountProvider`/`bibleVersesProvider` — mesmas
+fontes já usadas pela aba Bíblia (`lib/data/bible_repository.dart`), sem
+tabela nova. Capítulo só habilita depois do livro resolvido (seleção na
+lista de sugestões, ou nome digitado que bate exatamente com um livro ao
+perder o foco); versículo só depois do capítulo. Campo opcional — não
+preencher os três deixa a devocional sem texto base, sem bloquear o salvar.
+
+Exibição: `DevotionalsListPage`/`DevotionalRepositoryPage` mostram
+"Título (Livro cap:vers)" quando há texto base; `DevotionalDetailPage`
+mostra o texto base como segunda linha, abaixo do título, dentro do
+`_DevotionalHeader` fixo (não rola com o texto). Em
+`SIBValApp2/functions/index.js`, `postDevotionalToFeed` também compõe
+"Título (Livro cap:vers)" no texto do post automático do feed — **só editei
+o código-fonte, não fiz `firebase deploy`**, mesma cautela de sempre.
+
+Ajustes na mesma sessão, todos a pedido do usuário: Livro/Capítulo/Versículo
+foram pra uma linha só (`Row` com `Expanded`, flex 3/2/2/2); a lista de
+sugestões de livro passou a usar `Theme.of(context).canvasColor` em vez de
+`cardColor`, pra bater com a cor que `DropdownButtonFormField` já usa por
+padrão no popup de Capítulo/Versículo (confirmado no código-fonte do
+Flutter: sem `dropdownColor` explícito, os dois caem em
+`ThemeData.canvasColor` — não precisou fixar nenhuma cor à mão, só trocar
+qual cor do tema cada um lê); os três campos ganharam
+`floatingLabelBehavior: FloatingLabelBehavior.always` pro rótulo já nascer
+no topo da caixa, sem esperar uma seleção.
+
+**Versículo virou uma faixa "de... até..." (27/08/2026):** `baseVerse`
+(campo único) virou `baseVerseStart`/`baseVerseEnd` em
+`lib/models/devotional.dart` — `baseReference` formata `Livro cap:5` quando
+`end == start` e `Livro cap:5-8` numa faixa de verdade.
+`DevotionalRepository.create`/`update` gravam os dois campos.
+`DevotionalFormPage`: o dropdown único de Versículo virou dois
+(`_VerseDropdown` ganhou `label`/`minValue`) — "De" lista todos os
+versículos do capítulo; "Até" só habilita depois de "De" escolhido (recebe
+`bookId`/`chapter` nulos até lá, o que zera a lista de itens e desabilita o
+dropdown) e só lista números `>= minValue` (o valor de "De"), pra nunca
+montar uma faixa invertida. Selecionar "De" também preenche "Até" com o
+mesmo valor por padrão — continua bastando um toque pra versículo único, sem
+forçar o usuário a tocar em "Até" nesse caso comum. Leitura com fallback:
+`Devotional.fromFirestore` cai pro campo antigo `baseVerse` se
+`baseVerseStart` não existir (nenhuma devocional de produção tinha esse
+campo ainda, mas o fallback é grátis). Mesmo fallback e mesma faixa
+replicados em `postDevotionalToFeed`
+(`SIBValApp2/functions/index.js`, só código-fonte, sem deploy).
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

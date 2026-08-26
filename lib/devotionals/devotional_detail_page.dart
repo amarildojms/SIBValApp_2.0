@@ -89,6 +89,7 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
                   children: [
                     _DevotionalHeader(
                       title: devotional.title,
+                      baseReference: devotional.baseReference,
                       onDecreaseFont: () => _changeFontSize(-_fontSizeStep),
                       onIncreaseFont: () => _changeFontSize(_fontSizeStep),
                       onShare: () => _share(devotional),
@@ -148,12 +149,14 @@ class _DevotionalDetailPageState extends ConsumerState<DevotionalDetailPage> {
 class _DevotionalHeader extends StatelessWidget {
   const _DevotionalHeader({
     required this.title,
+    required this.baseReference,
     required this.onDecreaseFont,
     required this.onIncreaseFont,
     required this.onShare,
   });
 
   final String title;
+  final String? baseReference;
   final VoidCallback onDecreaseFont;
   final VoidCallback onIncreaseFont;
   final VoidCallback onShare;
@@ -168,9 +171,25 @@ class _DevotionalHeader extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                title,
-                style: TextStyle(color: context.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(color: context.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  if (baseReference != null)
+                    Text(
+                      baseReference!,
+                      style: const TextStyle(
+                        color: SibValColors.goldAccent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                ],
               ),
             ),
             IconButton(
