@@ -11,9 +11,11 @@ class VisitorRepository {
 
   final FirebaseFirestore _firestore;
 
-  CollectionReference<Map<String, dynamic>> get _visitors => _firestore.collection('visitors');
+  CollectionReference<Map<String, dynamic>> get _visitors =>
+      _firestore.collection('visitors');
 
-  CollectionReference<Map<String, dynamic>> get _summaries => _firestore.collection('visitorSummaries');
+  CollectionReference<Map<String, dynamic>> get _summaries =>
+      _firestore.collection('visitorSummaries');
 
   /// Cria só o doc completo (`visitors/{id}`) — a Cloud Function
   /// `onVisitorCreated` espelha o resumo em `visitorSummaries` e notifica
@@ -27,6 +29,7 @@ class VisitorRepository {
     String howFoundCategory = '',
     String howFoundDetail = '',
     String invitedByName = '',
+    List<String> companions = const [],
   }) {
     return _visitors.add({
       'name': name,
@@ -38,6 +41,7 @@ class VisitorRepository {
       'howFoundCategory': howFoundCategory,
       'howFoundDetail': howFoundDetail,
       'invitedByName': invitedByName,
+      'companions': companions,
     });
   }
 
@@ -51,7 +55,12 @@ class VisitorRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) => s.docs.map(Visitor.fromFirestore).where((v) => v.isFromToday).toList());
+        .map(
+          (s) => s.docs
+              .map(Visitor.fromFirestore)
+              .where((v) => v.isFromToday)
+              .toList(),
+        );
   }
 
   /// Recorte sem telefone (papel Dirigentes) — `visitorSummaries`, mantido
@@ -61,7 +70,12 @@ class VisitorRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) => s.docs.map(VisitorSummary.fromFirestore).where((v) => v.isFromToday).toList());
+        .map(
+          (s) => s.docs
+              .map(VisitorSummary.fromFirestore)
+              .where((v) => v.isFromToday)
+              .toList(),
+        );
   }
 
   /// Visitantes "arquivados" — dias anteriores a hoje (25/08/2026, ver
@@ -72,7 +86,12 @@ class VisitorRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) => s.docs.map(Visitor.fromFirestore).where((v) => !v.isFromToday).toList());
+        .map(
+          (s) => s.docs
+              .map(Visitor.fromFirestore)
+              .where((v) => !v.isFromToday)
+              .toList(),
+        );
   }
 
   /// Recorte sem telefone dos arquivados (papel Dirigentes).
@@ -81,7 +100,12 @@ class VisitorRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) => s.docs.map(VisitorSummary.fromFirestore).where((v) => !v.isFromToday).toList());
+        .map(
+          (s) => s.docs
+              .map(VisitorSummary.fromFirestore)
+              .where((v) => !v.isFromToday)
+              .toList(),
+        );
   }
 
   /// Apaga os dois docs (completo + resumo) — só a Introdução corrige/remove
@@ -103,14 +127,18 @@ final visitorsProvider = StreamProvider.autoDispose<List<Visitor>>((ref) {
   return ref.watch(visitorRepositoryProvider).watchAll();
 });
 
-final visitorSummariesProvider = StreamProvider.autoDispose<List<VisitorSummary>>((ref) {
-  return ref.watch(visitorRepositoryProvider).watchSummaries();
-});
+final visitorSummariesProvider =
+    StreamProvider.autoDispose<List<VisitorSummary>>((ref) {
+      return ref.watch(visitorRepositoryProvider).watchSummaries();
+    });
 
-final archivedVisitorsProvider = StreamProvider.autoDispose<List<Visitor>>((ref) {
+final archivedVisitorsProvider = StreamProvider.autoDispose<List<Visitor>>((
+  ref,
+) {
   return ref.watch(visitorRepositoryProvider).watchArchived();
 });
 
-final archivedVisitorSummariesProvider = StreamProvider.autoDispose<List<VisitorSummary>>((ref) {
-  return ref.watch(visitorRepositoryProvider).watchArchivedSummaries();
-});
+final archivedVisitorSummariesProvider =
+    StreamProvider.autoDispose<List<VisitorSummary>>((ref) {
+      return ref.watch(visitorRepositoryProvider).watchArchivedSummaries();
+    });

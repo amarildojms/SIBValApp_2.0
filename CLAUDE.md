@@ -1040,6 +1040,127 @@ vermelho→laranja de 0% a 50%, laranja→verde de 50% a 100%) em vez de um
 do caminho. Só a cor do anel muda — o texto "`$percent%`" continua branco,
 pra manter contraste sobre o fundo `navyBlueLight`.
 
+**Cadastro de família na Introdução — campo "Acompanhantes"
+(27/08/2026, pedido do usuário):** sem equivalente no nativo. Visita em
+família não virou um `Visitor` por pessoa (opção descartada: um `groupId`
+ligando N documentos) — continua **1 documento por visita**
+(`visitors/{id}`), com os dados completos (telefone, igreja, como conheceu,
+convidado por) de só um responsável, e um novo campo `companions: List<String>`
+guardando só os nomes dos demais familiares que vieram junto, sem telefone
+nem nenhum outro dado deles. Decisão registrada no doc comment de `Visitor`
+(`lib/models/visitor.dart`): a granularidade por pessoa não se paga porque o
+app não tem (e não pediu) nenhuma estatística de contagem individual de
+visitantes.
+
+`IntroductionPage` (`lib/introduction/introduction_page.dart`) ganhou uma
+lista dinâmica de campos "Nome do acompanhante" (`_companionControllers`,
+`+`/`x` pra adicionar/remover), logo abaixo do campo Igreja e antes de "Como
+conheceu a igreja" — a pergunta de como conheceu e quem convidou vale pra
+família inteira, respondida uma vez só. `VisitorRepository.registerVisitor`
+ganhou o parâmetro `companions` (grava a lista direto, sem filtrar vazio —
+quem filtra nomes em branco antes de montar a lista é a tela). `VisitorSummary`
+(o que o papel Dirigentes lê) também ganhou `companions` — só nomes, sem
+telefone de ninguém, então não fere o motivo de `visitorSummaries` existir
+separado de `visitors`. `VisitorFullTile`/`VisitorSummaryTile`
+(`visitor_tiles.dart`) mostram "Acompanhantes: nome1, nome2" quando a lista
+não é vazia.
+
+Em `SIBValApp2/functions/index.js`, `onVisitorCreated` passou a espelhar
+`companions` em `visitorSummaries` e a acrescentar "(+N da família)" no
+texto da notificação push/central pra Dirigentes/Pastor/admin — **só editei
+o código-fonte, não fiz `firebase deploy`**, mesma cautela de sempre.
+
+**Ajuste de posição/destaque dos acompanhantes (mesma sessão, pedido do
+usuário):** a linha "Acompanhantes: ..." tinha ficado dentro do `subtitle`
+do `ListTile`, misturada com igreja/telefone/data — sem destaque visual e
+longe do nome. Movida pra dentro do `title` (`_CompanionsLine`, widget novo
+e compartilhado em `visitor_tiles.dart`), logo abaixo do nome do visitante
+principal, como "Com: fulano, ciclano" em negrito — tanto em
+`VisitorFullTile` (Introdução/Pastor) quanto em `VisitorSummaryTile`
+(Dirigentes), que já enxergava `companions` desde a implementação original
+(é só nomes, sem telefone — não fere o motivo de `visitorSummaries` existir
+separado de `visitors`). O nome do visitante principal (`_boldTitle`,
+helper compartilhado) ganhou o mesmo negrito, pedido junto.
+
+Cor pedida como "negrito, porém branco mesmo" pra ambos: usei
+`context.textPrimary` em vez de `Colors.white` fixo ou
+`SibValColors.goldAccent` (cor original da primeira versão) — o card usa
+fundo branco no tema claro (`cardColor` em `app_theme.dart`), então um
+branco hardcoded ficaria invisível nesse tema; `textPrimary` responde ao
+tema (branco no escuro, escuro no claro), mesma convenção do resto do app.
+Confirmado com o usuário via pergunta direta antes de aplicar.
+
+**Deploy feito (mesma sessão):** o usuário reportou que a visão do Dirigentes
+continuava sem mostrar acompanhantes — causa raiz era a mudança em
+`onVisitorCreated` (espelhar `companions` em `visitorSummaries`) ter ficado
+só no código-fonte, nunca deployada, então visitantes cadastrados depois
+daquela edição continuaram indo pro Firestore sem esse campo no resumo,
+mesmo já preenchendo no documento completo (`visitors`). Aval explícito do
+usuário pra esse deploy específico — `firebase deploy --only
+functions:onVisitorCreated --project sibval-app-project`. Sem backfill: os
+cadastros feitos antes desse deploy continuam com o resumo sem
+`companions`, só quem for cadastrado a partir de agora aparece com
+acompanhantes na visão do Dirigentes.
+
+**"Como conheceu a igreja" no resumo do Dirigentes + aviso de dados não
+salvos ao voltar (mesma sessão, pedidos do usuário):**
+
+- `VisitorSummary` (`lib/models/visitor.dart`) ganhou `howFoundCategory`/
+  `howFoundDetail`, mesmos campos já expostos em `Visitor` — o resumo pra
+  Dirigentes não tinha essa informação, só o card completo de
+  Introdução/Pastor. `VisitorSummaryTile` (`visitor_tiles.dart`) passou a
+  mostrar "Como conheceu: ..." igual ao card completo. Espelhado em
+  `onVisitorCreated` (`SIBValApp2/functions/index.js`) e **deployado** —
+  aval explícito do usuário, mesmo padrão do deploy anterior de
+  `companions`. Mesma ressalva de sempre: sem backfill, só visitantes
+  cadastrados a partir do deploy saem com esses campos no resumo.
+- `IntroductionPage` ganhou `PopScope` (`_hasUnsavedData`,
+  `_confirmDiscardAndPop`) — se algum campo do formulário de cadastro
+  (nome, telefone, igreja, como conheceu, convidado por, algum
+  acompanhante) tiver conteúdo e o usuário tentar voltar (seta da app bar
+  ou gesto/botão do sistema), aparece um diálogo "Sair sem salvar?" antes
+  de sair de fato. Só entra em jogo pra quem vê o formulário (papel
+  Introdução) — os controllers ficam sempre vazios pros outros papéis, que
+  só leem listas.
+
+  **Bug relatado pelo usuário na mesma sessão:** preencher Nome/Telefone/
+  Igreja e voltar saía sem aviso — só "Como conheceu" (dropdown) e
+  acompanhantes (que passam por `setState` nos botões +/-) disparavam o
+  aviso. Causa: `canPop: !_hasUnsavedData` só é reavaliado quando `build()`
+  roda de novo, e os `TextField`s de Nome/Telefone/Igreja/Convidado por não
+  tinham nenhum `onChanged`/listener chamando `setState` — digitar neles não
+  reconstruía a tela, então `canPop` ficava preso no valor calculado no
+  primeiro build (sempre `true`, formulário vazio). Corrigido adicionando
+  `_onFormFieldChanged` (só `setState(() {})`) como listener de
+  `_nameController`/`_phoneController`/`_churchController`/
+  `_invitedByController` (`initState`/`dispose`) e de cada controller de
+  acompanhante (`_addCompanion`/`_removeCompanion`) — agora qualquer
+  digitação reconstrói a tela e `canPop` fica sempre correto.
+
+**"Convidado por" no lugar de "Como conheceu" quando for Membro da Igreja
+(mesma sessão, pedido do usuário):** no resumo do Dirigentes
+(`VisitorSummaryTile`), quando `howFoundDetail ==
+howFoundChurchInvitedByDetail` ("Membro da Igreja"), a linha vira "Convidado
+por: {invitedByName}" em vez de "Como conheceu: Membro da Igreja" — pra
+qualquer outro valor, continua mostrando "Como conheceu: ...". `VisitorSummary`
+ganhou `invitedByName`, espelhado em `onVisitorCreated`
+(`SIBValApp2/functions/index.js`) e **deployado** — aval explícito do
+usuário, mesma ressalva de sempre: sem backfill, só visitantes cadastrados a
+partir do deploy saem com `invitedByName` no resumo. Rótulo usado foi
+"Convidado por" (não "Convidado de", como o
+pedido descreveu informalmente) pra bater com o mesmo texto já usado em
+`VisitorFullTile` — evita dois rótulos diferentes pro mesmo dado entre os
+dois cards.
+
+**Selo "Primeira visita"/"Já visitou" movido pro canto superior direito do
+card (mesma sessão, pedido do usuário):** em `VisitorSummaryTile`, o selo
+saiu do `trailing` do `ListTile` (onde ficava centralizado verticalmente,
+competindo com o resto do conteúdo) e virou um `Positioned(top: 8, right: 8)`
+dentro de um `Stack` que envolve o `ListTile`. O `contentPadding` do
+`ListTile` ganhou `140` de margem direita (largura do `VisitBadge`, 116, +
+folga) pra nome/igreja/como-conheceu/data nunca ficarem por baixo do selo,
+em qualquer linha — não só na primeira.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

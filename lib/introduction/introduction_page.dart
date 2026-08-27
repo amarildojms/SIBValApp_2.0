@@ -52,6 +52,7 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
   final _invitedByController = TextEditingController();
   final _invitedByFocusNode = FocusNode();
   final _scrollController = ScrollController();
+  final List<TextEditingController> _companionControllers = [];
   bool _firstVisit = true;
   bool _sending = false;
   String? _nameError;
@@ -63,18 +64,89 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
   void initState() {
     super.initState();
     syncNotificationsForScreen(ref, type: NotificationType.visitor);
+    // PopScope avalia `_hasUnsavedData` no build — sem esses listeners,
+    // digitar em Nome/Telefone/Igreja/Convidado por não reconstrói a tela
+    // (só o dropdown "Como conheceu" e os botões de acompanhante chamam
+    // `setState` diretamente), então o aviso ao voltar ficava preso no valor
+    // calculado no primeiro build (bug relatado pelo usuário, 27/08/2026).
+    _nameController.addListener(_onFormFieldChanged);
+    _phoneController.addListener(_onFormFieldChanged);
+    _churchController.addListener(_onFormFieldChanged);
+    _invitedByController.addListener(_onFormFieldChanged);
   }
+
+  void _onFormFieldChanged() => setState(() {});
 
   @override
   void dispose() {
+    _nameController.removeListener(_onFormFieldChanged);
     _nameController.dispose();
     _nameFocusNode.dispose();
+    _phoneController.removeListener(_onFormFieldChanged);
     _phoneController.dispose();
+    _churchController.removeListener(_onFormFieldChanged);
     _churchController.dispose();
+    _invitedByController.removeListener(_onFormFieldChanged);
     _invitedByController.dispose();
     _invitedByFocusNode.dispose();
     _scrollController.dispose();
+    for (final controller in _companionControllers) {
+      controller.removeListener(_onFormFieldChanged);
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _addCompanion() {
+    final controller = TextEditingController()
+      ..addListener(_onFormFieldChanged);
+    setState(() => _companionControllers.add(controller));
+  }
+
+  void _removeCompanion(int index) {
+    final controller = _companionControllers.removeAt(index);
+    controller.removeListener(_onFormFieldChanged);
+    controller.dispose();
+    setState(() {});
+  }
+
+  /// Verdadeiro se algum campo do formulário de cadastro tem conteúdo ainda
+  /// não salvo — usado pelo `PopScope` do `build` pra avisar antes de sair
+  /// (27/08/2026, pedido do usuário). Fica sempre falso pra quem não vê o
+  /// formulário (Dirigentes/Pastor), já que os controllers nunca são
+  /// preenchidos nesse caso.
+  bool get _hasUnsavedData {
+    return _nameController.text.trim().isNotEmpty ||
+        _phoneController.text.trim().isNotEmpty ||
+        _churchController.text.trim().isNotEmpty ||
+        _howFoundValue != null ||
+        _invitedByController.text.trim().isNotEmpty ||
+        _companionControllers.any((c) => c.text.trim().isNotEmpty);
+  }
+
+  Future<void> _confirmDiscardAndPop() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair sem salvar?'),
+        content: const Text(
+          'Os dados preenchidos no formulário ainda não foram salvos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Continuar preenchendo'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _submit() async {
@@ -87,15 +159,20 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
       hasError = true;
     }
     final invitedByRequired =
-        _howFoundValue == howFoundChurchInvitedByDetail && _invitedByController.text.trim().isEmpty;
+        _howFoundValue == howFoundChurchInvitedByDetail &&
+        _invitedByController.text.trim().isEmpty;
     if (invitedByRequired) {
       hasError = true;
     }
     if (hasError) {
       setState(() {
         _nameError = name.isEmpty ? 'Informe o nome do visitante.' : null;
-        _howFoundError = _howFoundValue == null ? 'Selecione como conheceu a igreja.' : null;
-        _invitedByError = invitedByRequired ? 'Informe o nome de quem convidou.' : null;
+        _howFoundError = _howFoundValue == null
+            ? 'Selecione como conheceu a igreja.'
+            : null;
+        _invitedByError = invitedByRequired
+            ? 'Informe o nome de quem convidou.'
+            : null;
       });
       return;
     }
@@ -110,9 +187,16 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
     });
     _scrollController.scrollToSaveButton();
     try {
-      final howFoundCategory =
-          howFoundChurchOptions.firstWhere((o) => o.detail == _howFoundValue).category;
-      await ref.read(visitorRepositoryProvider).registerVisitor(
+      final howFoundCategory = howFoundChurchOptions
+          .firstWhere((o) => o.detail == _howFoundValue)
+          .category;
+      final companions = _companionControllers
+          .map((c) => c.text.trim())
+          .where((n) => n.isNotEmpty)
+          .toList();
+      await ref
+          .read(visitorRepositoryProvider)
+          .registerVisitor(
             name: name,
             phone: _phoneController.text.trim(),
             church: _churchController.text.trim(),
@@ -121,11 +205,16 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
             howFoundCategory: howFoundCategory,
             howFoundDetail: _howFoundValue!,
             invitedByName: _invitedByController.text.trim(),
+            companions: companions,
           );
       _nameController.clear();
       _phoneController.clear();
       _churchController.clear();
       _invitedByController.clear();
+      for (final controller in _companionControllers) {
+        controller.dispose();
+      }
+      _companionControllers.clear();
       setState(() {
         _firstVisit = true;
         _howFoundValue = null;
@@ -136,7 +225,12 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('Visitante cadastrado'),
             content: const Text('O cadastro foi realizado com sucesso.'),
-            actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
@@ -153,7 +247,12 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('Não foi possível cadastrar'),
             content: Text('Ocorreu um erro ao cadastrar o visitante:\n$error'),
-            actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
@@ -169,8 +268,14 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
         title: const Text('Excluir visitante'),
         content: const Text('Tem certeza que deseja excluir este cadastro?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Excluir')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
         ],
       ),
     );
@@ -190,165 +295,281 @@ class _IntroductionPageState extends ConsumerState<IntroductionPage> {
     // telefone, ver doc comment da classe.
     final canReadFull = canRegister || canViewDetails;
 
-    return Scaffold(
-      appBar: const SibValAppBar(isHome: false),
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const ScreenTitle('Introdução'),
-            Expanded(
-              child: ListView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                children: [
-                  if (canRegister) ...[
-                    TextField(
-                      controller: _nameController,
-                      focusNode: _nameFocusNode,
-                      decoration: InputDecoration(
-                        labelText: 'Nome',
-                        errorText: _nameError,
-                        border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
+    return PopScope(
+      canPop: !_hasUnsavedData,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _confirmDiscardAndPop();
+      },
+      child: Scaffold(
+        appBar: const SibValAppBar(isHome: false),
+        body: SafeArea(
+          bottom: true,
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const ScreenTitle('Introdução'),
+              Expanded(
+                child: ListView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  children: [
+                    if (canRegister) ...[
+                      TextField(
+                        controller: _nameController,
+                        focusNode: _nameFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Nome',
+                          errorText: _nameError,
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).cardColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [PhoneInputFormatter()],
-                      decoration: InputDecoration(
-                        labelText: 'Telefone (opcional)',
-                        border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [PhoneInputFormatter()],
+                        decoration: InputDecoration(
+                          labelText: 'Telefone (opcional)',
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).cardColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _churchController,
-                      decoration: InputDecoration(
-                        labelText: 'Igreja (opcional)',
-                        hintText: 'Deixe em branco se não frequenta nenhuma',
-                        border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _churchController,
+                        decoration: InputDecoration(
+                          labelText: 'Igreja (opcional)',
+                          hintText: 'Deixe em branco se não frequenta nenhuma',
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).cardColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _howFoundValue,
-                      decoration: InputDecoration(
-                        labelText: 'Como conheceu a igreja',
-                        errorText: _howFoundError,
-                        border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
+                      const SizedBox(height: 12),
+                      Text(
+                        'Acompanhantes (opcional)',
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      isExpanded: true,
-                      items: [
-                        DropdownMenuItem(
-                          value: howFoundChurchInvitedByDetail,
+                      const SizedBox(height: 2),
+                      Text(
+                        'Familiares que vieram junto — só o nome de cada um.',
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < _companionControllers.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Image.asset('assets/images/icon_sibval.png', width: 18, height: 18),
-                              const SizedBox(width: 8),
-                              Text(howFoundChurchInvitedByDetail),
+                              Expanded(
+                                child: TextField(
+                                  controller: _companionControllers[i],
+                                  decoration: InputDecoration(
+                                    labelText: 'Nome do acompanhante',
+                                    border: const OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(
+                                        Radius.circular(10),
+                                      ),
+                                    ),
+                                    filled: true,
+                                    fillColor: Theme.of(context).cardColor,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remover acompanhante',
+                                icon: const Icon(Icons.close),
+                                onPressed: () => _removeCompanion(i),
+                              ),
                             ],
                           ),
                         ),
-                        for (final option in howFoundChurchOptions.where((o) => o.detail != howFoundChurchInvitedByDetail))
-                          DropdownMenuItem(value: option.detail, child: Text(option.detail)),
-                      ],
-                      onChanged: (value) => setState(() {
-                        _howFoundValue = value;
-                        _howFoundError = null;
-                        if (value != howFoundChurchInvitedByDetail) {
-                          _invitedByController.clear();
-                          _invitedByError = null;
-                        }
-                      }),
-                    ),
-                    if (_howFoundValue == howFoundChurchInvitedByDetail) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _addCompanion,
+                          icon: const Icon(
+                            Icons.person_add_alt_1_outlined,
+                            size: 18,
+                          ),
+                          label: const Text('Adicionar acompanhante'),
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      _InvitedByField(
-                        controller: _invitedByController,
-                        focusNode: _invitedByFocusNode,
-                        errorText: _invitedByError,
-                        onChanged: () {
-                          if (_invitedByError != null) setState(() => _invitedByError = null);
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Text('Primeira visita', style: TextStyle(color: context.textPrimary)),
-                    const SizedBox(height: 4),
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Theme.of(context).colorScheme.outline),
-                        color: Theme.of(context).cardColor,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: CheckboxListTile(
-                              value: _firstVisit,
-                              onChanged: (_) => setState(() => _firstVisit = true),
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text('Sim', style: TextStyle(color: context.textPrimary)),
+                      DropdownButtonFormField<String>(
+                        initialValue: _howFoundValue,
+                        decoration: InputDecoration(
+                          labelText: 'Como conheceu a igreja',
+                          errorText: _howFoundError,
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).cardColor,
+                        ),
+                        isExpanded: true,
+                        items: [
+                          DropdownMenuItem(
+                            value: howFoundChurchInvitedByDetail,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Image.asset(
+                                  'assets/images/icon_sibval.png',
+                                  width: 18,
+                                  height: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(howFoundChurchInvitedByDetail),
+                              ],
                             ),
                           ),
-                          Expanded(
-                            child: CheckboxListTile(
-                              value: !_firstVisit,
-                              onChanged: (_) => setState(() => _firstVisit = false),
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text('Não', style: TextStyle(color: context.textPrimary)),
+                          for (final option in howFoundChurchOptions.where(
+                            (o) => o.detail != howFoundChurchInvitedByDetail,
+                          ))
+                            DropdownMenuItem(
+                              value: option.detail,
+                              child: Text(option.detail),
                             ),
+                        ],
+                        onChanged: (value) => setState(() {
+                          _howFoundValue = value;
+                          _howFoundError = null;
+                          if (value != howFoundChurchInvitedByDetail) {
+                            _invitedByController.clear();
+                            _invitedByError = null;
+                          }
+                        }),
+                      ),
+                      if (_howFoundValue == howFoundChurchInvitedByDetail) ...[
+                        const SizedBox(height: 12),
+                        _InvitedByField(
+                          controller: _invitedByController,
+                          focusNode: _invitedByFocusNode,
+                          errorText: _invitedByError,
+                          onChanged: () {
+                            if (_invitedByError != null)
+                              setState(() => _invitedByError = null);
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Primeira visita',
+                        style: TextStyle(color: context.textPrimary),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                          color: Theme.of(context).cardColor,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: CheckboxListTile(
+                                value: _firstVisit,
+                                onChanged: (_) =>
+                                    setState(() => _firstVisit = true),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(
+                                  'Sim',
+                                  style: TextStyle(color: context.textPrimary),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: CheckboxListTile(
+                                value: !_firstVisit,
+                                onChanged: (_) =>
+                                    setState(() => _firstVisit = false),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(
+                                  'Não',
+                                  style: TextStyle(color: context.textPrimary),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _sending ? null : _submit,
+                        child: _sending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Cadastrar visitante'),
+                      ),
+                      const SizedBox(height: 24),
+                      Divider(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (canReadFull || canViewSummaries) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Visitantes de hoje',
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ArchivedVisitorsPage(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.archive_outlined, size: 18),
+                            label: const Text('Arquivados'),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _sending ? null : _submit,
-                      child: _sending
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Cadastrar visitante'),
-                    ),
-                    const SizedBox(height: 24),
-                    Divider(color: Theme.of(context).colorScheme.outlineVariant),
-                    const SizedBox(height: 8),
+                      const SizedBox(height: 8),
+                      if (canReadFull)
+                        _FullVisitorList(
+                          canDelete: canRegister,
+                          onDelete: _delete,
+                        )
+                      else
+                        const _SummaryVisitorList(),
+                    ],
                   ],
-                  if (canReadFull || canViewSummaries) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Visitantes de hoje',
-                          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
-                        ),
-                        TextButton.icon(
-                          onPressed: () =>
-                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArchivedVisitorsPage())),
-                          icon: const Icon(Icons.archive_outlined, size: 18),
-                          label: const Text('Arquivados'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (canReadFull) _FullVisitorList(canDelete: canRegister, onDelete: _delete) else const _SummaryVisitorList(),
-                  ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -367,19 +588,29 @@ class _FullVisitorList extends ConsumerWidget {
 
     return visitorsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+      error: (error, _) => Text(
+        'Falha ao carregar: $error',
+        style: TextStyle(color: context.textPrimary),
+      ),
       data: (visitors) {
         if (visitors.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Text('Nenhum visitante hoje.', style: TextStyle(color: context.textSecondary)),
+              child: Text(
+                'Nenhum visitante hoje.',
+                style: TextStyle(color: context.textSecondary),
+              ),
             ),
           );
         }
         return Column(
           children: [
-            for (final visitor in visitors) VisitorFullTile(visitor: visitor, onDelete: canDelete ? onDelete : null),
+            for (final visitor in visitors)
+              VisitorFullTile(
+                visitor: visitor,
+                onDelete: canDelete ? onDelete : null,
+              ),
           ],
         );
       },
@@ -396,19 +627,26 @@ class _SummaryVisitorList extends ConsumerWidget {
 
     return summariesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+      error: (error, _) => Text(
+        'Falha ao carregar: $error',
+        style: TextStyle(color: context.textPrimary),
+      ),
       data: (summaries) {
         if (summaries.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Text('Nenhum visitante hoje.', style: TextStyle(color: context.textSecondary)),
+              child: Text(
+                'Nenhum visitante hoje.',
+                style: TextStyle(color: context.textSecondary),
+              ),
             ),
           );
         }
         return Column(
           children: [
-            for (final summary in summaries) VisitorSummaryTile(summary: summary),
+            for (final summary in summaries)
+              VisitorSummaryTile(summary: summary),
           ],
         );
       },
@@ -473,8 +711,17 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
   List<String> _matches(List<Member> members) {
     final query = _normalizeName(widget.controller.text);
     if (query.isEmpty) return const [];
-    final names = members.map((m) => m.name.trim()).where((n) => n.isNotEmpty).toSet().toList()..sort();
-    return names.where((name) => _normalizeName(name).contains(query)).take(8).toList();
+    final names =
+        members
+            .map((m) => m.name.trim())
+            .where((n) => n.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return names
+        .where((name) => _normalizeName(name).contains(query))
+        .take(8)
+        .toList();
   }
 
   void _selectName(String name) {
@@ -486,7 +733,9 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
   @override
   Widget build(BuildContext context) {
     final members = ref.watch(membersProvider).asData?.value ?? const [];
-    final matches = widget.focusNode.hasFocus ? _matches(members) : const <String>[];
+    final matches = widget.focusNode.hasFocus
+        ? _matches(members)
+        : const <String>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -509,7 +758,10 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
                 final name = matches[index];
                 return ListTile(
                   dense: true,
-                  title: Text(name, style: const TextStyle(color: Colors.white)),
+                  title: Text(
+                    name,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                   onTap: () => _selectName(name),
                 );
               },
@@ -522,7 +774,9 @@ class _InvitedByFieldState extends ConsumerState<_InvitedByField> {
             labelText: 'Convidado por',
             hintText: 'Nome de quem convidou',
             errorText: widget.errorText,
-            border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+            border: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
             filled: true,
             fillColor: Theme.of(context).cardColor,
           ),

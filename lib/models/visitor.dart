@@ -13,6 +13,15 @@ import 'event.dart' show toSaoPauloTime, toSaoPauloTimeNow;
 /// (catálogo em `lib/util/how_found_church_options.dart`) e `invitedByName`
 /// (autocompletado contra `members`, só quando o detalhe é "Membro da
 /// Igreja") são opcionais, adicionados depois.
+///
+/// `companions` (27/08/2026, pedido do usuário): visitas em família não
+/// viram um `Visitor` por pessoa — continua 1 documento por visita, com os
+/// dados completos (telefone, igreja, como conheceu, convidado por) de só
+/// um responsável, e `companions` guardando só os nomes dos demais membros
+/// da família que vieram junto (sem telefone/e-mail/nada mais deles). Opção
+/// escolhida em vez de um `groupId` ligando N documentos, um por pessoa, por
+/// ser mais simples de listar/notificar — sem estatística de contagem
+/// individual de visitantes hoje, então a granularidade extra não se paga.
 class Visitor {
   final String id;
   final String name;
@@ -24,6 +33,7 @@ class Visitor {
   final String howFoundCategory;
   final String howFoundDetail;
   final String invitedByName;
+  final List<String> companions;
 
   const Visitor({
     required this.id,
@@ -36,6 +46,7 @@ class Visitor {
     this.howFoundCategory = '',
     this.howFoundDetail = '',
     this.invitedByName = '',
+    this.companions = const [],
   });
 
   factory Visitor.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -51,6 +62,11 @@ class Visitor {
       howFoundCategory: data['howFoundCategory'] as String? ?? '',
       howFoundDetail: data['howFoundDetail'] as String? ?? '',
       invitedByName: data['invitedByName'] as String? ?? '',
+      companions:
+          (data['companions'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -62,7 +78,9 @@ class Visitor {
     if (createdAt == null) return false;
     final created = toSaoPauloTime(createdAt!.toUtc());
     final today = toSaoPauloTimeNow();
-    return created.year == today.year && created.month == today.month && created.day == today.day;
+    return created.year == today.year &&
+        created.month == today.month &&
+        created.day == today.day;
   }
 }
 
@@ -75,6 +93,10 @@ class VisitorSummary {
   final String church;
   final bool firstVisit;
   final DateTime? createdAt;
+  final List<String> companions;
+  final String howFoundCategory;
+  final String howFoundDetail;
+  final String invitedByName;
 
   const VisitorSummary({
     required this.id,
@@ -82,9 +104,15 @@ class VisitorSummary {
     required this.church,
     required this.firstVisit,
     required this.createdAt,
+    this.companions = const [],
+    this.howFoundCategory = '',
+    this.howFoundDetail = '',
+    this.invitedByName = '',
   });
 
-  factory VisitorSummary.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory VisitorSummary.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
     return VisitorSummary(
       id: doc.id,
@@ -92,6 +120,14 @@ class VisitorSummary {
       church: data['church'] as String? ?? '',
       firstVisit: data['firstVisit'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      companions:
+          (data['companions'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      howFoundCategory: data['howFoundCategory'] as String? ?? '',
+      howFoundDetail: data['howFoundDetail'] as String? ?? '',
+      invitedByName: data['invitedByName'] as String? ?? '',
     );
   }
 
@@ -100,6 +136,8 @@ class VisitorSummary {
     if (createdAt == null) return false;
     final created = toSaoPauloTime(createdAt!.toUtc());
     final today = toSaoPauloTimeNow();
-    return created.year == today.year && created.month == today.month && created.day == today.day;
+    return created.year == today.year &&
+        created.month == today.month &&
+        created.day == today.day;
   }
 }
