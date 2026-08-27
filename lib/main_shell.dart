@@ -503,14 +503,29 @@ class _MoreHeader extends ConsumerWidget {
 
 /// "Bolinha" com anel de progresso mostrando o % de cadastro preenchido —
 /// fica no canto direito do card de perfil (`_MoreHeader`), com "Cadastro"
-/// em cima e "completo" embaixo.
+/// em cima e "completo" embaixo. Cor do anel numa escala vermelho→laranja→
+/// verde conforme o percentual (28/08/2026, pedido do usuário — antes era
+/// sempre `SibValColors.goldAccent`, sem refletir o quanto falta preencher).
 class _CompletionBadge extends StatelessWidget {
   const _CompletionBadge({required this.percent});
 
   final int percent;
 
+  /// 0% = vermelho, 50% = laranja, 100% = verde — interpolação linear em
+  /// dois trechos (vermelho→laranja e laranja→verde) em vez de um único
+  /// `Color.lerp` ponta a ponta, que passaria por um marrom/oliva sem graça
+  /// no meio do caminho.
+  static Color _colorFor(int percent) {
+    final t = (percent / 100).clamp(0, 1).toDouble();
+    if (t <= 0.5) {
+      return Color.lerp(Colors.red, Colors.orange, t / 0.5)!;
+    }
+    return Color.lerp(Colors.orange, Colors.green, (t - 0.5) / 0.5)!;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final color = _colorFor(percent);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -526,7 +541,7 @@ class _CompletionBadge extends StatelessWidget {
                 value: (percent / 100).clamp(0, 1).toDouble(),
                 strokeWidth: 3,
                 backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation(SibValColors.goldAccent),
+                valueColor: AlwaysStoppedAnimation(color),
               ),
               Text(
                 '$percent%',

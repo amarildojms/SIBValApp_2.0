@@ -1030,6 +1030,16 @@ sessão, pedidos do usuário):**
   novo. `PostCard` só é usado dentro de `home_feed_page.dart` — não há outra
   tela mostrando posts de evento que precise do mesmo cuidado.
 
+**Cor do badge de % de cadastro em escala vermelho→laranja→verde
+(28/08/2026, pedido do usuário):** `_CompletionBadge`/`main_shell.dart` —
+o anel de progresso do card de perfil (menu Mais) era sempre
+`SibValColors.goldAccent`, sem refletir o quanto falta preencher. Novo
+`_CompletionBadge._colorFor` interpola em dois trechos (`Color.lerp`
+vermelho→laranja de 0% a 50%, laranja→verde de 50% a 100%) em vez de um
+`Color.lerp` único ponta a ponta, que passaria por um tom sem graça no meio
+do caminho. Só a cor do anel muda — o texto "`$percent%`" continua branco,
+pra manter contraste sobre o fundo `navyBlueLight`.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
