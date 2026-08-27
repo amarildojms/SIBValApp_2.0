@@ -33,6 +33,17 @@ class DevotionalRepository {
     return doc.exists ? Devotional.fromFirestore(doc) : null;
   }
 
+  /// Data da devocional mais recente já cadastrada (a de `dateMillis` mais
+  /// alto, publicada ou futura) — usado só pra pré-preencher o campo de data
+  /// no cadastro de uma nova devocional com "o dia seguinte à última
+  /// inserida" (26/08/2026, pedido do usuário).
+  Future<DateTime?> getLatestDate() async {
+    final snapshot = await _devotionals.orderBy('dateMillis', descending: true).limit(1).get();
+    if (snapshot.docs.isEmpty) return null;
+    final millis = snapshot.docs.first.data()['dateMillis'] as int?;
+    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
+  }
+
   /// Todas as devocionais (inclusive futuras), mais recente primeiro — usado
   /// no repositório de gerenciamento (admin/Secretaria).
   Future<List<Devotional>> getAll({int limit = 200}) async {

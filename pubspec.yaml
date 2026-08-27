@@ -18,15 +18,13 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 29, ajuste aqui e gere o
-# AAB de novo. Esta soma as features de 26-27/08/2026: campo "Texto base"
-# (livro/capítulo/versículo, com faixa "de...até...") no cadastro de
-# devocionais; e a reorganização do feed do Início por regra (aniversariante
-# do dia > evento pontual ativo > devocional > evento recorrente ativo >
-# resto > finalizados), com sombreamento leve pro que já passou, selo
-# "ATENÇÃO" pra post urgente do dia, e atualização automática por relógio a
-# cada minuto.
-version: 1.7.0+29
+# Play Console antes de enviar; se for maior que 30, ajuste aqui e gere o
+# AAB de novo. A 1.7.0+29 ainda estava em análise na Play Console quando
+# esta foi gerada (não publicada) — 30 garante um versionCode maior mesmo
+# assim. Novidade desta versão: pré-preenchimento da data de publicação no
+# cadastro de devocionais com o dia seguinte à última devocional cadastrada
+# (26/08/2026).
+version: 1.7.1+30
 
 environment:
   sdk: ^3.13.0

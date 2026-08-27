@@ -53,7 +53,20 @@ class _DevotionalFormPageState extends ConsumerState<DevotionalFormPage> {
     super.initState();
     if (widget.isEditing) {
       _load();
+    } else {
+      _prefillDate();
     }
+  }
+
+  /// Pré-preenche a data de publicação com o dia seguinte à última devocional
+  /// cadastrada (26/08/2026, pedido do usuário) — só faz sentido pra
+  /// cadastro novo; edição carrega a data existente em `_load`.
+  Future<void> _prefillDate() async {
+    final latest = await ref.read(devotionalRepositoryProvider).getLatestDate();
+    if (!mounted) return;
+    setState(() {
+      _selectedDate = latest != null ? latest.add(const Duration(days: 1)) : DateTime.now();
+    });
   }
 
   Future<void> _load() async {
