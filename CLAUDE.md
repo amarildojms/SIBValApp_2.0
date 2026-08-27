@@ -975,6 +975,61 @@ atualização em tempo real por escrita nova (post criado/editado/curtido)
 continua funcionando do jeito que já funcionava, via `.snapshots()` — o
 timer só cobre o caso que faltava.
 
+**Remoção do reposte 24h/6h de evento + faixa nova "evento do dia" no
+ranking do feed + Hoje/Amanhã calculado no cliente (27/08/2026, mesma
+sessão, pedidos do usuário):**
+
+- **Reposte 24h/6h removido.** `repostUpcomingEventFeedPosts`
+  (`SIBValApp2/functions/index.js`) apagava e recriava o post do evento duas
+  vezes antes do horário de início só pra subir `createdAt` (posição) e
+  trocar o texto pra "(Hoje)"/"(Amanhã)". Como o ranking por regra (entrada
+  acima) já cuida da posição sem depender de `createdAt`, o usuário pediu
+  pra cancelar esse reposte de vez. Função removida do código-fonte e
+  **excluída em produção** (`firebase functions:delete
+  repostUpcomingEventFeedPosts --project sibval-app-project --force`, aval
+  explícito do usuário — comando rodado por ele mesmo via `!`, porque o
+  sandbox deste ambiente bloqueia `functions:delete`/`deploy --force` por
+  serem destrutivos em infra de produção). Campos `feedRepost24hSent`/
+  `feedRepost6hSent` pararam de ser gravados (ficam órfãos nos docs antigos
+  de `events`, inofensivos, sem limpeza retroativa).
+
+- **Backfill de `isRecurring` tentado e abortado.** Antes da remoção do
+  reposte, um post de evento recorrente já existente (postado antes do
+  deploy que passou a gravar `isRecurring`, ver entrada anterior) ficou
+  preso sem esse campo — classificado como pontual no ranking do cliente.
+  Uma tentativa de corrigir via uma Cloud Function HTTP temporária
+  (`backfillEventIsRecurring`, protegida só por uma senha fixa no código)
+  foi **bloqueada pelo classificador de segurança do sandbox** antes mesmo
+  de aplicar a edição (endpoint público de escrita autenticado só por
+  segredo em texto plano — risco real, bloqueio correto). Revertida sem
+  deixar resíduo. Decisão do usuário: não mexer, deixar o ciclo semanal
+  (`resetWeeklyFeed` + `postWeeklyEventsToFeed`, madrugada de segunda) se
+  autocorrigir sozinho — o que já é o comportamento padrão pra qualquer
+  post automático desatualizado.
+
+- **Nova faixa 2: evento (pontual ou recorrente) que acontece hoje sobe pro
+  topo do feed**, ficando só abaixo de aniversariante do dia (faixa 1) e
+  post manual urgente (faixa 0) — pedido explícito do usuário, distinto da
+  separação pontual/recorrente que já existia. `Post.isEventToday`
+  (`lib/models/post.dart`, novo getter — compara `eventDateSaoPaulo` com o
+  dia de hoje, diferente de `isFromToday` que compara `createdAt`) alimenta
+  o novo `_feedRank` faixa 2 em `home_feed_page.dart`. As faixas antigas 2/3/4
+  (evento pontual não-hoje / devocional / evento recorrente não-hoje)
+  viraram 3/4/5, e a antiga faixa 6 ("fim da lista") virou 7 — só
+  renumeração, mesma regra de cada uma. `_rankSixSortDate` renomeado pra
+  `_rankSevenSortDate`.
+
+- **Texto "(Hoje)"/"(Amanhã)" volta a ser calculado no cliente**, sem
+  repostar — reintroduzido em `post_card.dart` (`PostCard._textWithHojeAmanha`,
+  mesmo helper/regex que existia antes da reforma de 24/08/2026, quando foi
+  removido em favor do reposte no servidor). Usa `Post.isEventTomorrow`
+  (novo getter, mesmo padrão de `isEventToday`) além do já existente
+  `isEventToday`. Recalculado a cada rebuild — o `Timer.periodic` de 1
+  minuto que já existia em `HomeFeedPage` (ver entrada anterior,
+  "Reordenação por relógio") cobre a virada de dia sem precisar de nada
+  novo. `PostCard` só é usado dentro de `home_feed_page.dart` — não há outra
+  tela mostrando posts de evento que precise do mesmo cuidado.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

@@ -265,17 +265,23 @@ class _MembershipAnniversaryBanner extends StatelessWidget {
 
 /// Ordenação do feed (27/08/2026, pedido do usuário — reintroduz uma
 /// ordenação por regra, que tinha sido removida em 24/08/2026 em favor de
-/// só `createdAt`). Faixas fixas, da mais alta pra mais baixa prioridade:
+/// só `createdAt`; mesmo dia, revisão posterior adicionou a faixa 2 abaixo —
+/// evento no próprio dia sobe pro topo, independente de ser pontual ou
+/// recorrente). Faixas fixas, da mais alta pra mais baixa prioridade:
 ///
 /// 0. Post manual urgente (`PostType.manual` publicado hoje) — "ATENÇÃO".
 /// 1. Aniversariante(s) do dia.
-/// 2. Evento pontual (não recorrente) ainda não finalizado, mais próximo
+/// 2. Evento (pontual ou recorrente) que acontece hoje (`Post.isEventToday`)
+///    e ainda não finalizado — mais próximo primeiro. Pedido do usuário: no
+///    dia do evento ele sobe pro topo, só abaixo de aniversariante/urgente.
+/// 3. Evento pontual (não recorrente) que NÃO é hoje, ainda não finalizado,
+///    mais próximo primeiro.
+/// 4. Devocional de hoje (`isFromToday`).
+/// 5. Evento recorrente que NÃO é hoje, ainda não finalizado, mais próximo
 ///    primeiro.
-/// 3. Devocional de hoje (`isFromToday`).
-/// 4. Evento recorrente ainda não finalizado, mais próximo primeiro.
-/// 5. Resto (post manual/aniversariante que não é mais de hoje etc.), mais
+/// 6. Resto (post manual/aniversariante que não é mais de hoje etc.), mais
 ///    recente primeiro — mesmo critério do feed antigo (`createdAt`).
-/// 6. "Fim da lista": eventos finalizados (pontuais e recorrentes juntos) e
+/// 7. "Fim da lista": eventos finalizados (pontuais e recorrentes juntos) e
 ///    devocional que não é mais a de hoje (27/08/2026, pedido do usuário —
 ///    antes ficava presa na faixa 3, só sombreada, sem cair de posição
 ///    "como os eventos finalizados") — mais recente primeiro (evento pelo
@@ -290,16 +296,17 @@ int _feedRank(Post post) {
   final isDevotional = post.postType == PostType.devotional;
   if (post.postType == PostType.manual && post.isFromToday) return 0;
   if (post.postType == PostType.birthday && post.isFromToday) return 1;
-  if (isEvent && !post.isRecurringEvent && !post.isPastEvent) return 2;
-  if (isDevotional && post.isFromToday) return 3;
-  if (isEvent && post.isRecurringEvent && !post.isPastEvent) return 4;
-  if ((isEvent && post.isPastEvent) || (isDevotional && !post.isFromToday)) return 6;
-  return 5;
+  if (isEvent && post.isEventToday && !post.isPastEvent) return 2;
+  if (isEvent && !post.isRecurringEvent && !post.isPastEvent) return 3;
+  if (isDevotional && post.isFromToday) return 4;
+  if (isEvent && post.isRecurringEvent && !post.isPastEvent) return 5;
+  if ((isEvent && post.isPastEvent) || (isDevotional && !post.isFromToday)) return 7;
+  return 6;
 }
 
-/// Data usada pra ordenar dentro da faixa 6 — horário de início pro evento,
+/// Data usada pra ordenar dentro da faixa 7 — horário de início pro evento,
 /// `createdAt` do post pra devocional (que não tem `eventDateTimeMillis`).
-DateTime _rankSixSortDate(Post post) {
+DateTime _rankSevenSortDate(Post post) {
   if (post.eventDateTimeMillis != null) {
     return DateTime.fromMillisecondsSinceEpoch(post.eventDateTimeMillis!);
   }
@@ -312,12 +319,13 @@ int _compareFeedPosts(Post a, Post b) {
   if (rankA != rankB) return rankA.compareTo(rankB);
   switch (rankA) {
     case 2:
-    case 4:
+    case 3:
+    case 5:
       // Eventos ativos: mais próximo de acontecer primeiro.
       return (a.eventDateTimeMillis ?? 0).compareTo(b.eventDateTimeMillis ?? 0);
-    case 6:
+    case 7:
       // Fim da lista: mais recente primeiro.
-      return _rankSixSortDate(b).compareTo(_rankSixSortDate(a));
+      return _rankSevenSortDate(b).compareTo(_rankSevenSortDate(a));
     default:
       final createdA = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
       final createdB = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);

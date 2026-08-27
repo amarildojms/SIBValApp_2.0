@@ -14,10 +14,14 @@ import '../models/post.dart';
 /// selo discreto "Finalizado" e leve sombreamento no card inteiro — 5 horas
 /// depois do horário de início (`Post.isPastEvent`, 27/08/2026 — antes era
 /// baseado no dia civil). A linha `🗓️ (Ter) dd/MM, HH:mm` dentro do texto do
-/// post já vem pronta da Cloud Function (`(Hoje)`/`(Amanhã)` quando o evento
-/// reposta 24h/6h antes — ver `formatEventFeedText` em functions/index.js),
-/// sem troca no cliente. Post de devocional ganha o mesmo sombreamento leve
-/// assim que deixa de ser `isFromToday` (devocional de um dia anterior).
+/// post vem pronta da Cloud Function com a abreviação do dia da semana
+/// (`formatEventFeedText` em functions/index.js) — `_textWithHojeAmanha`
+/// troca esse trecho por `(Hoje)`/`(Amanhã)` **no cliente**, calculado a
+/// cada rebuild (`Post.isEventToday`/`Post.isEventTomorrow`), sem precisar
+/// repostar (27/08/2026, revisão do que era feito só no servidor via reposte
+/// 24h/6h antes do evento — reposte removido no mesmo dia). Post de
+/// devocional ganha o mesmo sombreamento leve assim que deixa de ser
+/// `isFromToday` (devocional de um dia anterior).
 ///
 /// Post manual (`PostType.manual`) publicado no próprio dia (`isFromToday`)
 /// é tratado como urgente (27/08/2026, pedido do usuário) — ganha a faixa
@@ -51,6 +55,21 @@ class PostCard extends StatelessWidget {
   final VoidCallback? onDeleteTap;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
+  static final _weekdayParenRegex = RegExp(r'🗓️ \([^)]+\)');
+
+  /// Só troca o `(dia da semana)` da linha `🗓️ (...)` já gerada pela Cloud
+  /// Function por `(Hoje)`/`(Amanhã)` quando aplicável — calculado no
+  /// cliente a cada rebuild, sem depender de reposte no servidor.
+  String get _textWithHojeAmanha {
+    if (post.postType != PostType.event) return post.text;
+    final replacement = post.isEventToday
+        ? 'Hoje'
+        : post.isEventTomorrow
+            ? 'Amanhã'
+            : null;
+    if (replacement == null) return post.text;
+    return post.text.replaceFirst(_weekdayParenRegex, '🗓️ ($replacement)');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +153,7 @@ class PostCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
                 child: Text(
-                  post.text,
+                  _textWithHojeAmanha,
                   style: TextStyle(color: context.textPrimary),
                 ),
               ),

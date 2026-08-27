@@ -80,6 +80,34 @@ class Post {
     return toSaoPauloTimeNow().isAfter(eventDate.add(const Duration(hours: 5)));
   }
 
+  /// Verdadeiro se a data do evento (`eventDateSaoPaulo`) cai no dia de hoje
+  /// (fuso America/Sao_Paulo) — usado por `home_feed_page.dart#_feedRank`
+  /// pra subir o post do evento pro topo do feed no próprio dia (27/08/2026,
+  /// pedido do usuário), e por `post_card.dart` pra trocar `(dia da semana)`
+  /// por `(Hoje)` no texto sem precisar repostar. Diferente de [isFromToday],
+  /// que compara `createdAt` (quando o post foi publicado), não a data do
+  /// evento em si.
+  bool get isEventToday {
+    final eventDate = eventDateSaoPaulo;
+    if (eventDate == null) return false;
+    final today = toSaoPauloTimeNow();
+    return eventDate.year == today.year &&
+        eventDate.month == today.month &&
+        eventDate.day == today.day;
+  }
+
+  /// Verdadeiro se a data do evento cai amanhã (fuso America/Sao_Paulo) —
+  /// usado só por `post_card.dart` pra trocar `(dia da semana)` por
+  /// `(Amanhã)` no texto do post, sem precisar repostar.
+  bool get isEventTomorrow {
+    final eventDate = eventDateSaoPaulo;
+    if (eventDate == null) return false;
+    final tomorrow = toSaoPauloTimeNow().add(const Duration(days: 1));
+    return eventDate.year == tomorrow.year &&
+        eventDate.month == tomorrow.month &&
+        eventDate.day == tomorrow.day;
+  }
+
   /// Verdadeiro só no dia em que o post foi criado (fuso America/Sao_Paulo) —
   /// usado por [PostType.membershipAnniversary] pra deixar de aparecer
   /// fixado assim que o dia do aniversário passa (24/08/2026, a pedido do
