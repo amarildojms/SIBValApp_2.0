@@ -18,12 +18,11 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 31, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão: evento do dia sobe pro topo do feed do
-# Início (abaixo só de aniversariante/post urgente), texto "(Hoje)"/
-# "(Amanhã)" do post de evento calculado no cliente sem precisar repostar, e
-# remoção do reposte automático 24h/6h antes do evento (27/08/2026).
-version: 1.7.2+31
+# Play Console antes de enviar; se for maior que 32, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão: anel de % de cadastro (menu Mais) numa
+# escala de cor vermelho→laranja→verde, em vez de sempre dourado
+# (28/08/2026).
+version: 1.7.2+32
 
 environment:
   sdk: ^3.13.0
