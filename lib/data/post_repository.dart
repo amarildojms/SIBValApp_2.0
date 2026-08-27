@@ -12,10 +12,13 @@ import '../models/post.dart';
 /// mesma coleção `posts` e subcoleção `posts/{postId}/comments`, mesmas regras
 /// (like via arrayUnion/arrayRemove, comentário incrementa commentCount).
 ///
-/// Sem ordenação especial no cliente: o feed é sempre por `createdAt`
-/// descendente, direto do Firestore — quem decide quando um post automático
-/// sobe é a Cloud Function que o cria/reposta (evento repostado 24h/6h antes,
-/// aniversariante às 01h, devocional no seu dia), não uma regra local aqui.
+/// A query em si é só por `createdAt` descendente, direto do Firestore —
+/// quem decide quando um post automático sobe (novo `createdAt`) é a Cloud
+/// Function que o cria/reposta (evento repostado 24h/6h antes, aniversariante
+/// às 01h, devocional no seu dia). A ordenação por *regra* (aniversariante >
+/// evento > devocional > ... > evento finalizado) é aplicada depois, no
+/// cliente, em `home_feed_page.dart` (`_compareFeedPosts`, 27/08/2026) —
+/// `createdAt` descendente vira só o desempate dentro de cada faixa.
 /// `postsProvider` usa `.snapshots()` (tempo real), não busca única.
 class PostRepository {
   PostRepository(this._firestore, this._storage);
@@ -23,7 +26,8 @@ class PostRepository {
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
 
-  CollectionReference<Map<String, dynamic>> get _posts => _firestore.collection('posts');
+  CollectionReference<Map<String, dynamic>> get _posts =>
+      _firestore.collection('posts');
   CollectionReference<Map<String, dynamic>> _comments(String postId) =>
       _posts.doc(postId).collection('comments');
 
@@ -104,16 +108,25 @@ class PostRepository {
 
   Future<void> toggleLike(String postId, String uid, bool liked) {
     return _posts.doc(postId).update({
-      'likedBy': liked ? FieldValue.arrayUnion([uid]) : FieldValue.arrayRemove([uid]),
+      'likedBy': liked
+          ? FieldValue.arrayUnion([uid])
+          : FieldValue.arrayRemove([uid]),
     });
   }
 
   Future<List<Comment>> getComments(String postId) async {
-    final snapshot = await _comments(postId).orderBy('createdAt', descending: false).get();
+    final snapshot = await _comments(postId)
+        .orderBy('createdAt', descending: false)
+        .get();
     return snapshot.docs.map(Comment.fromFirestore).toList();
   }
 
-  Future<void> addComment(String postId, String uid, String authorName, String text) async {
+  Future<void> addComment(
+    String postId,
+    String uid,
+    String authorName,
+    String text,
+  ) async {
     final doc = _comments(postId).doc();
     await doc.set({
       'id': doc.id,
@@ -137,6 +150,10 @@ final postsProvider = StreamProvider.autoDispose<List<Post>>((ref) {
 
 /// Reativo — dispara sozinho quando o usuário loga/desloga (o app não recria
 /// mais a árvore de widgets no login, ver AuthGate removido de main.dart).
-final authStateChangesProvider = StreamProvider<User?>((ref) => FirebaseAuth.instance.authStateChanges());
+final authStateChangesProvider = StreamProvider<User?>(
+  (ref) => FirebaseAuth.instance.authStateChanges(),
+);
 
-final currentUidProvider = Provider<String?>((ref) => ref.watch(authStateChangesProvider).asData?.value?.uid);
+final currentUidProvider = Provider<String?>(
+  (ref) => ref.watch(authStateChangesProvider).asData?.value?.uid,
+);

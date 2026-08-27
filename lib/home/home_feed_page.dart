@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,6 +40,8 @@ class HomeFeedPage extends ConsumerStatefulWidget {
 }
 
 class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
+  Timer? _reorderTicker;
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +49,26 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
     // de MEMBRESIA agora leva direto pro Início (ver
     // `notification_navigation.dart`), então simplesmente chegar aqui já
     // marca como lida e cancela da barra do celular.
-    syncNotificationsForScreen(ref, type: NotificationType.membershipAnniversary);
+    syncNotificationsForScreen(
+      ref,
+      type: NotificationType.membershipAnniversary,
+    );
+    // Reordena o feed sozinho quando só o relógio muda o resultado de
+    // `_feedRank`/`Post.isPastEvent`/`Post.isFromToday` — evento cruzando a
+    // marca de 5h, devocional/aniversariante virando "não é mais de hoje" à
+    // meia-noite (27/08/2026, pedido do usuário). Sem isso, essas faixas só
+    // recalculavam quando uma escrita nova chegava pelo `postsProvider`
+    // (`StreamProvider`). Um minuto é granularidade de sobra pra esses dois
+    // critérios (nenhum precisa de precisão de segundo).
+    _reorderTicker = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _reorderTicker?.cancel();
+    super.dispose();
   }
 
   @override
@@ -61,7 +84,9 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
       floatingActionButton: canManagePublications
           ? FloatingActionButton(
               heroTag: 'home_feed_fab',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PostFormPage())),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const PostFormPage())),
               child: const Icon(Icons.add),
             )
           : null,
@@ -70,7 +95,12 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
         error: (error, _) => ListView(
           children: [
             const SizedBox(height: 80),
-            Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
+            Center(
+              child: Text(
+                'Falha ao carregar: $error',
+                style: TextStyle(color: context.textPrimary),
+              ),
+            ),
           ],
         ),
         data: (posts) {
@@ -84,16 +114,21 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
           final feedPosts = <Post>[];
           for (final post in posts) {
             if (post.postType == PostType.membershipAnniversary) {
-              if (uid != null && post.targetId == uid && post.isFromToday) membershipAnniversaryPost = post;
+              if (uid != null && post.targetId == uid && post.isFromToday) {
+                membershipAnniversaryPost = post;
+              }
               continue;
             }
             feedPosts.add(post);
           }
+          feedPosts.sort(_compareFeedPosts);
 
           return Column(
             children: [
               if (membershipAnniversaryPost != null)
-                _MembershipAnniversaryBanner(text: membershipAnniversaryPost.text),
+                _MembershipAnniversaryBanner(
+                  text: membershipAnniversaryPost.text,
+                ),
               Expanded(
                 child: feedPosts.isEmpty
                     ? ListView(
@@ -111,9 +146,12 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
                         itemCount: feedPosts.length,
                         itemBuilder: (context, index) {
                           final post = feedPosts[index];
-                          final liked = uid != null && post.likedBy.contains(uid);
-                          final canEdit = post.postType == PostType.manual &&
-                              (isAdmin || (uid != null && post.authorUid == uid));
+                          final liked =
+                              uid != null && post.likedBy.contains(uid);
+                          final canEdit =
+                              post.postType == PostType.manual &&
+                              (isAdmin ||
+                                  (uid != null && post.authorUid == uid));
                           return PostCard(
                             post: post,
                             liked: liked,
@@ -122,7 +160,9 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
                                 _showLoginRequired(context);
                                 return;
                               }
-                              await ref.read(postRepositoryProvider).toggleLike(post.id, uid, !liked);
+                              await ref
+                                  .read(postRepositoryProvider)
+                                  .toggleLike(post.id, uid, !liked);
                             },
                             onCommentTap: () {
                               if (uid == null) {
@@ -130,15 +170,23 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
                                 return;
                               }
                               Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => PostCommentsPage(postId: post.id)),
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      PostCommentsPage(postId: post.id),
+                                ),
                               );
                             },
                             onEditTap: canEdit
                                 ? () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => PostFormPage(editing: post)),
-                                    )
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          PostFormPage(editing: post),
+                                    ),
+                                  )
                                 : null,
-                            onDeleteTap: canEdit ? () => _confirmDelete(context, ref, post) : null,
+                            onDeleteTap: canEdit
+                                ? () => _confirmDelete(context, ref, post)
+                                : null,
                           );
                         },
                       ),
@@ -150,15 +198,27 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Post post) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Post post,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir publicação'),
-        content: const Text('Excluir esta publicação? Essa ação não pode ser desfeita.'),
+        content: const Text(
+          'Excluir esta publicação? Essa ação não pode ser desfeita.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Excluir')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
         ],
       ),
     );
@@ -193,8 +253,74 @@ class _MembershipAnniversaryBanner extends StatelessWidget {
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: SibValColors.navyBlue, fontWeight: FontWeight.bold, fontSize: 13),
+        style: const TextStyle(
+          color: SibValColors.navyBlue,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
       ),
     );
+  }
+}
+
+/// Ordenação do feed (27/08/2026, pedido do usuário — reintroduz uma
+/// ordenação por regra, que tinha sido removida em 24/08/2026 em favor de
+/// só `createdAt`). Faixas fixas, da mais alta pra mais baixa prioridade:
+///
+/// 0. Post manual urgente (`PostType.manual` publicado hoje) — "ATENÇÃO".
+/// 1. Aniversariante(s) do dia.
+/// 2. Evento pontual (não recorrente) ainda não finalizado, mais próximo
+///    primeiro.
+/// 3. Devocional de hoje (`isFromToday`).
+/// 4. Evento recorrente ainda não finalizado, mais próximo primeiro.
+/// 5. Resto (post manual/aniversariante que não é mais de hoje etc.), mais
+///    recente primeiro — mesmo critério do feed antigo (`createdAt`).
+/// 6. "Fim da lista": eventos finalizados (pontuais e recorrentes juntos) e
+///    devocional que não é mais a de hoje (27/08/2026, pedido do usuário —
+///    antes ficava presa na faixa 3, só sombreada, sem cair de posição
+///    "como os eventos finalizados") — mais recente primeiro (evento pelo
+///    horário de início, devocional pelo `createdAt` do post).
+///
+/// "Finalizado" = 5h depois do início (`Post.isPastEvent`), não mais o dia
+/// civil seguinte. Pontual vs. recorrente vem de `Post.isRecurringEvent`
+/// (campo `isRecurring`, gravado pela Cloud Function ao criar o post —
+/// `SIBValApp2/functions/index.js`, `createFeedPost`).
+int _feedRank(Post post) {
+  final isEvent = post.postType == PostType.event;
+  final isDevotional = post.postType == PostType.devotional;
+  if (post.postType == PostType.manual && post.isFromToday) return 0;
+  if (post.postType == PostType.birthday && post.isFromToday) return 1;
+  if (isEvent && !post.isRecurringEvent && !post.isPastEvent) return 2;
+  if (isDevotional && post.isFromToday) return 3;
+  if (isEvent && post.isRecurringEvent && !post.isPastEvent) return 4;
+  if ((isEvent && post.isPastEvent) || (isDevotional && !post.isFromToday)) return 6;
+  return 5;
+}
+
+/// Data usada pra ordenar dentro da faixa 6 — horário de início pro evento,
+/// `createdAt` do post pra devocional (que não tem `eventDateTimeMillis`).
+DateTime _rankSixSortDate(Post post) {
+  if (post.eventDateTimeMillis != null) {
+    return DateTime.fromMillisecondsSinceEpoch(post.eventDateTimeMillis!);
+  }
+  return post.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+int _compareFeedPosts(Post a, Post b) {
+  final rankA = _feedRank(a);
+  final rankB = _feedRank(b);
+  if (rankA != rankB) return rankA.compareTo(rankB);
+  switch (rankA) {
+    case 2:
+    case 4:
+      // Eventos ativos: mais próximo de acontecer primeiro.
+      return (a.eventDateTimeMillis ?? 0).compareTo(b.eventDateTimeMillis ?? 0);
+    case 6:
+      // Fim da lista: mais recente primeiro.
+      return _rankSixSortDate(b).compareTo(_rankSixSortDate(a));
+    default:
+      final createdA = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final createdB = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return createdB.compareTo(createdA);
   }
 }

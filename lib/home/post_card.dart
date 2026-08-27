@@ -11,11 +11,18 @@ import '../models/post.dart';
 /// usada pelos eventos), e a barra de curtir/comentar.
 ///
 /// Sem equivalente nativo: posts de evento deixam de ser tocáveis — com um
-/// selo discreto "Finalizado" — assim que a data do evento passa
-/// (`Post.isPastEvent`). A linha `🗓️ (Ter) dd/MM, HH:mm` dentro do texto do
+/// selo discreto "Finalizado" e leve sombreamento no card inteiro — 5 horas
+/// depois do horário de início (`Post.isPastEvent`, 27/08/2026 — antes era
+/// baseado no dia civil). A linha `🗓️ (Ter) dd/MM, HH:mm` dentro do texto do
 /// post já vem pronta da Cloud Function (`(Hoje)`/`(Amanhã)` quando o evento
 /// reposta 24h/6h antes — ver `formatEventFeedText` em functions/index.js),
-/// sem troca no cliente.
+/// sem troca no cliente. Post de devocional ganha o mesmo sombreamento leve
+/// assim que deixa de ser `isFromToday` (devocional de um dia anterior).
+///
+/// Post manual (`PostType.manual`) publicado no próprio dia (`isFromToday`)
+/// é tratado como urgente (27/08/2026, pedido do usuário) — ganha a faixa
+/// "ATENÇÃO" no topo do card; a posição no feed (topo do dia, 5º lugar
+/// depois) é decidida em `home_feed_page.dart`, não aqui.
 ///
 /// [onEditTap]/[onDeleteTap] só vêm preenchidos pra post manual do próprio
 /// autor (ou admin) — mostram um menu (⋮) no cabeçalho.
@@ -53,106 +60,145 @@ class PostCard extends StatelessWidget {
 
     final isEvent = post.postType == PostType.event;
     final isDevotional = post.postType == PostType.devotional;
+    final isUrgent = post.postType == PostType.manual && post.isFromToday;
     final eventDate = post.eventDateSaoPaulo;
     // Sem data resolvida (evento apagado ou virou inacessível) conta como
     // finalizado também — o link levaria a "Evento não encontrado", então
     // não faz sentido deixar tocável nem omitir o selo só por falta de dado.
     final isPastEvent = isEvent && (eventDate == null || post.isPastEvent);
     final isTappable =
-        (isEvent && post.targetId.isNotEmpty && eventDate != null && !post.isPastEvent) ||
+        (isEvent &&
+            post.targetId.isNotEmpty &&
+            eventDate != null &&
+            !post.isPastEvent) ||
         (isDevotional && post.targetId.isNotEmpty);
+    // Leve sombreamento (27/08/2026, pedido do usuário): evento finalizado
+    // ou devocional que não é mais a de hoje.
+    final dimmed = isPastEvent || (isDevotional && !post.isFromToday);
 
     final cardColor = Theme.of(context).cardColor;
-    return Card(
-      margin: const EdgeInsets.all(8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    post.authorName.isNotEmpty ? post.authorName : 'SIBVal Connect',
-                    style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (post.createdAt != null)
-                  Text(
-                    _dateFormat.format(post.createdAt!),
-                    style: TextStyle(color: context.textSecondary, fontSize: 12),
-                  ),
-                if (onEditTap != null || onDeleteTap != null)
-                  PopupMenuButton<VoidCallback>(
-                    icon: Icon(Icons.more_vert, color: context.textSecondary),
-                    onSelected: (action) => action(),
-                    itemBuilder: (context) => [
-                      if (onEditTap != null)
-                        PopupMenuItem(value: onEditTap!, child: const Text('Editar')),
-                      if (onDeleteTap != null)
-                        PopupMenuItem(value: onDeleteTap!, child: const Text('Excluir')),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          if (post.text.isNotEmpty)
+    return Opacity(
+      opacity: dimmed ? 0.6 : 1,
+      child: Card(
+        margin: const EdgeInsets.all(8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isUrgent) const _UrgentBanner(),
             Padding(
-              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-              child: Text(post.text, style: TextStyle(color: context.textPrimary)),
-            ),
-          if (post.imageUrl.isNotEmpty)
-            GestureDetector(
-              onTap: isTappable
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => isDevotional
-                              ? DevotionalDetailPage(devotionalId: post.targetId)
-                              : EventDetailPage(eventId: post.targetId),
-                        ),
-                      )
-                  : null,
-              child: Stack(
+              padding: const EdgeInsets.all(12),
+              child: Row(
                 children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Container(
-                      color: cardColor,
-                      child: Image.network(
-                        post.imageUrl,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(child: CircularProgressIndicator());
-                        },
-                        errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+                  Expanded(
+                    child: Text(
+                      post.authorName.isNotEmpty
+                          ? post.authorName
+                          : 'SIBVal Connect',
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  if (isPastEvent)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Finalizado',
-                          style: TextStyle(color: Colors.white70, fontSize: 11),
-                        ),
+                  if (post.createdAt != null)
+                    Text(
+                      _dateFormat.format(post.createdAt!),
+                      style: TextStyle(
+                        color: context.textSecondary,
+                        fontSize: 12,
                       ),
+                    ),
+                  if (onEditTap != null || onDeleteTap != null)
+                    PopupMenuButton<VoidCallback>(
+                      icon: Icon(Icons.more_vert, color: context.textSecondary),
+                      onSelected: (action) => action(),
+                      itemBuilder: (context) => [
+                        if (onEditTap != null)
+                          PopupMenuItem(
+                            value: onEditTap!,
+                            child: const Text('Editar'),
+                          ),
+                        if (onDeleteTap != null)
+                          PopupMenuItem(
+                            value: onDeleteTap!,
+                            child: const Text('Excluir'),
+                          ),
+                      ],
                     ),
                 ],
               ),
             ),
-          _buildLikeCommentBar(context),
-        ],
+            if (post.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
+                child: Text(
+                  post.text,
+                  style: TextStyle(color: context.textPrimary),
+                ),
+              ),
+            if (post.imageUrl.isNotEmpty)
+              GestureDetector(
+                onTap: isTappable
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => isDevotional
+                              ? DevotionalDetailPage(
+                                  devotionalId: post.targetId,
+                                )
+                              : EventDetailPage(eventId: post.targetId),
+                        ),
+                      )
+                    : null,
+                child: Stack(
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Container(
+                        color: cardColor,
+                        child: Image.network(
+                          post.imageUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          },
+                          errorBuilder: (context, error, stack) =>
+                              const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                    if (isPastEvent)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Finalizado',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            _buildLikeCommentBar(context),
+          ],
+        ),
       ),
     );
   }
@@ -175,8 +221,12 @@ class PostCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 26,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  backgroundImage: post.imageUrl.isNotEmpty ? NetworkImage(post.imageUrl) : null,
+                  backgroundColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
+                  backgroundImage: post.imageUrl.isNotEmpty
+                      ? NetworkImage(post.imageUrl)
+                      : null,
                   child: post.imageUrl.isEmpty
                       ? Icon(Icons.cake_outlined, color: context.textSecondary)
                       : null,
@@ -186,12 +236,18 @@ class PostCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(post.text, style: TextStyle(color: context.textPrimary)),
+                      Text(
+                        post.text,
+                        style: TextStyle(color: context.textPrimary),
+                      ),
                       if (post.createdAt != null) ...[
                         const SizedBox(height: 4),
                         Text(
                           _dateFormat.format(post.createdAt!),
-                          style: TextStyle(color: context.textSecondary, fontSize: 12),
+                          style: TextStyle(
+                            color: context.textSecondary,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ],
@@ -218,13 +274,52 @@ class PostCard extends StatelessWidget {
               color: liked ? Colors.redAccent : context.textSecondary,
             ),
           ),
-          Text('${post.likedBy.length}', style: TextStyle(color: context.textPrimary)),
+          Text(
+            '${post.likedBy.length}',
+            style: TextStyle(color: context.textPrimary),
+          ),
           const SizedBox(width: 16),
           IconButton(
             onPressed: onCommentTap,
             icon: Icon(Icons.chat_bubble_outline, color: context.textSecondary),
           ),
-          Text('${post.commentCount}', style: TextStyle(color: context.textPrimary)),
+          Text(
+            '${post.commentCount}',
+            style: TextStyle(color: context.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "ATENÇÃO" no topo do card — post manual publicado no próprio dia
+/// (27/08/2026, pedido do usuário: post inserido direto no Início é
+/// considerado urgente/informação importante enquanto durar o dia da
+/// postagem). Sem faixa colorida (removida 27/08/2026, a pedido do usuário)
+/// — só o ícone e o texto em vermelho, na cor de fundo normal do card.
+/// `Icons.warning_amber_rounded` — volta ao ícone original (era branco
+/// sobre a faixa vermelha), agora só ele em vermelho.
+class _UrgentBanner extends StatelessWidget {
+  const _UrgentBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+          SizedBox(width: 6),
+          Text(
+            'ATENÇÃO',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );

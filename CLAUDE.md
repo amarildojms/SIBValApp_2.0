@@ -898,6 +898,83 @@ campo ainda, mas o fallback é grátis). Mesmo fallback e mesma faixa
 replicados em `postDevotionalToFeed`
 (`SIBValApp2/functions/index.js`, só código-fonte, sem deploy).
 
+**Regras de ordenação do feed "Início" (27/08/2026, pedido do usuário) —
+reintroduz ranking por regra, removido em 24/08/2026 em favor de só
+`createdAt`:** `_feedRank`/`_compareFeedPosts`
+(`lib/home/home_feed_page.dart`) classificam cada post numa de 7 faixas
+antes de renderizar a lista (a query do Firestore continua só por
+`createdAt` descendente — vira o desempate dentro de cada faixa, ver
+`lib/data/post_repository.dart`):
+
+0. Post manual (`PostType.manual`) publicado hoje — "urgente".
+1. Aniversariante(s) do dia.
+2. Evento pontual (não recorrente) não finalizado — mais próximo primeiro.
+3. Devocional de hoje (`isFromToday`).
+4. Evento recorrente não finalizado — mais próximo primeiro.
+5. Resto (post manual/aniversariante que não é mais de hoje) — mais recente
+   primeiro.
+6. "Fim da lista": eventos finalizados (pontuais e recorrentes juntos) **e**
+   devocional que não é mais a de hoje (27/08/2026, correção de uma
+   suposição errada da rodada anterior — ver nota abaixo) — mais recente
+   primeiro (evento pelo horário de início, devocional pelo `createdAt` do
+   post, via `_rankSixSortDate`).
+
+"Finalizado" mudou de critério: `Post.isPastEvent`
+(`lib/models/post.dart`) era baseado no dia civil ("verdadeiro a partir do
+dia seguinte ao evento"); agora é **5 horas depois do horário de início**
+(pedido explícito do usuário), mesmo campo/getter reaproveitado (nome
+mantido pra não mexer nos 3 pontos que já liam `post.isPastEvent` em
+`post_card.dart`). Pontual vs. recorrente vem de `Post.isRecurringEvent`
+(`isRecurring` no Firestore) — campo novo, gravado só em posts de evento por
+`createFeedPost` em `SIBValApp2/functions/index.js`, a partir de
+`!!evt.recurringEventId` (o próprio doc do evento já distinguia isso, só não
+chegava até o post). **Sem retrocompatibilidade automática**: posts de
+evento já existentes no Firestore antes do deploy dessa mudança não têm o
+campo `isRecurring` e caem no default `false` (tratados como pontuais) até
+serem repostados (reposte 24h/6h antes, ou próxima segunda-feira).
+
+`PostCard` (`lib/home/post_card.dart`) ganhou: sombreamento leve
+(`Opacity(0.6)` no card inteiro) pra evento finalizado ou devocional que não
+é mais a de hoje (`!post.isFromToday`); faixa vermelha "ATENÇÃO" (ícone +
+texto, cor deliberadamente fora da paleta navy/dourado da marca) no topo do
+card pra post manual publicado hoje.
+
+Cloud Function (`SIBValApp2/functions/index.js`, só código-fonte, sem
+deploy — mesma cautela de sempre): `postDevotionalToFeed` passou a
+acrescentar uma linha "(Devocional diário: dd/mm/aaaa)" ao texto do post,
+usando `devotional.dateKey` (a data da própria devocional, não "hoje" no
+momento do cron/gatilho).
+
+**Correção da mesma sessão:** a primeira versão deixava a devocional que não
+é mais "a de hoje" presa na faixa 3 (só sombreada, sem cair de posição) —
+suposição errada; corrigida a pedido do usuário pra cair na faixa 6, igual
+aos eventos finalizados.
+
+**Suposições ainda assumidas sem confirmação explícita do usuário** (pedido
+tinha algumas lacunas; documentado aqui pra revisar se o comportamento não
+bater com o esperado):
+- Dentro da faixa 6 ("fim da lista"), ordenação por mais recente primeiro
+  (evento pelo horário de início, devocional pelo `createdAt` do post) —
+  não o inverso.
+- Faixa 5 ("resto": manual/aniversariante que não é mais de hoje) ordenada
+  por `createdAt` descendente, igual ao comportamento antigo do feed.
+- Evento pontual e recorrente são dois blocos sempre separados (faixa 2
+  sempre acima da 4), não intercalados por data — só a ordenação *dentro*
+  de cada bloco segue a data do evento.
+
+**Reordenação por relógio, sem depender de escrita nova (mesma sessão):** as
+faixas do feed dependem de condições que mudam sozinhas com o tempo
+(`Post.isPastEvent` cruzando as 5h após o início, `Post.isFromToday` virando
+falso à meia-noite) — sem nenhum gatilho próprio, essas transições só
+apareciam na tela quando uma escrita nova chegava pelo `postsProvider`
+(`StreamProvider`), não no exato momento em que aconteciam. `HomeFeedPage`
+(`_HomeFeedPageState`) ganhou um `Timer.periodic` de 1 minuto que só chama
+`setState(() {})` — força o `_compareFeedPosts` recalcular contra o relógio
+atual, sem nenhuma leitura nova do Firestore. Cancelado em `dispose()`. A
+atualização em tempo real por escrita nova (post criado/editado/curtido)
+continua funcionando do jeito que já funcionava, via `.snapshots()` — o
+timer só cobre o caso que faltava.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

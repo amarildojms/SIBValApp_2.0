@@ -23,6 +23,7 @@ class Post {
   final String postType;
   final String targetId;
   final int? eventDateTimeMillis;
+  final bool isRecurringEvent;
 
   const Post({
     required this.id,
@@ -37,6 +38,7 @@ class Post {
     required this.postType,
     required this.targetId,
     this.eventDateTimeMillis,
+    this.isRecurringEvent = false,
   });
 
   factory Post.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -54,22 +56,28 @@ class Post {
       postType: data['postType'] as String? ?? PostType.manual,
       targetId: data['targetId'] as String? ?? '',
       eventDateTimeMillis: (data['eventDateTimeMillis'] as num?)?.toInt(),
+      isRecurringEvent: data['isRecurring'] as bool? ?? false,
     );
   }
 
   DateTime? get eventDateSaoPaulo => eventDateTimeMillis != null
-      ? toSaoPauloTime(DateTime.fromMillisecondsSinceEpoch(eventDateTimeMillis!, isUtc: true))
+      ? toSaoPauloTime(
+          DateTime.fromMillisecondsSinceEpoch(
+            eventDateTimeMillis!,
+            isUtc: true,
+          ),
+        )
       : null;
 
-  /// Verdadeiro a partir do dia seguinte ao do evento (o dia do evento em si
-  /// ainda conta como "não ocorrido" pra manter o post fixado/tocável).
+  /// Verdadeiro a partir de 5 horas depois do horário de início do evento —
+  /// critério de "Finalizado" (27/08/2026, pedido do usuário; antes era
+  /// baseado no dia civil — "verdadeiro a partir do dia seguinte"). Usado
+  /// pro selo "Finalizado"/sombreamento do card em `post_card.dart` e pra
+  /// rebaixar o post pro fim da lista do Início em `home_feed_page.dart`.
   bool get isPastEvent {
     final eventDate = eventDateSaoPaulo;
     if (eventDate == null) return false;
-    final today = toSaoPauloTimeNow();
-    final eventDay = DateTime(eventDate.year, eventDate.month, eventDate.day);
-    final todayDay = DateTime(today.year, today.month, today.day);
-    return eventDay.isBefore(todayDay);
+    return toSaoPauloTimeNow().isAfter(eventDate.add(const Duration(hours: 5)));
   }
 
   /// Verdadeiro só no dia em que o post foi criado (fuso America/Sao_Paulo) —
@@ -81,7 +89,9 @@ class Post {
     if (createdAt == null) return false;
     final created = toSaoPauloTime(createdAt!.toUtc());
     final today = toSaoPauloTimeNow();
-    return created.year == today.year && created.month == today.month && created.day == today.day;
+    return created.year == today.year &&
+        created.month == today.month &&
+        created.day == today.day;
   }
 }
 
