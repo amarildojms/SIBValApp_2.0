@@ -18,13 +18,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 28, ajuste aqui e gere o
-# AAB de novo. Esta soma as correções de UX de 25/08/2026: rótulo
-# "Devocionais" cortando em telas menores (fonte reduzida na barra +
-# clamp de escala de texto), ícones do menu Mais com mais de uma palavra
-# sempre quebrando em 2 linhas balanceadas, e dica de "Proporção
-# recomendada: 16:9" nos seletores de imagem de Eventos/Posts/Flyers.
-version: 1.5.1+28
+# Play Console antes de enviar; se for maior que 29, ajuste aqui e gere o
+# AAB de novo. Esta soma as features de 26-27/08/2026: campo "Texto base"
+# (livro/capítulo/versículo, com faixa "de...até...") no cadastro de
+# devocionais; e a reorganização do feed do Início por regra (aniversariante
+# do dia > evento pontual ativo > devocional > evento recorrente ativo >
+# resto > finalizados), com sombreamento leve pro que já passou, selo
+# "ATENÇÃO" pra post urgente do dia, e atualização automática por relógio a
+# cada minuto.
+version: 1.7.0+29
 
 environment:
   sdk: ^3.13.0
