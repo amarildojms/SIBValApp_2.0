@@ -67,6 +67,13 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
   /// chegar na nota escolhida). Convive com os botões +/- já existentes,
   /// que continuam funcionando normalmente.
   Future<void> _openTonePicker(String baseTone) async {
+    // A cifra é menor (`baseTone` termina em "m") — a lista mostra as 12
+    // notas já com o "m" (ex. "Em", "Dbm", "F#m"), não as notas puras
+    // (28/08/2026, pedido do usuário). O acorde escolhido é sempre a nota
+    // pura (`praiseToneNotes[i]`) — o "m" é só rótulo, a conta de semitons
+    // usa a nota fundamental de qualquer jeito.
+    final isMinor = baseTone.endsWith('m');
+    final rootNote = isMinor ? baseTone.substring(0, baseTone.length - 1) : baseTone;
     final selected = await showDialog<String>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
@@ -75,14 +82,15 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
           for (final note in praiseToneNotes)
             SimpleDialogOption(
               onPressed: () => Navigator.of(dialogContext).pop(note),
-              child: Text(note, style: const TextStyle(fontSize: 16)),
+              child: Text(
+                isMinor ? '${note}m' : note,
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
         ],
       ),
     );
     if (selected == null) return;
-    final isMinor = baseTone.endsWith('m');
-    final rootNote = isMinor ? baseTone.substring(0, baseTone.length - 1) : baseTone;
     final baseIndex = noteIndex(rootNote);
     final targetIndex = noteIndex(selected);
     if (baseIndex == null || targetIndex == null) return;

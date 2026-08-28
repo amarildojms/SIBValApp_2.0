@@ -416,15 +416,19 @@ class _AssignmentRow extends StatelessWidget {
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   ),
+                  // Lista aberta e botão fechado mostram o mesmo texto — se
+                  // "Menor" estiver marcado, todo item ganha o "m" (ex.
+                  // "Em", "Dbm", "F#m"), não só o valor selecionado
+                  // (28/08/2026, pedido do usuário — antes só o botão
+                  // fechado ganhava o "m" via `selectedItemBuilder`, a lista
+                  // aberta continuava com as notas puras).
                   items: [
                     for (final note in praiseToneNotes)
-                      DropdownMenuItem(value: note, child: Text(note)),
+                      DropdownMenuItem(
+                        value: note,
+                        child: Text(draft.toneIsMinor ? '${note}m' : note),
+                      ),
                   ],
-                  // `selectedItemBuilder` (28/08/2026, pedido do usuário)
-                  // só troca o que aparece FECHADO no botão — a lista aberta
-                  // continua com as notas puras (`items` acima); é assim que
-                  // dá pra acrescentar o "m" de "Menor" sem duplicar cada
-                  // nota como um item próprio.
                   selectedItemBuilder: (context) => [
                     for (final note in praiseToneNotes)
                       Text(draft.toneIsMinor ? '${note}m' : note),

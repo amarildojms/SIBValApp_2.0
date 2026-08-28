@@ -2103,6 +2103,39 @@ usuário):**
   automática de escala e o popup de finalização só funcionam de verdade em
   produção depois de um `firebase deploy` explicitamente pedido.
 
+**Ordem de Culto — 14ª rodada: tons menores na lista (não só no botão
+fechado), texto do popup de finalização simplificado, confirmação do
+encaminhamento da notificação de participação (28/08/2026, mesma sessão,
+pedidos do usuário):**
+
+- **Lista de tons mostra "m" em todo item quando menor, não só no botão
+  fechado** — `weekly_repertoire_form_page.dart`/`cifra_editor_page.dart`
+  (`items` do `DropdownButtonFormField`) e `CifraViewPage._openTonePicker`
+  (novo desta sessão, rodada anterior) só sufixavam "m" no
+  `selectedItemBuilder` (texto do botão já fechado); a lista aberta
+  continuava com as notas puras. Corrigido nos três lugares — o "m" agora
+  aparece em toda a lista (ex. "Em", "Dbm", "F#m") sempre que o tom em
+  questão é menor (`toneIsMinor`/`_toneIsMinor` nos dois primeiros,
+  `baseTone.endsWith('m')` no terceiro, já que lá não há um toggle
+  separado — o "menor" vem direto do tom salvo na cifra).
+- **Texto do popup/notificação de finalização simplificado** — pedido do
+  usuário: só "{Culto/Tema} foi finalizado." (título) + "Que a bênção do
+  Senhor esteja sobre sua vida!" (corpo), sem "Vá em paz 🙏" (removido).
+  Botão do popup (`push_notification_service.dart`) virou "🙌 Amém" (o
+  emoji de "mãozinhas" pedido foi pro botão, não pro texto da mensagem).
+- **Encaminhamento da notificação de mensagem de participação pra
+  `MessageDetailPage`** — conferido, não precisou de nenhuma mudança: as
+  duas Cloud Functions novas da rodada anterior
+  (`onServiceOrderCreatedParticipationNotify`/
+  `onServiceOrderUpdatedParticipationNotify`) já gravam o documento em
+  `messages` com exatamente o mesmo formato de campos que
+  `MessageRepository.send()` usa (conferido campo a campo) — o gatilho
+  `onMessageCreated` (já existente) já dispara o push com
+  `type: "message", targetId: <id da mensagem>`, e
+  `notification_navigation.dart` já tinha o `case NotificationType.message`
+  levando pra `MessageDetailPage(messageId: targetId)` desde antes desta
+  feature existir. Já funcionava por construção.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

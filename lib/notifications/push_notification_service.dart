@@ -174,7 +174,7 @@ class PushNotificationService {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Amém'),
+            child: const Text('🙌 Amém'),
           ),
         ],
       ),

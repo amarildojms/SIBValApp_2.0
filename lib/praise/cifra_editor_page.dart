@@ -217,14 +217,18 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
+                          // Mesmo mecanismo de `weekly_repertoire_form_page.dart`
+                          // (28/08/2026, pedido do usuário) — a lista aberta E
+                          // o botão fechado ganham o "m" quando "Menor" está
+                          // marcado (ex. "Em", "Dbm", "F#m"), não só o
+                          // fechado.
                           items: [
                             for (final note in praiseToneNotes)
-                              DropdownMenuItem(value: note, child: Text(note)),
+                              DropdownMenuItem(
+                                value: note,
+                                child: Text(_toneIsMinor ? '${note}m' : note),
+                              ),
                           ],
-                          // Mesmo mecanismo de `weekly_repertoire_form_page.dart`
-                          // (28/08/2026, pedido do usuário) — só o texto do
-                          // botão fechado ganha o "m", a lista aberta continua
-                          // com as notas puras.
                           selectedItemBuilder: (context) => [
                             for (final note in praiseToneNotes)
                               Text(_toneIsMinor ? '${note}m' : note),
