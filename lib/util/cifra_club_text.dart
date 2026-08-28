@@ -1,5 +1,3 @@
-import 'chord_transpose.dart';
-
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário: "podemos implementar uma maneira mais prática de eu inserir as
 /// cifras? Importando um arquivo algo assim?" + confirmação de que a
@@ -8,6 +6,8 @@ import 'chord_transpose.dart';
 /// inline). Usado por `CifraEditorPage` (botão "Importar arquivo") e por
 /// `CifraViewPage` (decide qual dos dois renderizadores usar).
 library;
+
+import 'chord_transpose.dart';
 
 /// `true` se [line], depois de aparada, tiver pelo menos um token e TODOS
 /// os tokens (separados por espaço) baterem com `isChordToken`

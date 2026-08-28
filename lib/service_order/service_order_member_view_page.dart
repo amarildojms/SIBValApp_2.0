@@ -90,7 +90,7 @@ class _ServiceOrderMemberViewPageState extends ConsumerState<ServiceOrderMemberV
   Widget _buildWaiting(ServiceOrder order) {
     final displayName = serviceOrderDisplayName(order);
     final remaining = order.dateTime.difference(DateTime.now());
-    final reached = !remaining.isPositive;
+    final reached = remaining <= Duration.zero;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

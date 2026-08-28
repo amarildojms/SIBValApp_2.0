@@ -84,18 +84,18 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
 
   /// Importa um .txt (colado/exportado de um site de cifra) e joga no campo
   /// de conteúdo, já limpo (`cleanCifraClubText`) — pede confirmação antes
-  /// de sobrescrever se já havia algo digitado. `withData: true` pede os
-  /// bytes direto do picker (funciona em qualquer plataforma sem depender
-  /// de acesso a caminho de arquivo, mais simples que ler via `dart:io`).
+  /// de sobrescrever se já havia algo digitado. `FilePickerPlatform.instance`
+  /// (não mais `FilePicker.platform`, removido a partir do file_picker 12.x)
+  /// devolve a lista de `PlatformFile` diretamente, com `readAsBytes()` em
+  /// vez de um campo `bytes` nullable — API nova, confirmada lendo o pacote
+  /// instalado (`file_picker_platform_interface-3.2.0`).
   Future<void> _importFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final files = await FilePickerPlatform.instance.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['txt'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
-    final bytes = result.files.first.bytes;
-    if (bytes == null) return;
+    if (files.isEmpty) return;
+    final bytes = await files.first.readAsBytes();
     final cleaned = cleanCifraClubText(utf8.decode(bytes, allowMalformed: true));
 
     if (!mounted) return;
