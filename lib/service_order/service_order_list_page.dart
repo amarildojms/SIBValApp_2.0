@@ -10,21 +10,28 @@ import '../models/service_order.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'service_order_form_page.dart';
-import 'service_order_praise_view_page.dart';
-import 'service_order_precheck_page.dart';
+import 'service_order_navigation.dart';
+import 'service_order_preview_page.dart';
 
-/// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
+/// Sem equivalente no app nativo — feature nova (27-28/08/2026, pedido do
 /// usuário). Tela que abre ao tocar em "Ordem de Culto" no menu Mais — antes
 /// ia direto pro cadastro (`ServiceOrderFormPage`); agora mostra primeiro as
 /// ordens já cadastradas (`serviceOrdersProvider`), com um botão "Nova
-/// Ordem" pra iniciar o cadastro. Toque simples abre
-/// `ServiceOrderPrecheckPage` (contagem regressiva + "Iniciar Culto");
-/// toque e segure abre um menu Editar/Excluir (`_showActions`), só pra quem
-/// é dono da ordem ou admin (mesma regra de `firestore.rules`). O ícone de
-/// engrenagem, ao lado do título (28/08/2026 — antes ficava na app bar,
-/// movido pra cá a pedido do usuário, mesmo padrão de "Contribua" +
-/// "Configurar" em `contribute_page.dart`), abre
-/// `ManageServiceOrderMomentsPage` (momentos do culto + momentos especiais).
+/// Ordem" pra iniciar o cadastro. Tile agora incondicional (28/08/2026 — ver
+/// `main_shell.dart`), aberto pra qualquer usuário, logado ou em acesso
+/// convidado: toque simples despacha por papel via `openServiceOrder`
+/// (`service_order_navigation.dart`) — Dirigentes/admin vai pro Precheck
+/// (contagem regressiva + "Iniciar Culto"), Louvor pra
+/// `ServiceOrderPraiseViewPage`, e qualquer outro (membro comum ou
+/// convidado) pra `ServiceOrderMemberViewPage` (travada num timer até o
+/// dirigente iniciar). Toque e segure abre um menu Editar/Excluir/Visualizar
+/// (`_showActions`) — Editar/Excluir só pra quem é dono da ordem ou admin
+/// (mesma regra de `firestore.rules`); "Visualizar" (prévia, sempre
+/// disponível) usa o mesmo menu por conveniência. O ícone de engrenagem, ao
+/// lado do título (28/08/2026 — antes ficava na app bar, movido pra cá a
+/// pedido do usuário, mesmo padrão de "Contribua" + "Configurar" em
+/// `contribute_page.dart`), abre `ManageServiceOrderMomentsPage` (momentos
+/// do culto + momentos especiais).
 class ServiceOrderListPage extends ConsumerWidget {
   const ServiceOrderListPage({super.key});
 
@@ -158,13 +165,7 @@ class ServiceOrderListPage extends ConsumerWidget {
                                   'Dirigente: ${order.ownerName}',
                                   style: TextStyle(color: context.textSecondary),
                                 ),
-                          onTap: () => canManageOrders
-                              ? Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => ServiceOrderPrecheckPage(order: order),
-                                  ),
-                                )
-                              : _openPraiseView(context, order),
+                          onTap: () => openServiceOrder(context, order.id),
                           onLongPress: canManage
                               ? () => _showActions(context, ref, order)
                               : null,
@@ -181,17 +182,6 @@ class ServiceOrderListPage extends ConsumerWidget {
     );
   }
 
-  /// Quem não gerencia Ordem de Culto (Louvor puro) cai aqui — a própria
-  /// `ServiceOrderPraiseViewPage` decide se mostra a ordem ou "ainda não
-  /// disponível" (liberada 1h antes do culto).
-  void _openPraiseView(BuildContext context, ServiceOrder order) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ServiceOrderPraiseViewPage(orderId: order.id),
-      ),
-    );
-  }
-
   void _showActions(BuildContext context, WidgetRef ref, ServiceOrder order) {
     showModalBottomSheet<void>(
       context: context,
@@ -199,6 +189,22 @@ class ServiceOrderListPage extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // "Visualizar" (28/08/2026, pedido do usuário: "uma maneira do
+            // dirigente acessar uma prévia do culto") — sempre disponível,
+            // sem trava de horário, mesmo menu de conveniência do
+            // dono/admin.
+            ListTile(
+              leading: const Icon(Icons.visibility_outlined),
+              title: const Text('Visualizar'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ServiceOrderPreviewPage(order: order),
+                  ),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
               title: const Text('Editar'),

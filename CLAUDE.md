@@ -1907,7 +1907,132 @@ sessão, pedidos do usuário):**
   usuário colar — ele topou. Segue como próximo passo assim que a lista
   chegar.
 
-## Como responder "o que falta migrar"
+**Ordem de Culto — 12ª rodada: Ceia do Senhor, Tema, import de cifra no
+formato Cifra Club, visão dos membros/visitantes travada por timer,
+notificações de 5min-antes/início e prévia do dirigente (28/08/2026, mesma
+sessão, pedidos do usuário):**
+
+- **Novo momento fixo "Ceia do Senhor"**: `ServiceOrderMomentType.communion`
+  inserido no enum entre `message` e `praise3` — como a posição padrão é a
+  própria ordem de declaração do enum, isso já garante "logo após a
+  Mensagem" pra qualquer cadastro novo sem customização de
+  `settings/serviceOrderMomentOrder`. Campo `ServiceOrder.communionResponsible`
+  (padrão `'Pr. Ronan'`), mesmo padrão de `intercessionModerator`/`message`.
+  **Limitação aceita**: se `settings/serviceOrderMomentOrder` já tiver sido
+  customizado (tela "Configurar"), o momento novo é só apendado no fim da
+  lista salva, não inserido na posição relativa — mesmo comportamento já
+  visto em adições anteriores de momento fixo; o admin precisa arrastar
+  "Ceia do Senhor" pro lugar certo uma vez, depois do deploy.
+- **Campo "Tema"** (`ServiceOrder.theme`, vazio por padrão) logo abaixo de
+  Data/Horário no formulário, com aviso "Preencha apenas para cultos
+  especiais". Novo helper `serviceOrderDisplayName(order)` (`"Culto"` quando
+  `theme` vazio) reaproveitado em toda tela/notificação que antes mostrava
+  "Culto" solto (lista, Precheck, modo apresentação, visão do Louvor, visão
+  de membro, e replicado em JS nas duas Cloud Functions novas abaixo, já
+  que JS não importa Dart).
+- **Cifras — import de arquivo + formato "Cifra Club"**: pedido do usuário
+  foi explícito — não bastava importar texto bruto, a própria **exibição**
+  da cifra também devia virar o formato de site de cifra (linha de acordes
+  solta em cima, linha de letra embaixo), não mais `[Acorde]palavra` inline.
+  `Cifra.content` continua um texto único, mas agora nesse formato de duas
+  linhas — `CifraEditorPage` ganhou botão "Importar .txt"
+  (`file_picker`, novo pacote) que lê o arquivo, limpa cabeçalhos de página
+  de cifra (`cleanCifraClubText`, `lib/util/cifra_club_text.dart` — corta
+  tudo antes do primeiro par acorde+letra reconhecível, colapsa linhas em
+  branco) e joga no campo (com confirmação se já havia conteúdo). Colar
+  direto de um site já funciona sem precisar de arquivo. `chord_transpose.dart`
+  ganhou `isChordToken`/`transposeChordLine` (transpõe uma linha inteira de
+  acordes preservando alinhamento — a diferença de comprimento entre acorde
+  antigo/novo é absorvida no espaço seguinte). `CifraViewPage` detecta
+  formato pelo conteúdo salvo: se tem colchetes, usa o renderizador antigo
+  inline (cifras salvas antes desta mudança continuam funcionando sem
+  migração); senão usa o novo renderizador de duas linhas
+  (`isChordLine`/`transposeChordLine`), fonte monoespaçada pra manter
+  alinhamento. Regex de reconhecimento de acorde é uma heurística
+  documentada (lista ampla de sufixos, não um parser musical completo) — o
+  campo continua editável em texto livre, então qualquer classificação
+  errada rara é fácil de corrigir manualmente.
+- **Visão da Ordem de Culto pros demais membros/visitantes** — pedido
+  explícito do usuário, terceiro nível de acesso além de Dirigentes/admin
+  (Precheck) e Louvor (visão própria com tom/cifra): `ServiceOrder.startedAt`
+  (`DateTime?`, fora de `toFieldsMap()`/`copyWith`, mesmo tratamento de
+  `isFinalized`/`finalizedAt` — só `ServiceOrderRepository.markStarted`
+  escreve) + getter `isStarted`. `ServiceOrderPrecheckPage._startService`
+  chama `markStarted` antes de entrar no modo apresentação. Nova
+  `ServiceOrderMemberViewPage` (`lib/service_order/`): travada só numa
+  contagem regressiva até `order.dateTime` enquanto `!isStarted` — **mesmo
+  que o relógio já tenha passado do horário marcado, continua mostrando só
+  "Aguardando o dirigente iniciar" em vez do conteúdo** (confirmado com o
+  usuário: nunca abre sozinha pelo horário, só pelo toque real em "Iniciar
+  Culto"). Assim que `startedAt` é gravado, o `serviceOrderStreamProvider`
+  (tempo real) atualiza a tela sozinha, sem precisar reabrir. Conteúdo
+  completo renderizado via `ServiceOrderReadOnlyBody` — lista somente-leitura
+  extraída de dentro de `ServiceOrderPraiseViewPage` (antes vivia só lá) pra
+  ser reaproveitada pelas duas telas, parametrizada por
+  `showPraiseDetails: bool`: `true` na visão do Louvor (mostra tom, toque
+  abre `CifraViewPage`), `false` na visão de membro (esconde tom, toque nos
+  momentos "Louvor" não navega pra lugar nenhum — "igual à do Louvor, porém
+  sem acesso às cifras", pedido literal do usuário).
+
+  Tile "Ordem de Culto" no menu Mais (`main_shell.dart`) deixou de ser
+  condicional (antes só Dirigentes/Louvor/admin) — agora é incondicional,
+  visível pra qualquer usuário, **inclusive acesso convidado sem conta**
+  (confirmado com o usuário via `AskUserQuestion`). `ServiceOrderListPage`
+  (`onTap`) despacha por papel via novo helper `openServiceOrder`
+  (`lib/service_order/service_order_navigation.dart`, compartilhado com a
+  navegação de notificação abaixo): Dirigentes/admin → Precheck; Louvor →
+  visão própria; qualquer outro (membro comum ou convidado, `profile` pode
+  ser `null`) → `ServiceOrderMemberViewPage`. `SIBValApp2/firestore.rules`:
+  `match /serviceOrders` — `read` virou `allow read: if true;` (leitura
+  pública, mesmo padrão já usado em `posts`/`devotionals`) — `create`/
+  `update`/`delete` continuam restritos a Dirigentes/dono/admin. **Só editei
+  o código-fonte das regras — não fiz `firebase deploy`**, mesma cautela de
+  sempre; até o deploy, a visão de membro/convidado não consegue ler
+  `serviceOrders` de verdade em produção.
+
+- **Notificações de 5 minutos antes e de início do culto** — pedido do
+  usuário, ambas audiência `all` (todo mundo), texto usa
+  `serviceOrderDisplayName`/`theme` no lugar de "Culto" quando preenchido.
+  Novos `NotificationType.serviceOrderReminder`/`.serviceOrderStarted`
+  (`lib/models/notification.dart`); `notification_navigation.dart` despacha
+  os dois pra `openServiceOrder` (mesma regra por papel de cima).
+  `syncNotificationsForScreen` chamado no `initState` de
+  `ServiceOrderMemberViewPage`/`ServiceOrderPraiseViewPage`/
+  `ServiceOrderPrecheckPage`/`ServiceOrderLivePage`, mesmo padrão das demais
+  telas ligadas a um tipo de notificação. Em
+  `SIBValApp2/functions/index.js` (só código-fonte, sem deploy): novo
+  `sendServiceOrderReminders` (`onSchedule`, a cada minuto) consulta
+  `serviceOrders` num range de 1h à frente, filtra em memória quem ainda não
+  tem `reminder5MinSent` e cuja janela de 5 minutos já começou, envia e
+  marca o flag (idempotência, mesmo padrão de `reminderSent` em
+  `sendRecurringEventReminders`); novo `onServiceOrderStartedNotify`
+  (`onDocumentUpdated`) detecta a transição de `startedAt` ausente pra
+  presente e notifica na hora, em tempo real.
+
+- **Prévia da ordem pro dirigente** — pedido do usuário ("uma maneira do
+  dirigente acessar uma prévia do culto"). Nova `ServiceOrderPreviewPage`
+  (`lib/service_order/`) — lista somente-leitura de `order.momentOrder`
+  (rótulo + resumo de cada momento, sem tracking de progresso, sem trava de
+  horário, sempre disponível) — é a lista de momentos que existia em
+  `ServiceOrderPrecheckPage` antes da 3ª rodada da mesma sessão (removida de
+  lá), revivida como tela própria. Dois pontos de entrada: botão "Ver
+  Prévia" em `ServiceOrderPrecheckPage` (sempre habilitado, não depende da
+  contagem regressiva) e item "Visualizar" no menu de toque-e-segure de
+  `ServiceOrderListPage` (mesmo menu que já tinha Editar/Excluir pro
+  dono/admin), disponível a qualquer momento, não só perto do horário do
+  culto.
+
+- **Nota de processo**: esta rodada foi implementada por três frentes em
+  paralelo (Flutter core, import/exibição de cifra, Cloud Functions/regras).
+  A frente de Cloud Functions/regras inicialmente saiu do escopo combinado
+  (mexeu em arquivos Dart que não eram dela, colidindo com a frente
+  principal) e nunca chegou a aplicar as mudanças em
+  `firestore.rules`/`functions/index.js` — percebido só na verificação final
+  (`git status` no repo nativo mostrando árvore limpa apesar do relatório
+  dizer o contrário); refeito diretamente por mim depois, e toda a árvore de
+  arquivos Dart revisada manualmente linha por linha (sem `flutter analyze`
+  disponível neste ambiente) pra confirmar que a concorrência não deixou
+  nada quebrado.
 
 ## Como responder "o que falta migrar"
 

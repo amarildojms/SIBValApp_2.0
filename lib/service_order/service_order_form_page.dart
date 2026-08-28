@@ -78,6 +78,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
 
+  final _themeController = TextEditingController();
+
   PreludeStyle _preludeStyle = PreludeStyle.naoHavera;
   final _preludeOtherController = TextEditingController();
 
@@ -101,6 +103,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   final _praise2Controller = TextEditingController();
   final _intercessionController = TextEditingController();
   final _messageController = TextEditingController();
+  final _communionController = TextEditingController();
   final _praise3Controller = TextEditingController();
 
   PreludeStyle _postludeStyle = PreludeStyle.instrumental;
@@ -144,6 +147,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
         hour: editing.dateTime.hour,
         minute: editing.dateTime.minute,
       );
+      _themeController.text = editing.theme;
       _preludeStyle = editing.preludeStyle;
       _preludeOtherController.text = editing.preludeOther;
       _prayerController.text = editing.prayerText;
@@ -160,6 +164,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _praise2Controller.text = editing.praise2;
       _intercessionController.text = editing.intercessionModerator;
       _messageController.text = editing.message;
+      _communionController.text = editing.communionResponsible;
       _praise3Controller.text = editing.praise3;
       _postludeStyle = editing.postludeStyle;
       _postludeOtherController.text = editing.postludeOther;
@@ -171,6 +176,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _praise3Controller.text = 'Ministério Adorai';
       _intercessionController.text = 'Pr. Ronan';
       _messageController.text = 'Pr. Ronan';
+      _communionController.text = 'Pr. Ronan';
     }
     if (_bibleReadingControllers.isEmpty) {
       _bibleReadingControllers.add(BibleReferenceController());
@@ -206,6 +212,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   }
 
   List<TextEditingController> get _textControllersToTrack => [
+    _themeController,
     _preludeOtherController,
     _prayerController,
     _praise1Controller,
@@ -216,6 +223,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _praise2Controller,
     _intercessionController,
     _messageController,
+    _communionController,
     _praise3Controller,
     _postludeOtherController,
   ];
@@ -411,16 +419,19 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       praise2: _praise2Controller.text.trim(),
       intercessionModerator: _intercessionController.text.trim(),
       message: _messageController.text.trim(),
+      communionResponsible: _communionController.text.trim(),
       praise3: _praise3Controller.text.trim(),
       postludeStyle: _postludeStyle,
       postludeOther: _postludeStyle == PreludeStyle.outro
           ? _postludeOtherController.text.trim()
           : '',
+      theme: _themeController.text.trim(),
       ownerUid: editing?.ownerUid ?? uid,
       ownerName: editing?.ownerName ?? profile.shortName,
       createdByUid: editing?.createdByUid ?? uid,
       createdByName: editing?.createdByName ?? profile.shortName,
       createdAt: editing?.createdAt,
+      startedAt: editing?.startedAt,
       momentOrder: _extraMoments,
     );
 
@@ -453,6 +464,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       controller.removeListener(_markDirty);
     }
     _scrollController.dispose();
+    _themeController.dispose();
     _preludeOtherController.dispose();
     _prayerController.dispose();
     for (final controller in _bibleReadingControllers) {
@@ -469,6 +481,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _praise2Controller.dispose();
     _intercessionController.dispose();
     _messageController.dispose();
+    _communionController.dispose();
     _praise3Controller.dispose();
     _postludeOtherController.dispose();
     super.dispose();
@@ -546,6 +559,17 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        _sectionLabel(context, 'Tema'),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: _themeController,
+                          decoration: _fieldDecoration.copyWith(
+                            hintText:
+                                'Preencha apenas para cultos especiais',
+                          ),
                         ),
                         const SizedBox(height: 10),
 
@@ -707,6 +731,16 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                         TextField(
                           controller: _messageController,
                           decoration: _fieldDecoration,
+                        ),
+                        const SizedBox(height: 10),
+
+                        _momentLabel(context, 'Ceia do Senhor'),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: _communionController,
+                          decoration: _fieldDecoration.copyWith(
+                            hintText: 'Responsável',
+                          ),
                         ),
                         const SizedBox(height: 10),
 

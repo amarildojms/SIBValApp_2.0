@@ -57,6 +57,16 @@ abstract final class NotificationType {
   static const message = 'message';
   static const membershipAnniversary = 'membership_anniversary';
   static const visitor = 'visitor';
+
+  /// 5 minutos antes do início do culto (28/08/2026, pedido do usuário) —
+  /// audiência `all`, texto usa `serviceOrderDisplayName` no lugar de
+  /// "Culto" quando a ordem tem `theme` preenchido.
+  static const serviceOrderReminder = 'service_order_reminder';
+
+  /// Disparada quando o dirigente de fato toca em "Iniciar Culto"
+  /// (`ServiceOrderRepository.markStarted`) — é o que libera
+  /// `ServiceOrderMemberViewPage` de ficar travada no timer.
+  static const serviceOrderStarted = 'service_order_started';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem

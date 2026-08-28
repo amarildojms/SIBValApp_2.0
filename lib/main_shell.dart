@@ -444,18 +444,20 @@ class _MaisPage extends ConsumerWidget {
         ),
       // NOVO (27/08/2026): Ordem de Culto — dirigente/admin cadastra e gera;
       // Louvor (28/08/2026, papel novo) só enxerga, numa visão própria com
-      // tom/cifra (ver `ServiceOrderListPage._openPraiseView`). Abre
+      // tom/cifra (ver `openServiceOrder`, `service_order_navigation.dart`). Abre
       // primeiro a lista das ordens já cadastradas — antes ia direto pro
-      // cadastro.
-      if ((profile?.canManageServiceOrders ?? false) ||
-          (profile?.canViewPraiseOrder ?? false))
-        MoreTile(
-          customIcon: _ServiceOrderIcon(color: context.textPrimary),
-          label: 'Ordem de Culto',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ServiceOrderListPage()),
-          ),
+      // cadastro. Tile incondicional (28/08/2026, pedido do usuário) — a
+      // partir de agora tem uma visão pra qualquer usuário, logado ou em
+      // acesso convidado (`ServiceOrderMemberViewPage`, mesmo padrão de
+      // leitura pública já usado por `posts`/`devotionals`), travada num
+      // timer até o dirigente tocar em "Iniciar Culto".
+      MoreTile(
+        customIcon: _ServiceOrderIcon(color: context.textPrimary),
+        label: 'Ordem de Culto',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ServiceOrderListPage()),
         ),
+      ),
       // NOVO (28/08/2026): Ministério de Louvor — repertório mensal/semanal
       // + menu ☰ com "Cifras". Gate é só Louvor/admin
       // (`canViewPraiseOrder`) + quem o admin selecionou individualmente

@@ -80,6 +80,17 @@ class ServiceOrderRepository {
       'finalizedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// Marca o momento em que o dirigente de fato tocou em "Iniciar Culto"
+  /// (28/08/2026, pedido do usuário) — separado de `completedMomentKeys`/
+  /// `isFinalized`, grava só `startedAt`, pra uma edição normal nunca
+  /// resetar. É o que libera `ServiceOrderMemberViewPage` (demais membros/
+  /// visitantes) de ficar travada no timer.
+  Future<void> markStarted(String id) {
+    return _serviceOrders.doc(id).update({
+      'startedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }
 
 final serviceOrderRepositoryProvider = Provider<ServiceOrderRepository>((ref) {

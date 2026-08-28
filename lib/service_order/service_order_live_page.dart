@@ -9,9 +9,11 @@ import '../data/visitor_repository.dart';
 import '../hymnal/hymn_detail_page.dart';
 import '../introduction/visitor_tiles.dart';
 import '../models/hymn.dart';
+import '../models/notification.dart';
 import '../models/praise_repertoire.dart';
 import '../models/service_order.dart';
 import '../models/visitor.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
 
@@ -83,6 +85,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     super.initState();
     _loadRepertoire();
     _loadVisitors();
+    // Chega aqui por outro caminho que não o toque na notificação também
+    // marca como lida/cancela da barra (24/08/2026, mesmo padrão das demais
+    // telas ligadas a um tipo de notificação).
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderReminder, targetId: widget.order.id);
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderStarted, targetId: widget.order.id);
   }
 
   Future<void> _loadRepertoire() async {
@@ -613,6 +620,7 @@ IconData _iconFor(ServiceOrderMomentType? type) {
     ServiceOrderMomentType.childrenPrayer => Icons.child_care,
     ServiceOrderMomentType.intercession => Icons.groups,
     ServiceOrderMomentType.message => Icons.record_voice_over,
+    ServiceOrderMomentType.communion => Icons.wine_bar,
     ServiceOrderMomentType.apostolicBlessing => Icons.emoji_events,
     ServiceOrderMomentType.postlude => Icons.piano,
   };
@@ -628,6 +636,7 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.prayer => '🙏',
   ServiceOrderMomentType.welcome => '🫂',
   ServiceOrderMomentType.apostolicBlessing => '🤲',
+  ServiceOrderMomentType.communion => '🍷',
   _ => null,
 };
 

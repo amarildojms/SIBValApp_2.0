@@ -10,7 +10,9 @@ import '../data/service_order_repository.dart';
 import '../hymnal/hymn_detail_page.dart';
 import '../models/hymn.dart';
 import '../models/praise_repertoire.dart';
+import '../models/notification.dart';
 import '../models/service_order.dart';
+import '../notifications/notification_read_sync.dart';
 import '../praise/cifra_view_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
@@ -32,6 +34,14 @@ import 'service_order_bible_text_page.dart';
 /// - Acesso liberado 1h antes do horário do culto (`_isAvailable`) — antes
 ///   disso mostra só a contagem regressiva. Um cronômetro fica visível no
 ///   topo até o horário exato, mesmo depois de já poder ver a ordem.
+///
+/// A lista de momentos somente-leitura (`ServiceOrderReadOnlyBody`, abaixo)
+/// foi extraída pra cá pra ser reaproveitada também por
+/// `ServiceOrderMemberViewPage` (28/08/2026, pedido do usuário — visão dos
+/// demais membros/visitantes, "igual à do Louvor, porém sem acesso às
+/// cifras") — `showPraiseDetails: false` esconde o tom e desliga o toque nos
+/// momentos "Louvor" (só nome/cantor, sem link pra `CifraViewPage`); as
+/// demais navegações (bíblia/hino) continuam iguais nos dois casos.
 class ServiceOrderPraiseViewPage extends ConsumerStatefulWidget {
   const ServiceOrderPraiseViewPage({super.key, required this.orderId});
 
@@ -52,6 +62,11 @@ class _ServiceOrderPraiseViewPageState
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    // Chega aqui por outro caminho que não o toque na notificação também
+    // marca como lida/cancela da barra (24/08/2026, mesmo padrão das demais
+    // telas ligadas a um tipo de notificação).
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderReminder, targetId: widget.orderId);
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderStarted, targetId: widget.orderId);
   }
 
   @override
@@ -60,6 +75,110 @@ class _ServiceOrderPraiseViewPageState
     super.dispose();
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(serviceOrderStreamProvider(widget.orderId));
+    return Scaffold(
+      backgroundColor: SibValColors.navyBlue,
+      body: SafeArea(
+        child: orderAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: SibValColors.goldAccent),
+          ),
+          error: (error, _) => Center(
+            child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white)),
+          ),
+          data: (order) {
+            if (order == null) {
+              return const Center(
+                child: Text('Ordem não encontrada.', style: TextStyle(color: Colors.white)),
+              );
+            }
+            final available = !DateTime.now().isBefore(
+              order.dateTime.subtract(const Duration(hours: 1)),
+            );
+            if (!available) return _NotYetAvailable(order: order, dateFormat: _dateFormat);
+            return _buildOrder(order);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrder(ServiceOrder order) {
+    final started = !DateTime.now().isBefore(order.dateTime);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ORDEM DO CULTO — LOUVOR',
+                style: TextStyle(
+                  color: SibValColors.goldAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _dateFormat.format(order.dateTime),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (order.isFinalized)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: _Banner(text: 'Culto finalizado', icon: Icons.check_circle),
+          )
+        else if (!started)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: _CountdownBanner(target: order.dateTime),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: _Banner(text: 'Culto em andamento', icon: Icons.play_circle_outline),
+          ),
+        Expanded(
+          child: ServiceOrderReadOnlyBody(order: order, showPraiseDetails: true),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lista somente-leitura dos momentos de uma ordem, com o progresso lido de
+/// `order.completedMomentKeys` (nunca escreve nada) — extraída de dentro de
+/// `_ServiceOrderPraiseViewPageState` (28/08/2026) pra ser reaproveitada
+/// também por `ServiceOrderMemberViewPage`. Ver doc comment de
+/// `ServiceOrderPraiseViewPage` acima pro que [showPraiseDetails] controla.
+class ServiceOrderReadOnlyBody extends ConsumerStatefulWidget {
+  const ServiceOrderReadOnlyBody({
+    super.key,
+    required this.order,
+    required this.showPraiseDetails,
+  });
+
+  final ServiceOrder order;
+  final bool showPraiseDetails;
+
+  @override
+  ConsumerState<ServiceOrderReadOnlyBody> createState() => _ServiceOrderReadOnlyBodyState();
+}
+
+class _ServiceOrderReadOnlyBodyState extends ConsumerState<ServiceOrderReadOnlyBody> {
   String _baseKeyFor(int index, ServiceOrderItem item, List<ServiceOrderItem> items) {
     final raw = item.type?.name ?? 'extra:${item.extraMomentId}';
     final before = items
@@ -185,13 +304,18 @@ class _ServiceOrderPraiseViewPageState
           final base = assignment.songArtist.isEmpty
               ? assignment.songName
               : '${assignment.songName} — ${assignment.songArtist}';
-          final label = assignment.toneDisplay.isEmpty
-              ? base
-              : '$base (Tom: ${assignment.toneDisplay})';
+          // Tom só pro Louvor (28/08/2026, pedido do usuário) — visão de
+          // membro comum (`showPraiseDetails: false`) vê só nome/cantor, sem
+          // tom e sem toque pra `CifraViewPage`.
+          final label = widget.showPraiseDetails && assignment.toneDisplay.isNotEmpty
+              ? '$base (Tom: ${assignment.toneDisplay})'
+              : base;
           rows.add(
             _DetailRow(
               label: label,
-              onTap: () => _openCifra(assignment.songId, assignment.songName),
+              onTap: widget.showPraiseDetails
+                  ? () => _openCifra(assignment.songId, assignment.songName)
+                  : null,
             ),
           );
         }
@@ -202,107 +326,35 @@ class _ServiceOrderPraiseViewPageState
 
   @override
   Widget build(BuildContext context) {
-    final orderAsync = ref.watch(serviceOrderStreamProvider(widget.orderId));
-    return Scaffold(
-      backgroundColor: SibValColors.navyBlue,
-      body: SafeArea(
-        child: orderAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: SibValColors.goldAccent),
-          ),
-          error: (error, _) => Center(
-            child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white)),
-          ),
-          data: (order) {
-            if (order == null) {
-              return const Center(
-                child: Text('Ordem não encontrada.', style: TextStyle(color: Colors.white)),
-              );
-            }
-            final available = !DateTime.now().isBefore(
-              order.dateTime.subtract(const Duration(hours: 1)),
-            );
-            if (!available) return _NotYetAvailable(order: order, dateFormat: _dateFormat);
-            return _buildOrder(order);
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOrder(ServiceOrder order) {
-    final started = !DateTime.now().isBefore(order.dateTime);
+    final order = widget.order;
     final repertoireAsync = ref.watch(weeklyRepertoireForDateProvider(order.dateTime));
     final repertoire = repertoireAsync.asData?.value;
     final completed = order.completedMomentKeys.toSet();
     final items = order.momentOrder;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'ORDEM DO CULTO — LOUVOR',
-                style: TextStyle(
-                  color: SibValColors.goldAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _dateFormat.format(order.dateTime),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (order.isFinalized)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: _Banner(text: 'Culto finalizado', icon: Icons.check_circle),
-          )
-        else if (!started)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: _CountdownBanner(target: order.dateTime),
-          )
-        else
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: _Banner(text: 'Culto em andamento', icon: Icons.play_circle_outline),
-          ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final baseKey = _baseKeyFor(index, item, items);
-              final leaves = _leafKeysFor(baseKey, item, order);
-              final isDone = _isDone(completed, baseKey, leaves, item);
-              final rows = _detailRowsFor(item, order, repertoire);
-              return _PraiseMomentCard(index: index, item: item, order: order, isDone: isDone, rows: rows);
-            },
-          ),
-        ),
-      ],
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final baseKey = _baseKeyFor(index, item, items);
+        final leaves = _leafKeysFor(baseKey, item, order);
+        final isDone = _isDone(completed, baseKey, leaves, item);
+        final rows = _detailRowsFor(item, order, repertoire);
+        return _PraiseMomentCard(index: index, item: item, order: order, isDone: isDone, rows: rows);
+      },
     );
   }
 }
 
 class _DetailRow {
-  const _DetailRow({required this.label, required this.onTap});
+  const _DetailRow({required this.label, this.onTap});
   final String label;
-  final VoidCallback onTap;
+
+  /// `null` quando a linha não navega pra lugar nenhum (28/08/2026 —
+  /// momento "Louvor" na visão de membro comum, `showPraiseDetails: false`,
+  /// mostra só o texto sem virar link).
+  final VoidCallback? onTap;
 }
 
 class _Banner extends StatelessWidget {
@@ -426,6 +478,7 @@ IconData _iconFor(ServiceOrderMomentType? type) {
     ServiceOrderMomentType.childrenPrayer => Icons.child_care,
     ServiceOrderMomentType.intercession => Icons.groups,
     ServiceOrderMomentType.message => Icons.record_voice_over,
+    ServiceOrderMomentType.communion => Icons.wine_bar,
     ServiceOrderMomentType.apostolicBlessing => Icons.emoji_events,
     ServiceOrderMomentType.postlude => Icons.piano,
   };
@@ -435,6 +488,7 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.prayer => '🙏',
   ServiceOrderMomentType.welcome => '🫂',
   ServiceOrderMomentType.apostolicBlessing => '🤲',
+  ServiceOrderMomentType.communion => '🍷',
   _ => null,
 };
 
@@ -502,30 +556,39 @@ class _PraiseMomentCard extends StatelessWidget {
           for (final row in rows)
             Padding(
               padding: const EdgeInsets.only(left: 32, top: 6),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: row.onTap,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.chevron_right, size: 18, color: Colors.white38),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          // Toda linha aqui navega (bíblia/hino/cifra) — dourado
-                          // padrão de "clicável" (28/08, pedido do usuário).
-                          child: Text(
-                            row.label,
-                            style: const TextStyle(color: SibValColors.goldAccent, fontSize: 14),
+              child: row.onTap != null
+                  ? Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: row.onTap,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.chevron_right, size: 18, color: Colors.white38),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                // Toda linha tocável aqui navega (bíblia/hino/cifra)
+                                // — dourado padrão de "clicável" (28/08, pedido do
+                                // usuário).
+                                child: Text(
+                                  row.label,
+                                  style: const TextStyle(color: SibValColors.goldAccent, fontSize: 14),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        row.label,
+                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
         ],
       ),

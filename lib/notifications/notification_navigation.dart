@@ -12,6 +12,7 @@ import '../main_shell.dart' show homeTabIndex, mainShellTabIndexProvider;
 import '../messages/message_detail_page.dart';
 import '../models/notification.dart';
 import '../prayer/prayer_page.dart';
+import '../service_order/service_order_navigation.dart';
 
 /// Roteamento por `type`/`targetId` compartilhado entre o toque num item da
 /// Central de notificações (`NotificationsPage._onTap`) e o toque numa
@@ -54,5 +55,13 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.visitor:
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IntroductionPage()));
+    case NotificationType.serviceOrderReminder:
+    case NotificationType.serviceOrderStarted:
+      // Despacha por papel (28/08/2026, pedido do usuário) — Dirigentes/
+      // admin vai pro Precheck, Louvor pra visão própria, qualquer outro
+      // (membro comum ou convidado) pra `ServiceOrderMemberViewPage`. Mesma
+      // regra do toque numa ordem em `ServiceOrderListPage`, ver
+      // `service_order_navigation.dart`.
+      if (targetId.isNotEmpty) openServiceOrder(context, targetId);
   }
 }

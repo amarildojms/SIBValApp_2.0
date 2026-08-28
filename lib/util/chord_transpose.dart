@@ -56,3 +56,84 @@ String transposeContent(String content, int semitones) {
     (m) => '[${transposeChord(m.group(1)!, semitones)}]',
   );
 }
+
+/// Sufixos de acorde reconhecidos (repetíveis/combináveis) — lista
+/// deliberadamente ampla, mas não exaustiva; é uma heurística
+/// (`isChordToken`/`isChordLine`), não um parser musical completo. Palavras
+/// de letra que por acaso começam com A-G (ex. "Amor", "Deus") não batem
+/// porque o restante do token não se encaixa em nenhuma combinação destes
+/// sufixos.
+final RegExp _chordSuffixPattern = RegExp(
+  r'^(maj7|maj9|maj13|dim7|dim|aug|sus2|sus4|sus|add2|add4|add9|add11|add13|'
+  r'm7b5|mM7|m7|m9|m11|m13|m6|M7|M9|m|M|6\/9|6|7|9|11|13|\+|°|º)*$',
+);
+
+/// `true` se [token] (uma "palavra" isolada, sem espaço) tem cara de acorde
+/// — nota fundamental (`A`-`G`) + acidente opcional + sufixo reconhecido
+/// (`_chordSuffixPattern`) + baixo opcional depois de `/`. Base de
+/// `isChordLine`/`cleanCifraClubText` (`cifra_club_text.dart`) e de
+/// `transposeChordLine` — mais rígido que o `RegExp` usado dentro de
+/// `transposeChord` (que só olha a raiz, porque ali o token já veio de
+/// dentro de colchetes, sabidamente um acorde).
+bool isChordToken(String token) {
+  if (token.isEmpty) return false;
+  final match = RegExp(r'^([A-G])([#b]?)(.*)$').firstMatch(token);
+  if (match == null) return false;
+  final rest = match.group(3)!;
+  final slashIndex = rest.indexOf('/');
+  if (slashIndex == -1) return _chordSuffixPattern.hasMatch(rest);
+  final suffix = rest.substring(0, slashIndex);
+  final bass = rest.substring(slashIndex + 1);
+  if (!RegExp(r'^[A-G][#b]?$').hasMatch(bass)) return false;
+  return _chordSuffixPattern.hasMatch(suffix);
+}
+
+/// Transpõe todos os acordes de uma "linha de acordes" no formato Cifra
+/// Club (acordes soltos separados por espaço, numa linha acima da letra —
+/// ver `cifra_club_text.dart`) por [semitones]. Como o novo nome de um
+/// acorde pode ter comprimento diferente do antigo (ex. "C" → "C#"), a
+/// diferença é absorvida no espaço em branco logo DEPOIS do token (nunca
+/// menos de 1 espaço quando já havia espaço ali) — mantém razoavelmente
+/// alinhada a coluna dos acordes seguintes/a letra embaixo. Tokens que não
+/// são acorde (ex. "|", "%") atravessam sem alteração.
+String transposeChordLine(String line, int semitones) {
+  if (semitones == 0) return line;
+  final buffer = StringBuffer();
+  var i = 0;
+  while (i < line.length) {
+    if (line[i] == ' ') {
+      var j = i;
+      while (j < line.length && line[j] == ' ') {
+        j++;
+      }
+      buffer.write(line.substring(i, j));
+      i = j;
+      continue;
+    }
+    var j = i;
+    while (j < line.length && line[j] != ' ') {
+      j++;
+    }
+    final token = line.substring(i, j);
+    i = j;
+    if (!isChordToken(token)) {
+      buffer.write(token);
+      continue;
+    }
+    final transposed = transposeChord(token, semitones);
+    buffer.write(transposed);
+    final delta = transposed.length - token.length;
+    if (delta == 0) continue;
+    var k = i;
+    while (k < line.length && line[k] == ' ') {
+      k++;
+    }
+    final spaceCount = k - i;
+    if (spaceCount > 0) {
+      final newCount = (spaceCount - delta).clamp(1, spaceCount + 20);
+      buffer.write(' ' * newCount);
+      i = k;
+    }
+  }
+  return buffer.toString();
+}

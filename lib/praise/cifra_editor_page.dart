@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,15 +10,20 @@ import '../data/user_repository.dart';
 import '../models/cifra.dart';
 import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
+import '../util/cifra_club_text.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Editor de cifra — só admin ou quem foi selecionado
 /// individualmente como editor de cifra (`canEditCifrasProvider`, não é um
-/// papel) chega aqui (`CifraListPage`). `content` usa colchetes pro acorde
-/// entrar antes da sílaba/palavra (ex. `"[G]Digno é o [D]Senhor"`) —
-/// `chord_transpose.dart` é quem sabe achar/transpor isso na hora de exibir
-/// (`CifraViewPage`, não aqui: o texto salvo fica sempre no tom original).
+/// papel) chega aqui (`CifraListPage`). `content` é digitado/colado no
+/// formato "Cifra Club" — linha de acordes solta em cima, linha de letra
+/// embaixo (28/08/2026, rodada de import — antes era `[Acorde]palavra`
+/// inline; cifras salvas nesse formato antigo continuam funcionando, ver
+/// `CifraViewPage`) — ou importado de um arquivo .txt (botão "Importar
+/// arquivo", `_importFile`, `cleanCifraClubText`). `chord_transpose.dart` é
+/// quem sabe achar/transpor isso na hora de exibir (`CifraViewPage`, não
+/// aqui: o texto salvo fica sempre no tom original).
 ///
 /// Três modos (28/08/2026, revisão — "deve ser possível incluir cifras além
 /// do que está no repertório"):
@@ -72,6 +80,49 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     _artistController.dispose();
     _contentController.dispose();
     super.dispose();
+  }
+
+  /// Importa um .txt (colado/exportado de um site de cifra) e joga no campo
+  /// de conteúdo, já limpo (`cleanCifraClubText`) — pede confirmação antes
+  /// de sobrescrever se já havia algo digitado. `withData: true` pede os
+  /// bytes direto do picker (funciona em qualquer plataforma sem depender
+  /// de acesso a caminho de arquivo, mais simples que ler via `dart:io`).
+  Future<void> _importFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['txt'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final bytes = result.files.first.bytes;
+    if (bytes == null) return;
+    final cleaned = cleanCifraClubText(utf8.decode(bytes, allowMalformed: true));
+
+    if (!mounted) return;
+    if (_contentController.text.trim().isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Substituir o conteúdo atual?'),
+          content: const Text(
+            'O texto do arquivo importado vai substituir o que já está '
+            'digitado nesta cifra.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Substituir'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _contentController.text = cleaned);
   }
 
   Future<void> _save() async {
@@ -213,10 +264,23 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'Letra e acordes — coloque o acorde entre colchetes antes da '
-                    'sílaba/palavra, ex.: [G]Digno é o [D]Senhor',
-                    style: TextStyle(color: context.textSecondary, fontSize: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Letra e acordes — formato Cifra Club: uma linha só '
+                          'com os acordes, e a linha de baixo com a letra '
+                          'correspondente. Também dá pra colar direto de um '
+                          'site de cifra.',
+                          style: TextStyle(color: context.textSecondary, fontSize: 12),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _importFile,
+                        icon: const Icon(Icons.upload_file, size: 18),
+                        label: const Text('Importar .txt'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   TextField(

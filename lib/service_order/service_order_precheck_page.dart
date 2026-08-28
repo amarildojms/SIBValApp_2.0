@@ -1,12 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../data/service_order_repository.dart';
+import '../models/notification.dart';
 import '../models/service_order.dart';
+import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'service_order_countdown.dart';
 import 'service_order_live_page.dart';
+import 'service_order_preview_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Toque simples numa ordem de `ServiceOrderListPage` abre esta
@@ -18,16 +24,18 @@ import 'service_order_live_page.dart';
 /// hora exata (`_canStart`) — antes disso leva pro "modo apresentação"
 /// (`ServiceOrderLivePage`), que aí sim mostra a ordem completa, num layout
 /// diferente pensado pra acompanhar o culto ao vivo.
-class ServiceOrderPrecheckPage extends StatefulWidget {
+class ServiceOrderPrecheckPage extends ConsumerStatefulWidget {
   const ServiceOrderPrecheckPage({super.key, required this.order});
 
   final ServiceOrder order;
 
   @override
-  State<ServiceOrderPrecheckPage> createState() => _ServiceOrderPrecheckPageState();
+  ConsumerState<ServiceOrderPrecheckPage> createState() =>
+      _ServiceOrderPrecheckPageState();
 }
 
-class _ServiceOrderPrecheckPageState extends State<ServiceOrderPrecheckPage> {
+class _ServiceOrderPrecheckPageState
+    extends ConsumerState<ServiceOrderPrecheckPage> {
   static final _dateFormat =
       DateFormat("EEEE, d 'de' MMMM 'de' yyyy 'às' HH:mm", 'pt_BR');
 
@@ -37,6 +45,8 @@ class _ServiceOrderPrecheckPageState extends State<ServiceOrderPrecheckPage> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderReminder, targetId: widget.order.id);
+    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderStarted, targetId: widget.order.id);
   }
 
   @override
@@ -52,9 +62,31 @@ class _ServiceOrderPrecheckPageState extends State<ServiceOrderPrecheckPage> {
   /// grava em `ServiceOrder.completedMomentKeys` a cada momento marcado).
   bool get _hasProgress => widget.order.completedMomentKeys.isNotEmpty;
 
-  void _startService() {
+  /// Grava `startedAt` (28/08/2026, pedido do usuário) antes de entrar no
+  /// modo apresentação — é o que libera `ServiceOrderMemberViewPage` (demais
+  /// membros/visitantes) de ficar travada no timer, e o que dispara a
+  /// notificação `onServiceOrderStartedNotify` (Cloud Function). Não
+  /// bloqueia a navegação se falhar (mesmo padrão não-fatal de
+  /// `_prefillDateTime`/`service_order_form_page.dart`).
+  Future<void> _startService() async {
+    try {
+      await ref
+          .read(serviceOrderRepositoryProvider)
+          .markStarted(widget.order.id);
+    } catch (_) {
+      // Segue pro modo apresentação de qualquer jeito.
+    }
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => ServiceOrderLivePage(order: widget.order)),
+    );
+  }
+
+  void _openPreview() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ServiceOrderPreviewPage(order: widget.order),
+      ),
     );
   }
 
@@ -69,7 +101,7 @@ class _ServiceOrderPrecheckPageState extends State<ServiceOrderPrecheckPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ScreenTitle('Ordem de Culto'),
+            ScreenTitle(serviceOrderDisplayName(order)),
             Expanded(
               child: Center(
                 child: Padding(
@@ -110,6 +142,17 @@ class _ServiceOrderPrecheckPageState extends State<ServiceOrderPrecheckPage> {
                             child: Text(_hasProgress ? 'Continuar Culto' : 'Iniciar Culto'),
                           ),
                         ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                          ),
+                          onPressed: _openPreview,
+                          child: const Text('Ver Prévia'),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -185,26 +228,6 @@ class _CountdownCard extends StatelessWidget {
   final bool canStart;
   final DateTime target;
 
-  String _plural(int n, String singular, String plural) => n == 1 ? singular : plural;
-
-  String _format(Duration d) {
-    final days = d.inDays;
-    final hours = d.inHours % 24;
-    final minutes = d.inMinutes % 60;
-    final seconds = d.inSeconds % 60;
-
-    final parts = <String>[];
-    if (days > 0) parts.add('$days ${_plural(days, "dia", "dias")}');
-    if (days > 0 || hours > 0) parts.add('$hours ${_plural(hours, "hora", "horas")}');
-    if (days > 0 || hours > 0 || minutes > 0) {
-      parts.add('$minutes ${_plural(minutes, "minuto", "minutos")}');
-    }
-    parts.add('$seconds ${_plural(seconds, "segundo", "segundos")}');
-
-    if (parts.length == 1) return parts.first;
-    return '${parts.sublist(0, parts.length - 1).join(', ')} e ${parts.last}';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -222,7 +245,9 @@ class _CountdownCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            canStart ? '🎉' : _format(target.difference(DateTime.now())),
+            canStart
+                ? '🎉'
+                : formatServiceOrderCountdown(target.difference(DateTime.now())),
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: SibValColors.goldAccent,

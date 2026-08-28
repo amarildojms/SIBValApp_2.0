@@ -6,6 +6,7 @@ import '../data/cifra_repository.dart';
 import '../models/cifra.dart';
 import '../theme/app_theme.dart';
 import '../util/chord_transpose.dart';
+import '../util/cifra_club_text.dart';
 import '../widgets/sibval_app_bar.dart';
 
 const _fontSizeKey = 'cifra_font_size';
@@ -163,6 +164,14 @@ String _transposeToneLabel(String tone, int semitones) {
   return isMinor ? '${shifted}m' : shifted;
 }
 
+/// Cifras salvas antes de 28/08/2026 (rodada de import) ainda usam
+/// `[Acorde]palavra` inline — detectadas por esta regex e renderizadas pelo
+/// caminho antigo (`_lineSpans`), sem migração. Conteúdo novo (colado ou
+/// importado de arquivo, já limpo por `cleanCifraClubText`) não tem
+/// colchete nenhum e cai no formato "Cifra Club" de duas linhas
+/// (`_lineSpansTwoLine`/`isChordLine`).
+final RegExp _legacyBracketPattern = RegExp(r'\[[^\]\n]+\]');
+
 class _CifraContent extends StatelessWidget {
   const _CifraContent({required this.cifra, required this.semitones, required this.fontSize});
 
@@ -195,9 +204,29 @@ class _CifraContent extends StatelessWidget {
     return spans;
   }
 
+  /// Formato "Cifra Club": a linha inteira é acorde (`isChordLine`) — vira
+  /// negrito/dourado, transposta como uma unidade (`transposeChordLine`,
+  /// preserva alinhamento); senão é letra normal.
+  List<InlineSpan> _lineSpansTwoLine(String line) {
+    if (isChordLine(line)) {
+      final transposed = transposeChordLine(line, semitones);
+      return [
+        TextSpan(
+          text: transposed.isEmpty ? ' ' : transposed,
+          style: const TextStyle(
+            color: SibValColors.goldAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ];
+    }
+    return [TextSpan(text: line.isEmpty ? ' ' : line)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final lines = cifra.content.split('\n');
+    final isLegacyFormat = _legacyBracketPattern.hasMatch(cifra.content);
     final displayTone = _transposeToneLabel(cifra.baseTone, semitones);
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -236,7 +265,7 @@ class _CifraContent extends StatelessWidget {
                   fontSize: fontSize,
                   height: 1.6,
                 ),
-                children: _lineSpans(line, context),
+                children: isLegacyFormat ? _lineSpans(line, context) : _lineSpansTwoLine(line),
               ),
             ),
           ),

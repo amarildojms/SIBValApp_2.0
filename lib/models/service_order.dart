@@ -1,5 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Nome de exibição do culto — o `theme` preenchido pelo dirigente, ou
+/// "Culto" quando vazio (28/08/2026, pedido do usuário). Reaproveitado em
+/// toda tela/notificação que hoje mostra a palavra "Culto" solta.
+String serviceOrderDisplayName(ServiceOrder order) =>
+    order.theme.isNotEmpty ? order.theme : 'Culto';
+
 /// Sem equivalente no app nativo — feature nova (27/08/2026, pedido do
 /// usuário). Ordem de culto semanal: sequência fixa de itens de liturgia,
 /// alguns configuráveis (com valor padrão) e outros só um marcador de posição
@@ -39,16 +45,33 @@ class ServiceOrder {
   final String praise2;
   final String intercessionModerator;
   final String message;
+  final String communionResponsible;
   final String praise3;
 
   final PreludeStyle postludeStyle;
   final String postludeOther;
+
+  /// Tema do culto (28/08/2026, pedido do usuário) — vazio por padrão;
+  /// preenchido só em cultos especiais. Quando vazio, telas/notificações
+  /// usam "Culto" no lugar (ver `serviceOrderDisplayName`).
+  final String theme;
 
   final String ownerUid;
   final String ownerName;
   final String createdByUid;
   final String createdByName;
   final DateTime? createdAt;
+
+  /// Marca quando o dirigente de fato tocou em "Iniciar Culto"
+  /// (`ServiceOrderRepository.markStarted`, 28/08/2026, pedido do usuário) —
+  /// separado do horário agendado (`dateTime`): a visão dos demais
+  /// membros/visitantes (`ServiceOrderMemberViewPage`) fica travada num
+  /// timer até este campo existir, mesmo que o relógio já tenha passado do
+  /// horário. Fora de `toFieldsMap()`/`copyWith`, mesmo tratamento de
+  /// `isFinalized`/`finalizedAt` — só `markStarted` escreve, pra uma edição
+  /// normal nunca resetar.
+  final DateTime? startedAt;
+  bool get isStarted => startedAt != null;
 
   /// Ordem dos momentos escolhida pelo dirigente na 2ª etapa do cadastro
   /// (`ServiceOrderReorderPage`, arrastar pra cima/baixo) — ponto de partida
@@ -89,14 +112,17 @@ class ServiceOrder {
     this.praise2 = 'Ministério Adorai',
     this.intercessionModerator = 'Pr. Ronan',
     this.message = 'Pr. Ronan',
+    this.communionResponsible = 'Pr. Ronan',
     this.praise3 = 'Ministério Adorai',
     this.postludeStyle = PreludeStyle.instrumental,
     this.postludeOther = '',
+    this.theme = '',
     this.ownerUid = '',
     this.ownerName = '',
     this.createdByUid = '',
     this.createdByName = '',
     this.createdAt,
+    this.startedAt,
     this.momentOrder = const [],
     this.completedMomentKeys = const [],
     this.isFinalized = false,
@@ -125,14 +151,17 @@ class ServiceOrder {
       praise2: praise2,
       intercessionModerator: intercessionModerator,
       message: message,
+      communionResponsible: communionResponsible,
       praise3: praise3,
       postludeStyle: postludeStyle,
       postludeOther: postludeOther,
+      theme: theme,
       ownerUid: ownerUid,
       ownerName: ownerName,
       createdByUid: createdByUid,
       createdByName: createdByName,
       createdAt: createdAt,
+      startedAt: startedAt,
       momentOrder: momentOrder ?? this.momentOrder,
       completedMomentKeys: completedMomentKeys,
       isFinalized: isFinalized,
@@ -160,9 +189,11 @@ class ServiceOrder {
       'praise2': praise2,
       'intercessionModerator': intercessionModerator,
       'message': message,
+      'communionResponsible': communionResponsible,
       'praise3': praise3,
       'postludeStyle': postludeStyle.name,
       'postludeOther': postludeOther,
+      'theme': theme,
       'ownerUid': ownerUid,
       'ownerName': ownerName,
       'momentOrder': momentOrder.map((m) => m.toMap()).toList(),
@@ -198,14 +229,17 @@ class ServiceOrder {
       praise2: data['praise2'] as String? ?? '',
       intercessionModerator: data['intercessionModerator'] as String? ?? '',
       message: data['message'] as String? ?? '',
+      communionResponsible: data['communionResponsible'] as String? ?? '',
       praise3: data['praise3'] as String? ?? '',
       postludeStyle: PreludeStyle.fromName(data['postludeStyle'] as String?),
       postludeOther: data['postludeOther'] as String? ?? '',
+      theme: data['theme'] as String? ?? '',
       ownerUid: data['ownerUid'] as String? ?? '',
       ownerName: data['ownerName'] as String? ?? '',
       createdByUid: data['createdByUid'] as String? ?? '',
       createdByName: data['createdByName'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      startedAt: (data['startedAt'] as Timestamp?)?.toDate(),
       momentOrder:
           (data['momentOrder'] as List<dynamic>?)
               ?.map(ServiceOrderItem.fromDynamic)
@@ -247,6 +281,7 @@ enum ServiceOrderMomentType {
   praise2,
   intercession,
   message,
+  communion,
   praise3,
   apostolicBlessing,
   postlude;
@@ -272,6 +307,7 @@ enum ServiceOrderMomentType {
     ServiceOrderMomentType.praise2 => 'Louvor',
     ServiceOrderMomentType.intercession => 'Momento de Intercessão',
     ServiceOrderMomentType.message => 'Mensagem',
+    ServiceOrderMomentType.communion => 'Ceia do Senhor',
     ServiceOrderMomentType.praise3 => 'Louvor',
     ServiceOrderMomentType.apostolicBlessing => 'Benção Apostólica',
     ServiceOrderMomentType.postlude => 'Poslúdio',
@@ -399,6 +435,10 @@ class ServiceOrderItem {
             : order.intercessionModerator;
       case ServiceOrderMomentType.message:
         return order.message.isEmpty ? null : order.message;
+      case ServiceOrderMomentType.communion:
+        return order.communionResponsible.isEmpty
+            ? null
+            : order.communionResponsible;
       case ServiceOrderMomentType.praise3:
         return order.praise3.isEmpty ? null : order.praise3;
       case ServiceOrderMomentType.postlude:
