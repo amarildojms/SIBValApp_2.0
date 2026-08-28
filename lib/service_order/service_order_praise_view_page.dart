@@ -1,0 +1,534 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../data/hymnal_repository.dart';
+import '../data/praise_repertoire_repository.dart';
+import '../data/service_order_repository.dart';
+import '../hymnal/hymn_detail_page.dart';
+import '../models/hymn.dart';
+import '../models/praise_repertoire.dart';
+import '../models/service_order.dart';
+import '../praise/cifra_view_page.dart';
+import '../theme/app_theme.dart';
+import 'service_order_bible_text_page.dart';
+
+/// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
+/// usuário). Visão da Ordem de Culto pra quem tem o papel Louvor — mesma
+/// tela cheia escura de `ServiceOrderLivePage` (dirigente), mas:
+/// - **Somente leitura**: nada é marcado concluído por um toque aqui. O
+///   progresso vem direto de `serviceOrderStreamProvider` (Firestore em
+///   tempo real) — quando o dirigente marca um momento em
+///   `ServiceOrderLivePage`, aparece aqui sozinho, sem nenhuma ação do
+///   usuário do Louvor.
+/// - Textos bíblicos/hinos são tocáveis, mesmos destinos do dirigente
+///   (`ServiceOrderBibleTextPage`/`HymnDetailPage`), só que sem marcar nada
+///   ao voltar.
+/// - Momentos "Louvor" mostram o tom de cada música (o dirigente não vê
+///   isso, por pedido do usuário — "por hora, regra a ajustar depois") e
+///   tocar numa música leva pra `CifraViewPage`.
+/// - Acesso liberado 1h antes do horário do culto (`_isAvailable`) — antes
+///   disso mostra só a contagem regressiva. Um cronômetro fica visível no
+///   topo até o horário exato, mesmo depois de já poder ver a ordem.
+class ServiceOrderPraiseViewPage extends ConsumerStatefulWidget {
+  const ServiceOrderPraiseViewPage({super.key, required this.orderId});
+
+  final String orderId;
+
+  @override
+  ConsumerState<ServiceOrderPraiseViewPage> createState() =>
+      _ServiceOrderPraiseViewPageState();
+}
+
+class _ServiceOrderPraiseViewPageState
+    extends ConsumerState<ServiceOrderPraiseViewPage> {
+  static final _dateFormat = DateFormat('EEEE, dd/MM HH:mm', 'pt_BR');
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _baseKeyFor(int index, ServiceOrderItem item, List<ServiceOrderItem> items) {
+    final raw = item.type?.name ?? 'extra:${item.extraMomentId}';
+    final before = items
+        .take(index)
+        .where((i) => (i.type?.name ?? 'extra:${i.extraMomentId}') == raw)
+        .length;
+    return before == 0 ? raw : '$raw#$before';
+  }
+
+  List<String> _leafKeysFor(String baseKey, ServiceOrderItem item, ServiceOrder order) {
+    if (item.type == ServiceOrderMomentType.bibleReading) {
+      final keys = <String>[];
+      for (var j = 0; j < order.bibleReadings.length; j++) {
+        if (order.bibleReadings[j].isFilled) keys.add('$baseKey:bible$j');
+      }
+      return keys.isEmpty ? [baseKey] : keys;
+    }
+    if (item.type == ServiceOrderMomentType.tithesOffering) {
+      final keys = <String>[];
+      if (order.tithesBibleReading.isFilled) keys.add('$baseKey:tithesBible');
+      if (order.congregationalHymn.isNotEmpty) keys.add('$baseKey:tithesHymn');
+      return keys;
+    }
+    if (item.type == null && item.extraBibleReferences.isNotEmpty) {
+      final keys = <String>[];
+      for (var j = 0; j < item.extraBibleReferences.length; j++) {
+        if (item.extraBibleReferences[j].isFilled) keys.add('$baseKey:bible$j');
+      }
+      return keys.isEmpty ? [baseKey] : keys;
+    }
+    return [baseKey];
+  }
+
+  bool _isDone(Set<String> completed, String baseKey, List<String> leaves, ServiceOrderItem item) {
+    if (item.type == ServiceOrderMomentType.welcome) {
+      return completed.contains(baseKey) || completed.contains('$baseKey:visitors');
+    }
+    if (leaves.isEmpty) return true;
+    return leaves.every(completed.contains);
+  }
+
+  Future<(Hymnal, Hymn)?> _resolveHymn(String label) async {
+    for (final hymnal in Hymnal.values) {
+      final prefix = '${hymnal.titlePrefix} ';
+      if (!label.startsWith(prefix)) continue;
+      final numberPart = label.substring(prefix.length).split(' — ').first.trim();
+      try {
+        final songs = await ref.read(hymnSongsProvider(hymnal).future);
+        for (final song in songs) {
+          if (song.number == numberPart) return (hymnal, song);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> _openHymn(String label) async {
+    final resolved = await _resolveHymn(label);
+    if (!mounted) return;
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hino não encontrado no hinário.')),
+      );
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => HymnDetailPage(hymnal: resolved.$1, songId: resolved.$2.id),
+      ),
+    );
+  }
+
+  void _openBibleText(BibleReference reference) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ServiceOrderBibleTextPage(reference: reference)),
+    );
+  }
+
+  void _openCifra(String songId, String songName) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CifraViewPage(songId: songId, songName: songName),
+      ),
+    );
+  }
+
+  List<_DetailRow> _detailRowsFor(
+    ServiceOrderItem item,
+    ServiceOrder order,
+    WeeklyRepertoire? repertoire,
+  ) {
+    final rows = <_DetailRow>[];
+    if (item.type == ServiceOrderMomentType.bibleReading) {
+      for (final r in order.bibleReadings.where((r) => r.isFilled)) {
+        rows.add(_DetailRow(label: r.reference ?? '', onTap: () => _openBibleText(r)));
+      }
+    } else if (item.type == ServiceOrderMomentType.tithesOffering) {
+      final bibleRef = order.tithesBibleReading;
+      if (bibleRef.isFilled) {
+        rows.add(
+          _DetailRow(
+            label: 'Texto bíblico: ${bibleRef.reference}',
+            onTap: () => _openBibleText(bibleRef),
+          ),
+        );
+      }
+      if (order.congregationalHymn.isNotEmpty) {
+        rows.add(
+          _DetailRow(
+            label: 'Hino: ${order.congregationalHymn}',
+            onTap: () => _openHymn(order.congregationalHymn),
+          ),
+        );
+      }
+    } else if (item.type == null && item.extraBibleReferences.isNotEmpty) {
+      for (final r in item.extraBibleReferences.where((r) => r.isFilled)) {
+        rows.add(_DetailRow(label: r.reference ?? '', onTap: () => _openBibleText(r)));
+      }
+    } else if (item.type != null) {
+      final slot = praiseSlotLabelFor(item.type!);
+      if (slot != null && repertoire != null) {
+        for (final assignment in repertoire.forSlot(slot)) {
+          final base = assignment.songArtist.isEmpty
+              ? assignment.songName
+              : '${assignment.songName} — ${assignment.songArtist}';
+          final label = assignment.toneDisplay.isEmpty
+              ? base
+              : '$base (Tom: ${assignment.toneDisplay})';
+          rows.add(
+            _DetailRow(
+              label: label,
+              onTap: () => _openCifra(assignment.songId, assignment.songName),
+            ),
+          );
+        }
+      }
+    }
+    return rows;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(serviceOrderStreamProvider(widget.orderId));
+    return Scaffold(
+      backgroundColor: SibValColors.navyBlue,
+      body: SafeArea(
+        child: orderAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: SibValColors.goldAccent),
+          ),
+          error: (error, _) => Center(
+            child: Text('Falha ao carregar: $error', style: const TextStyle(color: Colors.white)),
+          ),
+          data: (order) {
+            if (order == null) {
+              return const Center(
+                child: Text('Ordem não encontrada.', style: TextStyle(color: Colors.white)),
+              );
+            }
+            final available = !DateTime.now().isBefore(
+              order.dateTime.subtract(const Duration(hours: 1)),
+            );
+            if (!available) return _NotYetAvailable(order: order, dateFormat: _dateFormat);
+            return _buildOrder(order);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrder(ServiceOrder order) {
+    final started = !DateTime.now().isBefore(order.dateTime);
+    final repertoireAsync = ref.watch(weeklyRepertoireForDateProvider(order.dateTime));
+    final repertoire = repertoireAsync.asData?.value;
+    final completed = order.completedMomentKeys.toSet();
+    final items = order.momentOrder;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ORDEM DO CULTO — LOUVOR',
+                style: TextStyle(
+                  color: SibValColors.goldAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _dateFormat.format(order.dateTime),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (order.isFinalized)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: _Banner(text: 'Culto finalizado', icon: Icons.check_circle),
+          )
+        else if (!started)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: _CountdownBanner(target: order.dateTime),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: _Banner(text: 'Culto em andamento', icon: Icons.play_circle_outline),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final baseKey = _baseKeyFor(index, item, items);
+              final leaves = _leafKeysFor(baseKey, item, order);
+              final isDone = _isDone(completed, baseKey, leaves, item);
+              final rows = _detailRowsFor(item, order, repertoire);
+              return _PraiseMomentCard(index: index, item: item, order: order, isDone: isDone, rows: rows);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailRow {
+  const _DetailRow({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({required this.text, required this.icon});
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: SibValColors.goldAccent, size: 18),
+          const SizedBox(width: 8),
+          Text(text, style: const TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Cronômetro no topo até o horário do culto (28/08/2026, pedido do
+/// usuário: "o timer fica rodando no topo da ordem até o início").
+class _CountdownBanner extends StatelessWidget {
+  const _CountdownBanner({required this.target});
+  final DateTime target;
+
+  String _format(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = target.difference(DateTime.now());
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          const Text('Tempo até o início', style: TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(
+            _format(remaining.isNegative ? Duration.zero : remaining),
+            style: const TextStyle(
+              color: SibValColors.goldAccent,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotYetAvailable extends StatelessWidget {
+  const _NotYetAvailable({required this.order, required this.dateFormat});
+  final ServiceOrder order;
+  final DateFormat dateFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_clock, color: SibValColors.goldAccent, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              dateFormat.format(order.dateTime),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'A ordem de culto fica disponível 1 hora antes do início.',
+              style: TextStyle(color: Colors.white70),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Voltar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+IconData _iconFor(ServiceOrderMomentType? type) {
+  if (type == null) return Icons.auto_awesome;
+  return switch (type) {
+    ServiceOrderMomentType.prelude => Icons.piano,
+    ServiceOrderMomentType.prayer => Icons.front_hand,
+    ServiceOrderMomentType.bibleReading => Icons.menu_book,
+    ServiceOrderMomentType.praise1 ||
+    ServiceOrderMomentType.praise2 ||
+    ServiceOrderMomentType.praise3 => Icons.music_note,
+    ServiceOrderMomentType.welcome => Icons.waving_hand,
+    ServiceOrderMomentType.announcements => Icons.campaign,
+    ServiceOrderMomentType.participation => Icons.star,
+    ServiceOrderMomentType.missionMoment => Icons.public,
+    ServiceOrderMomentType.tithesOffering => Icons.volunteer_activism,
+    ServiceOrderMomentType.childrenPrayer => Icons.child_care,
+    ServiceOrderMomentType.intercession => Icons.groups,
+    ServiceOrderMomentType.message => Icons.record_voice_over,
+    ServiceOrderMomentType.apostolicBlessing => Icons.emoji_events,
+    ServiceOrderMomentType.postlude => Icons.piano,
+  };
+}
+
+String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
+  ServiceOrderMomentType.prayer => '🙏',
+  ServiceOrderMomentType.welcome => '🫂',
+  ServiceOrderMomentType.apostolicBlessing => '🤲',
+  _ => null,
+};
+
+class _PraiseMomentCard extends StatelessWidget {
+  const _PraiseMomentCard({
+    required this.index,
+    required this.item,
+    required this.order,
+    required this.isDone,
+    required this.rows,
+  });
+
+  final int index;
+  final ServiceOrderItem item;
+  final ServiceOrder order;
+  final bool isDone;
+  final List<_DetailRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = item.summary(order);
+    final emoji = _emojiFor(item.type);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: isDone ? SibValColors.goldAccent : Colors.white12,
+                child: isDone
+                    ? const Icon(Icons.check, size: 16, color: SibValColors.navyBlue)
+                    : Text('${index + 1}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ),
+              const SizedBox(width: 12),
+              emoji != null
+                  ? Text(emoji, style: const TextStyle(fontSize: 20))
+                  : Icon(_iconFor(item.type), color: Colors.white70, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isDone ? Colors.white38 : Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    decoration: isDone ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (rows.isEmpty && summary != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 42, top: 4),
+              child: Text(summary, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+            ),
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 6),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: row.onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.chevron_right, size: 18, color: Colors.white38),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          // Toda linha aqui navega (bíblia/hino/cifra) — dourado
+                          // padrão de "clicável" (28/08, pedido do usuário).
+                          child: Text(
+                            row.label,
+                            style: const TextStyle(color: SibValColors.goldAccent, fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

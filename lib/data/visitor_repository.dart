@@ -108,6 +108,26 @@ class VisitorRepository {
         );
   }
 
+  /// Resumo dos visitantes cadastrados no dia de [date] (fuso
+  /// America/Sao_Paulo, UTC-3 fixo — mesmo critério de
+  /// `VisitorSummary.isFromToday`, mas pra uma data específica em vez de
+  /// "hoje") — usado pelo momento "Boas-vindas" no modo apresentação da
+  /// Ordem de Culto (`ServiceOrderLivePage`, 28/08/2026, pedido do usuário).
+  /// Lê `visitorSummaries` (não `visitors`) de propósito: quem toca a Ordem
+  /// de Culto normalmente só tem o papel Dirigentes, que `firestore.rules`
+  /// libera pra ler o resumo, não os dados completos (telefone) —
+  /// exclusivos de Introdução/Pastor.
+  Future<List<VisitorSummary>> getSummariesForDate(DateTime date) async {
+    final startUtc = DateTime.utc(date.year, date.month, date.day, 3);
+    final endUtc = startUtc.add(const Duration(days: 1));
+    final snapshot = await _summaries
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startUtc))
+        .where('createdAt', isLessThan: Timestamp.fromDate(endUtc))
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snapshot.docs.map(VisitorSummary.fromFirestore).toList();
+  }
+
   /// Apaga os dois docs (completo + resumo) — só a Introdução corrige/remove
   /// um cadastro feito por engano; ver `firestore.rules` (`isIntroducao()`
   /// também libera `delete` em `visitorSummaries`, exclusivamente pra isso).

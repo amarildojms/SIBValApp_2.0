@@ -107,4 +107,15 @@ abstract final class UserRole {
   static const introducao = 'introducao';
   static const dirigentes = 'dirigentes';
   static const pastor = 'pastor';
+
+  // NOVO (28/08/2026): Ministério de Louvor — quem tem esse papel vê a Ordem
+  // de Culto numa visão própria (`ServiceOrderPraiseViewPage`), com tom das
+  // músicas e link pra cifra, 1h antes do horário liberado pros Dirigentes.
+  static const louvor = 'louvor';
+
+  // NOTA (28/08/2026): quem edita cifras NÃO é um papel — o usuário pediu
+  // explicitamente pra ser uma seleção individual do admin, não um chip
+  // aqui (existiu como papel "cifrista" por uma rodada, revertido). Ver
+  // `CifraEditorsRepository`/`settings/cifraEditors` em
+  // `lib/data/cifra_repository.dart`.
 }

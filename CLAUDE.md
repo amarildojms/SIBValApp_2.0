@@ -1161,6 +1161,754 @@ dentro de um `Stack` que envolve o `ListTile`. O `contentPadding` do
 folga) pra nome/igreja/como-conheceu/data nunca ficarem por baixo do selo,
 em qualquer linha — não só na primeira.
 
+**Ordem de Culto — cadastro (27/08/2026, pedido do usuário):** sem
+equivalente no nativo (`SIBValApp2` só tinha o rótulo placeholder "Ordem de
+Culto (em breve)", nunca implementado) — feature nova, primeira etapa (só a
+tela de inserção; listagem/edição/exclusão ficam pra depois). Modelo em
+`lib/models/service_order.dart` (`ServiceOrder`, `PreludeStyle`,
+`MissionMoment`, `BibleReference`), repositório em
+`lib/data/service_order_repository.dart` (`serviceOrders`, só
+`create`/`watchAll`/`getLatestDateTime` nesta etapa), tela em
+`lib/service_order/service_order_form_page.dart`, tile "Ordem de Culto" em
+`main_shell.dart` (ícone composto `_ServiceOrderIcon`, igreja + nota
+musical).
+
+Sequência da liturgia, na ordem exata pedida: Data/horário → Prelúdio
+(Instrumental/Ministério Adorai/Outro, com campo livre se "Outro") → Oração
+(texto livre, padrão "Dirigente") → Leitura bíblica (lista, pode repetir) →
+Louvor (padrão "Ministério Adorai") → Boas-vindas/Avisos-Comunicações/Oração
+pelas crianças (fixos, só marcam a posição, sem campo) → Participação (texto
+com sugestão) → Momento Missionário (dropdown Mundiais/Nacionais/
+Estaduais/Não haverá, abre Tema/Divisa se não for "Não haverá") → Dedicação
+dos dízimos e ofertas (fixo) com Texto bíblico + Hino Congregacional →
+Oração de gratidão (fixo) → Louvor → Momento de Intercessão (padrão "Pr.
+Ronan") → Mensagem (padrão "Pr. Ronan") → Louvor → Benção Apostólica (fixo)
+→ Poslúdio (mesmas opções do Prelúdio).
+
+Data/horário pré-preenchidos: sempre o próximo domingo às 19h a partir da
+última ordem cadastrada (`ServiceOrderRepository.getLatestDateTime` +
+`_nextSunday` em `service_order_form_page.dart`) — sem ordem anterior, cai
+pro próximo domingo a partir de hoje (hoje conta, se já for domingo).
+"Leitura bíblica" (repetível) e "Texto bíblico" da seção de dízimos
+reaproveitam a mesma lógica de livro/capítulo/versículo do "Texto base" de
+Devocionais (`devotional_form_page.dart`) — os widgets equivalentes
+(`_BookField`/`_ChapterDropdown`/`_VerseDropdown`) foram duplicados
+localmente (mesmo padrão de duplicação já usado entre telas desta base),
+empacotados num `BibleReferenceController` reaproveitável pelos dois casos
+(campo único vs. lista). "Participação" sugere nomes via `membersProvider`
+(mesmo motivo de `_InvitedByField`/Introdução: `users` não libera `list` pra
+não-admin). "Hino Congregacional" sugere combinando os dois hinários
+(`hymnSongsProvider(Hymnal.cantorCristao)` +
+`hymnSongsProvider(Hymnal.hinarioCristao)`), sem coleção/catálogo novo.
+
+Permissão: `CurrentUserProfile.canManageServiceOrders` (isAdmin ||
+roles.contains('dirigentes')) — reaproveita o papel Dirigentes já existente,
+sem criar papel novo (decisão do usuário). `SIBValApp2/firestore.rules`
+ganhou `match /serviceOrders/{orderId}` (`allow create: if isDirigentes()`)
+— **só editei o código-fonte, não fiz `firebase deploy`**, mesma cautela de
+sempre; sem o deploy, o cadastro pelo app vai falhar com permission-denied
+até alguém pedir esse deploy explicitamente.
+
+`ServiceOrder.ownerUid`/`ownerName` já existem no model e são gravados como
+o próprio criador na criação, e a regra de update/delete já está desenhada
+(`isAdmin() || (isDirigentes() && resource.data.ownerUid ==
+request.auth.uid)`) — mas a UI de editar/excluir/transferir propriedade
+**ainda não foi construída** (o usuário descreveu esse mecanismo como
+contexto pra decidir a permissão, não como pedido desta etapa: "Inicialmente
+vamos implementar a página onde a ordem de culto será inserida"). Próximo
+passo natural: tela de listagem das ordens cadastradas (`serviceOrdersProvider`
+já existe) + edição/exclusão restritas ao dono/admin + transferência de
+propriedade pelo admin.
+
+**Ordem de Culto — fluxo em 2 etapas + ajustes de UX (28/08/2026, pedido do
+usuário):**
+
+- **Data/hora sem ordem anterior:** `_nextSunday` (`service_order_form_page.dart`)
+  perdeu o parâmetro `strictlyAfter` — agora é sempre "estritamente depois de
+  `from`", nunca o próprio dia mesmo que já seja domingo. Sem ordem
+  cadastrada ainda, cai pro próximo domingo a partir de hoje (nunca hoje
+  mesmo, mesmo em pleno domingo) — pedido explícito do usuário, que corrigiu
+  a suposição da rodada anterior (hoje contava se já fosse domingo).
+- **Rótulo do campo "Outro" do Prelúdio:** trocado de "Descreva o prelúdio"
+  pra "Responsável pelo prelúdio" — só o Prelúdio, o Poslúdio continua
+  "Descreva o poslúdio" (não foi pedido).
+- **Aviso de saída sem salvar:** `PopScope` + `_dirty` (flag explícita, não
+  um cálculo "algum campo não vazio" — vários campos já nascem preenchidos
+  com valor padrão tipo "Dirigente"/"Ministério Adorai", o que daria falso
+  positivo assim que a tela abre) — só vira `true` quando o usuário de fato
+  interage com algum campo: listener nos `TextEditingController`s
+  (adicionado só depois de já preenchidos os valores padrão em `initState`,
+  mesma cautela do bug documentado em `introduction_page.dart`/
+  `[[feedback_flutter_migration_style]]`), `_dirty = true` explícito nos
+  `onChanged` de data/horário/dropdowns, e um novo parâmetro `onChanged` em
+  `_BibleReferenceFields` (repassado pra dentro de `_BibleReferenceFieldsState`,
+  chamado a cada seleção/edição de livro/capítulo/versículo) pra cobrir
+  "Leitura bíblica" e o "Texto bíblico" dos dízimos.
+- **Fluxo virou 2 etapas.** `ServiceOrderFormPage` não grava mais no
+  Firestore — o botão final virou "Avançar" (`_continue`), que valida os
+  mesmos campos de antes e monta um `ServiceOrder` "rascunho" (`id`/
+  `createdAt` vazios), empurrado via `Navigator.push<bool>` pra
+  `ServiceOrderReorderPage` (nova, `lib/service_order/service_order_reorder_page.dart`).
+  Lá o dirigente arrasta os "momentos" do culto pra reordenar como quiser
+  (`ReorderableListView.builder`, `ReorderableDragStartListener` como
+  drag handle explícito — cada `Card` mostra o rótulo do momento + um resumo
+  do dado preenchido, ex. o texto do Louvor, pra distinguir os três momentos
+  "Louvor" entre si) e só então toca "Salvar", que de fato grava no
+  Firestore. Volta `Navigator.pop(true)` em caso de sucesso — a tela de
+  formulário recebe esse `true` e faz um `Navigator.pop()` direto (bypassa o
+  `PopScope`, que só intercepta o back gesture/botão, não um `pop()`
+  explícito no código — confirmado funcionando: não reabre o diálogo de
+  "sair sem salvar?" depois de já ter salvo com sucesso).
+- **Novo `ServiceOrderMomentType`** (`lib/models/service_order.dart`) — um
+  enum por "momento" da liturgia, na mesma ordem original pedida pelo
+  usuário (a ordem de declaração do enum É a ordem default,
+  `ServiceOrderMomentType.values`). Os três "Louvor" (antes do Momento
+  Missionário, antes da Mensagem, depois da Mensagem) viraram três valores
+  distintos (`praise1`/`praise2`/`praise3`) — mesmo rótulo "Louvor" na tela,
+  mas reordenáveis independentemente porque apontam pra campos diferentes
+  de `ServiceOrder`. `ServiceOrder.momentOrder` (`List<ServiceOrderMomentType>`)
+  é a ordem final escolhida, gravada como `List<String>` (nomes do enum) em
+  `serviceOrders/{id}.momentOrder` — `ServiceOrderRepository.create` ganhou
+  o parâmetro `momentOrder`.
+
+**Ordem de Culto — polimento em lote (28/08/2026, pedidos do usuário):**
+
+- Título fixo (não rola mais junto com o formulário) e campos mais
+  compactos em `ServiceOrderFormPage` (`_fieldDecoration` — `isDense` +
+  `contentPadding` menor — e espaçamentos entre seções reduzidos de
+  16/8/6 pra 10/6/4).
+- Bug de data/hora vindo vazia: `_prefillDateTime` engolia qualquer
+  exceção da consulta (ex.: regra do Firestore não deployada — ver
+  `[[feedback_deploy_requires_explicit_ask]]`) sem tratamento, então
+  `setState` nunca rodava. Agora tem try/catch com fallback pro mesmo
+  comportamento de "sem ordem anterior".
+- Bug do cursor saindo do campo ao selecionar um livro da Bíblia:
+  `_BookFieldState._select` chamava `focusNode.unfocus()` depois de
+  escolher — removido; a lista de sugestões some via uma flag
+  `_suppressSuggestions` local, sem tirar o foco do campo. Só corrigido em
+  `_BookField` (Ordem de Culto) — `_ParticipationField`/`_HymnField` no
+  mesmo arquivo e `_BaseBookField` em `devotional_form_page.dart` têm o
+  mesmo padrão de `unfocus()` e não foram tocados (não foi pedido).
+- Prelúdio ganhou a opção "Não haverá" (`PreludeStyle.naoHavera`), valor
+  padrão agora — Poslúdio continua só com as três opções originais
+  (dropdown filtra `naoHavera` fora), não foi pedido lá.
+- Reordenação padrão da liturgia (`ServiceOrderMomentType`, ordem de
+  declaração do enum): Prelúdio, Oração, Leitura bíblica, Louvor,
+  Boas-vindas, Avisos/Comunicações, Participação Especial (renomeado de
+  "Participação"), Momento Missionário, Dedicação dos dízimos e ofertas,
+  Oração pelas crianças (**movido** pra depois da Dedicação — antes ficava
+  logo após Avisos/Comunicações), Louvor, Momento de Intercessão,
+  Mensagem, Louvor, Benção Apostólica, Poslúdio. `gratitudePrayer`
+  ("Oração de gratidão") foi **removido** do enum — o pedido do usuário
+  não incluiu esse item na nova sequência; interpretação: ele foi
+  substituído pelo "Oração pelas crianças" realocado pra aquela posição,
+  eliminando a redundância de dois momentos de oração desconectados. Se
+  isso não bater com o esperado, é reversível (o enum não tem dado
+  próprio associado).
+- Momentos que ficam vazios saem da ordem automaticamente
+  (`ServiceOrderReorderPage._buildDefaultOrder`/`_isEmptyMoment`):
+  Prelúdio se `naoHavera`, Participação Especial se o texto ficou vazio,
+  Momento Missionário se `naoHavera`. A exclusão só afeta a 2ª etapa
+  (Organizar momentos) — o formulário continua coletando os três campos
+  normalmente.
+- **Momentos especiais** (novo, sem equivalente no nativo): botão
+  "Adicionar momento" em `ServiceOrderReorderPage` abre um bottom sheet
+  com duas seções — momentos fixos que não estão na ordem atual (ex.:
+  excluídos automaticamente, ou removidos manualmente antes) e um
+  catálogo de "momentos especiais" tipo Batismo/Ceia do Senhor/
+  Apresentação de bebê (`defaultServiceOrderExtraMoments`, sempre
+  disponíveis) mais o que o admin cadastrar em
+  `manage_service_order_moments_page.dart` (coleção
+  `serviceOrderExtraMoments`, tile "Momentos Especiais" no menu Mais,
+  admin-only). Modelo: `ServiceOrder.momentOrder` deixou de ser
+  `List<ServiceOrderMomentType>` e virou `List<ServiceOrderItem>` — ou um
+  momento fixo (`type`) ou um momento extra (`extraMomentId`/
+  `extraMomentName`), serializado como `Map` (`{'kind': 'fixed'|'extra',
+  ...}`); `ServiceOrderItem.fromDynamic` aceita o formato antigo (`String`
+  com o nome do enum) pra não quebrar ordens já salvas antes desta
+  mudança (sem backfill, mesmo padrão de sempre). Só momentos extras têm
+  botão de remover na lista (ícone X) — momentos fixos não, pra não
+  incentivar tirar algo da liturgia padrão sem querer.
+- Toque longo antes de arrastar: `ReorderableDragStartListener` virou
+  `ReorderableDelayedDragStartListener` no ícone de arraste — evita
+  reordenar sem querer ao tocar.
+- Botão "Voltar" ao lado de "Salvar" em `ServiceOrderReorderPage` — volta
+  pro formulário (`Navigator.pop()`) sem salvar, mantendo os dados
+  preenchidos lá (a tela de formulário só reseta `_submitting`, não os
+  campos).
+- **Lista antes do cadastro:** tocar em "Ordem de Culto" no menu Mais
+  agora abre `ServiceOrderListPage` (nova) — lista as ordens já
+  cadastradas (`serviceOrdersProvider`) com um botão flutuante "Nova
+  Ordem" que leva pro cadastro; tocar numa ordem existente abre
+  `ServiceOrderDetailPage` (nova, somente leitura, mostra `momentOrder` na
+  sequência salva). Edição/exclusão continuam não implementadas.
+- `SIBValApp2/firestore.rules` ganhou `match /serviceOrderExtraMoments`
+  (`read` pra `isDirigentes()`, `write` só `isAdmin()`) — **só editei o
+  código-fonte, não fiz `firebase deploy`**, mesma cautela de sempre.
+
+**Ordem de Culto — 2ª rodada de polimento (28/08/2026, pedidos do usuário):**
+
+- **Momentos Especiais deixou de ser tile do menu Mais.** `ManageServiceOrderMomentsPage`
+  agora abre pelo ícone de engrenagem na app bar de `ServiceOrderListPage` —
+  visível pra quem já acessa Ordem de Culto (dirigentes/admin), mas só admin
+  vê os controles de adicionar/renomear/excluir/marcar padrão (leitura
+  liberada a `isDirigentes()` em `firestore.rules`, escrita só `isAdmin()`,
+  sem mudança de regra nesta rodada).
+- **Catálogo virou dados de verdade com flag "padrão"
+  (`ServiceOrderExtraMomentOption.isDefault`).** Os três exemplos
+  (Batismo/Ceia do Senhor/Apresentação de bebê) eram só uma constante no
+  cliente (`defaultServiceOrderExtraMoments`) na rodada anterior — pra o
+  admin poder desmarcá-los/editá-los/excluí-los como qualquer outro item,
+  precisavam virar documentos reais em `serviceOrderExtraMoments`. Sem
+  Cloud Function nem script de migração: `ManageServiceOrderMomentsPage`
+  detecta catálogo vazio (`_seedIfEmpty`) e cria os três via
+  `ServiceOrderExtraMomentRepository.seedDefaults()` (`isDefault: true`) na
+  primeira vez que um **admin** abre a tela — como a escrita exige
+  `isAdmin()`, só funciona depois que algum admin visitar a engrenagem pelo
+  menos uma vez; até lá, o picker de "Adicionar momento" mostra "Nenhum
+  momento especial cadastrado ainda" pra quem só é Dirigentes. `isDefault`
+  só controla destaque (selo de estrela, ordenação primeiro) no catálogo e
+  no picker — não afeta mais nada automaticamente (ex.: não entra sozinho
+  numa ordem nova sem o dirigente escolher).
+- **"Adicionar momento" mudou de tela** — pedido explícito do usuário foi
+  que ficasse na 1ª etapa (`ServiceOrderFormPage`), não mais em "Organizar
+  momentos". Nova seção "Momentos Especiais" no fim do formulário
+  (`_pickExtraMoments`, bottom sheet de múltipla escolha,
+  `_ExtraMomentPickerSheet`) grava a escolha em `_extraMoments`, carregada
+  pra `ServiceOrderReorderPage` via `draft.momentOrder` (reaproveitando o
+  campo — um "rascunho" nunca usava esse campo pra outra coisa antes).
+  `ServiceOrderReorderPage` perdeu o botão/bottom sheet de adicionar; só
+  ficou com o "X" de remover um momento extra já incluído.
+- **Editar/excluir uma ordem já cadastrada** (novo — toque e segure num
+  card de `ServiceOrderListPage`, só se dono da ordem ou admin, mesma regra
+  de `firestore.rules` que já existia sem uso até agora):
+  `ServiceOrderFormPage` ganhou o parâmetro `editing` (prefill de todos os
+  campos, inclusive os momentos extras já escolhidos);
+  `ServiceOrderRepository.create`/`update` foram unificados pra receber um
+  `ServiceOrder` completo (`toFieldsMap()`/`ServiceOrder.copyWith`, em vez
+  da lista enorme de parâmetros nomeados de antes).
+  `ServiceOrderReorderPage._buildInitialOrder` reconcilia em vez de
+  recomeçar do zero quando `editingOrder != null`: parte do arranjo já
+  salvo, tira o que ficou vazio/desmarcado nesta edição, acrescenta no fim
+  o que passou a valer (momento fixo preenchido de novo, momento extra
+  recém-escolhido) — preserva a reordenação manual que o dirigente já tinha
+  feito, só ajusta o que mudou. Simples exclusão sem edição
+  (`ServiceOrderRepository.delete`) direto na lista, com confirmação.
+- **Toque simples numa ordem abre `ServiceOrderPrecheckPage`** (nova, no
+  lugar da antiga tela de detalhe somente leitura) — mostra a ordem
+  completa (mesmo `ServiceOrderItem.summary`) com um contador regressivo
+  (`Timer.periodic` de 1s) até `order.dateTime`. Botão "Iniciar Culto" só
+  fica clicável quando `DateTime.now()` já alcançou o horário exato
+  (`_canStart`) — antes disso mostra o tempo restante; depois, "Pode
+  iniciar". "Voltar" sempre disponível.
+- **"Iniciar Culto" leva pro "modo apresentação"** (`ServiceOrderLivePage`,
+  novo, `pushReplacement` — não faz sentido voltar pra tela de contagem
+  regressiva depois que o culto já começou). Layout deliberadamente
+  diferente do resto do app: tela cheia, fundo navy, sem `SibValAppBar`,
+  cada momento num card com ícone (`_MomentCard._icon`, mapeado por
+  `ServiceOrderMomentType`), toque marca como concluído (risco no texto +
+  avança o destaque dourado pro próximo) — só estado local em memória, não
+  grava no Firestore. **O usuário mencionou ter salvo uma foto de um
+  modelo antigo pra inspirar esse layout, mas nenhum anexo de imagem
+  chegou nesta conversa** — este design é uma criação própria (moderno,
+  sem tentar reproduzir o modelo antigo que eu não vi); se o usuário
+  compartilhar a foto depois, vale revisar esta tela especificamente.
+- **Rótulos de campo removidos do cadastro** — só Data/Horário e os campos
+  de referência bíblica (Leitura bíblica/Texto bíblico, que reaproveitam
+  `_BibleReferenceFields`/`_BookField`/`_ChapterDropdown`/`_VerseDropdown`)
+  mantiveram `labelText` ancorado na borda. Os demais (Oração, Louvor x3,
+  Participação Especial, Tema/Divisa do Momento Missionário, Hino
+  Congregacional, campos "Outro" de Prelúdio/Poslúdio) viraram caixas sem
+  rótulo — `hintText` só onde o cabeçalho da seção sozinho não distinguia
+  o campo (ex. Tema vs. Divisa, os dois sob o mesmo cabeçalho "Momento
+  Missionário").
+- **Todo momento no mesmo padrão visual** — `_momentLabel` (novo helper em
+  `service_order_form_page.dart`) renderiza "- Nome do momento" em itálico,
+  cor `SibValColors.goldAccent` (dourado padrão do app), usado tanto pros
+  cabeçalhos de seção com campo (Prelúdio, Oração, Louvor...) quanto pros
+  itens fixos sem campo (Boas-vindas, Avisos/Comunicações...) — antes eram
+  dois estilos diferentes (`_sectionLabel` bold cinza vs. `_fixedItem` com
+  ícone "−"). `_sectionLabel` (estilo antigo) ficou restrito a rótulos que
+  não são "momentos" em si: "Data e horário" e os sub-campos "Texto
+  bíblico"/"Hino Congregacional" dentro de "Dedicação dos dízimos e
+  ofertas".
+
+**Ordem de Culto — 3ª rodada, correção de rumo sobre "padrão"
+(28/08/2026, mesma sessão, pedido do usuário):** a rodada anterior tinha
+dado um `isDefault` pros "momentos especiais" (Batismo/Ceia do Senhor/
+Apresentação de bebê, auto-semeados) — o usuário corrigiu: esses **não**
+são momentos do culto, são avulsos, sempre cadastrados um a um pelo admin,
+sem noção de "padrão". Quem é "padrão" de verdade são os 16 momentos fixos
+da liturgia (`ServiceOrderMomentType`) — e o pedido foi poder reordenar
+esse conjunto dentro das configurações, não só via código.
+
+- `ServiceOrderExtraMomentOption.isDefault` e o auto-seed
+  (`seedDefaults`/`_seedIfEmpty`) foram **revertidos** — catálogo de
+  momentos especiais voltou a ser CRUD simples (nome, sem mais nada),
+  começa vazio, admin cadastra Batismo/Ceia/etc. manualmente.
+- Nova `ServiceOrderMomentOrderRepository`
+  (`lib/data/service_order_moment_order_repository.dart`) guarda a
+  sequência dos 16 momentos fixos em `settings/serviceOrderMomentOrder`
+  (`{order: List<String>}`, nomes do enum) — **sem regra nova no
+  `firestore.rules`**, o `match /settings/{docId}` já cobre qualquer
+  documento da coleção (`read` pra autenticado, `write` só admin).
+  Fallback pra `ServiceOrderMomentType.values` (a ordem hardcoded de
+  sempre) quando o documento não existe ou tem nomes desatualizados —
+  qualquer momento do enum ausente do documento salvo é acrescentado no
+  fim, então um momento novo do app nunca some por causa de configuração
+  velha.
+- `ServiceOrderFormPage` busca essa ordem uma vez em `initState`
+  (`_loadDefaultMomentOrder`, mesmo padrão try/catch-com-fallback de
+  `_prefillDateTime`) e repassa pra `ServiceOrderReorderPage` via
+  `defaultMomentOrder` — só usado no modo cadastro; edição continua
+  partindo do arranjo já salvo (`editingOrder.momentOrder`), sem tocar
+  nesse padrão.
+- `ManageServiceOrderMomentsPage` virou duas seções: "Momentos do Culto"
+  (os 16 fixos, só reordenáveis — não têm botão de adicionar/excluir,
+  são intrínsecos ao formulário, cada um com campo próprio) e "Momentos
+  Especiais" (o catálogo CRUD de sempre, sem "padrão"). Botão de acesso
+  saiu da app bar (`SibValAppBar.actions`) e virou "Configurar" ao lado do
+  título "Ordem de Culto", dentro do corpo de `ServiceOrderListPage` —
+  mesmo padrão visual de "Contribua" + "Configurar" em
+  `contribute_page.dart` (`Row` com o título em `SibValColors.goldAccent`
+  + `TextButton.icon`).
+- `ServiceOrderPrecheckPage` (tela de contagem regressiva) perdeu a lista
+  de momentos — só mostra data/hora, o card do contador e os dois botões
+  centralizados (Iniciar Culto em cima, Voltar embaixo), pedido explícito
+  do usuário. A ordem completa só aparece depois, no modo apresentação
+  (`ServiceOrderLivePage`, ao tocar "Iniciar Culto").
+- Frase do contador mudou pra "Tempo para o início do culto"; formato
+  virou por extenso ("N dias, N horas, N minutos e N segundos"), omitindo
+  as unidades maiores que já zeraram (`_CountdownCard._format`) — não
+  mostra mais "0 dias, 0 horas" quando falta só alguns minutos.
+- Menu Mais: Introdução e Ordem de Culto subiram pro topo do "Tier 3 —
+  admin/secretaria/eventos/dirigentes/introdução" (antes ficavam no fim da
+  lista inteira, depois de E-mails de eventos) — mesma faixa de
+  permissão/tier, só reordenados dentro dela, a pedido do usuário.
+
+**Ordem de Culto — 4ª rodada: modo apresentação completo + Ministério de
+Louvor + Hinários (28/08/2026, mesma sessão, pedidos do usuário):**
+
+- **Bug corrigido:** `_pickExtraMoments` (`ServiceOrderFormPage`) lia
+  `ref.read(serviceOrderExtraMomentsProvider).asData?.value` — se nada mais
+  tivesse observado o provider ainda, o stream não tinha tido chance de
+  emitir o primeiro snapshot e vinha sempre vazio, mesmo com momentos
+  especiais cadastrados. Trocado por `ref.read(provider.future)`.
+- **`isDefault` reintroduzido em `ServiceOrderExtraMomentOption`** (tinha
+  sido removido na rodada anterior) — desta vez com efeito de verdade: um
+  momento especial marcado como padrão entra em
+  `settings/serviceOrderMomentOrder` como token `"extra:<id>"`, misturado
+  com os 16 momentos fixos nesse mesmo documento (`ServiceOrderMomentOrderRepository`,
+  `resolveServiceOrderMomentTemplate`). `ManageServiceOrderMomentsPage`
+  agora tem uma seção única "Momentos do Culto" mostrando essa sequência
+  combinada (arrastar reordena; só extras têm botão de remover, que
+  desmarca `isDefault` em vez de excluir — exclusão de verdade é na seção
+  "Momentos Especiais"). Limite reconhecido: **não é possível
+  renomear/excluir os 16 momentos fixos** — cada um tem campo de dado
+  próprio no formulário (`ServiceOrder.preludeStyle`, `.prayerText`, etc.),
+  generalizar isso exigiria reescrever o cadastro inteiro num form builder
+  dinâmico. Só a ordem deles é configurável.
+- **Progresso do culto persiste no Firestore** — `ServiceOrder` ganhou
+  `completedMomentKeys`/`isFinalized`/`finalizedAt` (fora de
+  `toFieldsMap()`/`copyWith`, gravados só por
+  `ServiceOrderRepository.updateProgress`/`finalize`, pra uma edição normal
+  nunca resetar isso). Chaves são `"<tipo>:<sub>"` (baseadas no
+  tipo/id do momento, não no índice — sobrevive a reordenação numa edição
+  posterior). `ServiceOrderPrecheckPage` mostra "Continuar Culto" em vez de
+  "Iniciar Culto" quando já há progresso, e um card "Culto finalizado" no
+  lugar do contador quando `isFinalized`. `ServiceOrderListPage` mostra selo
+  "Finalizada".
+- **Leitura bíblica/Texto bíblico/Hino Congregacional abrem a leitura de
+  verdade antes de marcar concluído** (`ServiceOrderLivePage`) —
+  reaproveita `BibleReaderPage`/`HymnDetailPage` (mesmas telas da Bíblia/
+  Hinário no menu principal); marca automaticamente ao voltar de lá.
+  `_resolveHymn` casa o texto salvo em `congregationalHymn` (ex. "CC 45 —
+  Nome") contra os hinários de verdade via prefixo + número. "Dedicação dos
+  dízimos e ofertas" sempre renderiza como grupo com as subcategorias
+  Texto bíblico/Hino Congregacional (`_MomentGroupCard`), cada uma com sua
+  própria marcação — mesmo mecanismo cobre "Leitura bíblica" com mais de
+  uma referência.
+- **Ministério de Louvor** (novo, sem equivalente no nativo) —
+  `lib/praise/`: `PraiseMinistryPage` com duas abas. "Repertório Mensal"
+  (`praiseSongs`) é o catálogo mestre de músicas (nome + cantor/banda) —
+  "mensal" é só o nome da aba, não particiona por mês (o pedido do usuário
+  foi só "cadastrar todas as músicas"). "Repertório Semanal"
+  (`weeklyRepertoires/{weekKey}`, `weekKey = yyyy-MM-dd` do domingo daquela
+  semana — `PraiseRepertoireRepository.weekKeyFor`) escala músicas com tom
+  e "momento" (Louvor 1/2/3 sugeridos + campo livre pra "mais ou menos
+  casos", pedido do usuário) e uma lista de links de playlist.
+  `ServiceOrderLivePage` busca o repertório da semana do culto
+  (`getForDate`) e mostra as músicas escaladas dentro do card de cada
+  momento "Louvor" (`praiseSlotLabelFor` casa `praise1/2/3` com "Louvor
+  1/2/3"). **Decisão de permissão sem confirmação explícita do usuário:**
+  gate do tile e das regras (`praiseSongs`/`weeklyRepertoires` em
+  `firestore.rules`) reaproveita `canManageServiceOrders`
+  (admin/dirigentes) — não existe papel dedicado de "Ministério de Louvor"
+  ainda; se o usuário quiser um papel separado, precisa pedir
+  explicitamente (envolveria `UserRole`/`firestore.rules`/
+  `manage_users_page.dart`).
+- **Hinários**: Cantor Cristão e HCC eram dois tiles separados no menu
+  Mais — viraram um só ("Hinários", `lib/hymnal/hymnals_page.dart`) que
+  abre uma tela de escolha entre os dois.
+- `firestore.rules`: `praiseSongs`/`weeklyRepertoires` — **só editei o
+  código-fonte, não fiz `firebase deploy`**, mesma cautela de sempre;
+  `settings/serviceOrderMomentOrder` não precisou de regra nova (`match
+  /settings/{docId}` já cobre qualquer documento da coleção).
+
+**Ordem de Culto — 5ª rodada (28/08/2026, mesma sessão):**
+
+- **Bug dos momentos especiais no picker, 3ª tentativa:** as duas correções
+  anteriores (`asData?.value` → `.future` do `StreamProvider`) não
+  resolveram — o usuário reportou de novo. Trocado por
+  `ServiceOrderExtraMomentRepository.getAll()`, uma leitura `.get()` direta
+  no Firestore sem nenhum provider Riverpod no meio, e o erro (se houver)
+  agora aparece num SnackBar em vez de cair num catch silencioso que
+  mascarava o problema real. Se o bug persistir depois disso, o próximo
+  passo é olhar o SnackBar de erro pra saber se é permissão/rede/outra
+  coisa — não ficou 100% claro qual era a causa raiz das duas tentativas
+  anteriores.
+- **Momento "Boas-vindas" abre os visitantes do dia** no modo apresentação
+  (`ServiceOrderLivePage`) — novo `VisitorRepository.getSummariesForDate`
+  (query por intervalo UTC do dia, fuso America/Sao_Paulo fixo UTC-3,
+  mesmo critério de `VisitorSummary.isFromToday` mas pra uma data
+  específica em vez de "hoje"). Lê `visitorSummaries` (não `visitors`) de
+  propósito — quem toca a Ordem de Culto normalmente só tem o papel
+  Dirigentes, que só tem `read` liberado no resumo, não nos dados
+  completos (telefone), exclusivos de Introdução/Pastor. Reaproveita
+  `VisitorSummaryTile` (`introduction/visitor_tiles.dart`) num bottom
+  sheet; mostra "Não há visitantes." se a lista vier vazia. Mesmo padrão
+  de interação dos outros momentos com sub-ação (toque abre, marca
+  concluído só depois de fechar).
+
+**Ordem de Culto — 6ª rodada (28/08/2026, mesma sessão):**
+
+- **Tom do repertório escondido do dirigente por enquanto** —
+  `ServiceOrderLivePage._repertoireSummaryFor` parou de incluir "(Tom: X)"
+  no resumo do momento "Louvor"; mostra só nome + cantor/banda. Pedido
+  explícito do usuário: o tom deve aparecer só pro perfil do Ministério de
+  Louvor — papel/permissão que ainda não existe, fica pra quando for
+  pedido.
+- **"Boas-vindas" mostra "Não há visitantes." direto**, sem precisar tocar
+  — `ServiceOrderLivePage` busca `_visitors` já no `initState` (junto com o
+  repertório); enquanto `null` (carregando) ou com visitantes, mantém o
+  toque abrindo a lista completa (`_subActionsFor`/`_showVisitorsSheet`).
+- **"Momentos Especiais" renomeado pra "Momentos Adicionais"** em toda a UI
+  (config, picker do cadastro) — nomes de classe/arquivo (`ServiceOrderExtraMomentOption`,
+  `service_order_extra_moment_repository.dart` etc.) não foram renomeados,
+  só o texto visível.
+- **Momentos adicionais ganharam campo próprio** (`ExtraMomentFieldKind`:
+  nenhum/um nome/vários nomes/texto bíblico) — o admin define ao cadastrar/
+  editar o momento (`ManageServiceOrderMomentsPage._showEditDialog`,
+  unificou os diálogos de adicionar/renomear em um só); o dirigente
+  preenche ao escolher o momento no cadastro
+  (`_ExtraMomentPickerSheet._collectFieldData`, reescrita — trocou de
+  multi-seleção por checkbox pra toque-abre-diálogo-de-preenchimento,
+  reaproveitando `_BibleReferenceFields`/`BibleReferenceController` já
+  existentes no arquivo pro caso "texto bíblico"). Satisfaz o pedido "mais
+  um momento de Louvor, ou Leitura bíblica" — um momento adicional com
+  fieldKind `bibleReference` É uma leitura bíblica extra. `ServiceOrderItem`
+  ganhou `extraNames`/`extraBibleReference` (persistidos em `momentOrder`,
+  com fallback nulo pra ordens salvas antes desta mudança). Um momento
+  adicional com texto bíblico preenchido (ex.: "Ceia do Senhor", pedido
+  explícito do usuário — "parecido com os dízimos e ofertas") ganha o
+  mesmo tratamento de leitura de verdade em `ServiceOrderLivePage`
+  (`BibleReaderPage`, marca concluído só ao voltar) que "Leitura bíblica"/
+  "Texto bíblico" dos dízimos já tinham — mecanismo genérico, não
+  específico de "Ceia do Senhor".
+- **Novo tile "Configurações e Gerenciamento"** no menu Mais — agrupa Tema,
+  Rol de Membros, Ministérios e Cargos, Gerenciar Usuários, Repositório de
+  Flyers e E-mails de eventos (`lib/settings/settings_management_page.dart`),
+  que antes eram 6 tiles soltos na grade principal. Cada um mantém seu
+  próprio gate de permissão dentro da nova tela; o tile de fora é sempre
+  visível (Tema não tem gate) e carrega o selo de pendentes de "Gerenciar
+  Usuários" borbulhado, pra um admin notar sem precisar entrar.
+  `MoreTile`/`SettingsMailIcon` (`main_shell.dart`) viraram públicos só pra
+  isso — import circular entre `main_shell.dart` e
+  `settings_management_page.dart` (Dart aceita, confirmado com
+  `flutter analyze` limpo).
+
+**Ordem de Culto — 7ª rodada (28/08/2026, mesma sessão):**
+
+- **Dedicação dos dízimos marca o próprio momento quando texto+hino ficam
+  concluídos** — `_MomentGroupCard` ganhou `isDone` (derivado, `leaves.every
+  (_done.contains)`, não uma chave própria) e passou a refletir isso
+  visualmente (badge de check, texto riscado) igual a um `_MomentCard`
+  concluído — antes só as sub-linhas mudavam, o cabeçalho ficava sempre
+  "ativo".
+- **Texto bíblico de momento adicional aceita mais de um** —
+  `ServiceOrderItem.extraBibleReference` (um só) virou `.extraBibleReferences`
+  (lista) — compatível com o formato antigo salvo antes desta mudança (`fromDynamic`
+  aceita a chave singular como fallback). O picker do cadastro trocou o
+  diálogo de referência única por `_MultiBibleReferenceDialog` (mesmo botão
+  "+ Adicionar texto"/lista dinâmica de "Leitura bíblica"); no modo
+  apresentação, virou uma subcategoria por texto (mesmo mecanismo de
+  "Leitura bíblica" com várias referências).
+- **"Vários nomes" ganhou lista dinâmica** em vez de campo único separado
+  por vírgula — pedido do usuário. Novo `_MultiNameDialog` (mesmo padrão
+  "+ Adicionar" de `_MultiBibleReferenceDialog`) substitui o campo de texto
+  único que existia em `_collectNames` (agora `_collectMultipleNames`);
+  `ExtraMomentFieldKind.name` (singular, "um nome") continua com campo
+  único simples (`_collectSingleName`), sem lista — só o plural mudou.
+- **Bug "Right overflowed"**: causa mais provável era o
+  `DropdownButtonFormField` sem `isExpanded: true` mostrando um rótulo
+  comprido (`ExtraMomentFieldKind.label`, ex. "Vários nomes (ex.:
+  batizandos)") dentro da largura estreita padrão de um `AlertDialog` —
+  clássico gotcha do Flutter. Corrigido com `isExpanded: true` +
+  `SizedBox(width: double.maxFinite)` no diálogo de editar momento
+  (`ManageServiceOrderMomentsPage._showEditDialog`) e nos dropdowns de
+  Capítulo/Versículo (`_ChapterDropdown`/`_VerseDropdown`, mais
+  `overflow: ellipsis` na lista de sugestão de livro) — defensivo, já que
+  não foi possível confirmar com 100% de certeza qual Row exata disparava
+  o "ao selecionar o livro" sem reprodução ao vivo.
+- **Texto bíblico abre só o trecho selecionado** — nova
+  `ServiceOrderBibleTextPage` (`service_order_bible_text_page.dart`), sem
+  navegação entre capítulos/livros nem controle de fonte, só os versículos
+  entre `verseStart`/`verseEnd`. Substituiu `BibleReaderPage` (a tela cheia
+  da aba Bíblia) em todos os pontos de `ServiceOrderLivePage` que abrem
+  leitura bíblica (Leitura bíblica, Texto bíblico dos dízimos, texto
+  bíblico de momento adicional).
+- **Ícones trocados por emoji** (`_emojiFor`/`_momentIcon`,
+  `service_order_live_page.dart`) — Material Icons não tem "mãos juntas em
+  oração"/"abraço"/"mãos recebendo bênção" de verdade: Oração → 🙏,
+  Boas-vindas → 🫂, Benção Apostólica → 🤲. Os demais momentos continuam
+  com `Icon`/`IconData` normal.
+
+**Ordem de Culto — 8ª rodada: papel Louvor + Cifras (28/08/2026, mesma
+sessão, pedidos do usuário):**
+
+- **Ajustes pequenos**: foco move sozinho pro campo novo ao tocar "Adicionar
+  nome"/"Adicionar texto" nos diálogos de momento adicional
+  (`WidgetsBinding.instance.addPostFrameCallback` + `FocusNode`/
+  `BibleReferenceController.bookFocusNode`); `ServiceOrderBibleTextPage`
+  ganhou os mesmos botões de zoom da Bíblia normal (`_fontSizeKey`
+  compartilhado); `dropdownColor: colorScheme.surfaceContainerHighest`
+  adicionado nos dropdowns dentro de diálogos (causa mais provável do
+  "Right overflowed"/cor igual ao popup — sem isso caem em `canvasColor`,
+  igual ao fundo padrão de `AlertDialog`); `ServiceOrderReorderPage._save`
+  valida que o Prelúdio (quando presente) é o primeiro momento e o Poslúdio
+  é sempre o último, recusando salvar caso contrário.
+- **Tom das músicas virou dropdown + check "Menor"** —
+  `PraiseAssignment.tone` (texto livre) virou `.toneNote`/`.toneIsMinor`
+  (`toneDisplay` monta "F#m" pra exibição), com fallback de leitura do
+  formato antigo. `praiseToneNotes` tem as 12 notas cromáticas — o usuário
+  listou só 10 (faltavam Bb/B), completei pra cobrir todas.
+- **Papel Louvor + Cifrista** (`UserRole.louvor`/`.cifrista`,
+  `CurrentUserProfile.canViewPraiseOrder`/`.canEditCifras`) — chips em
+  `ManageUsersPage`, mesmo padrão dos demais papéis. `firestore.rules`:
+  `isLouvor()`/`isCifrista()` novos; `serviceOrders`/`praiseSongs`/
+  `weeklyRepertoires` ganharam `isLouvor()` no `read` (escrita continua só
+  Dirigentes); `cifras` é `read` pra Dirigentes/Louvor, `write` só
+  Cifrista/admin — **só editei o código-fonte, não fiz `firebase deploy`**,
+  mesma cautela de sempre.
+- **`ServiceOrderPraiseViewPage`** (nova) — visão da Ordem de Culto pro
+  Louvor: mesmo layout escuro do modo apresentação do dirigente, mas
+  **somente leitura** — o progresso vem de `serviceOrderStreamProvider`
+  (`ServiceOrderRepository.watchOne`, `.snapshots()` em tempo real), sem
+  nenhuma escrita própria; quando o dirigente marca um momento em
+  `ServiceOrderLivePage`, aparece aqui sozinho. Textos bíblicos/hinos
+  continuam tocáveis (mesmos destinos do dirigente), só que sem marcar nada
+  ao voltar — a lógica de "quais sub-referências existem" foi duplicada
+  (não compartilhada com `ServiceOrderLivePage`, que é focada em
+  escrever/marcar) num nível reduzido: sem a granularidade completa de
+  sub-chave pro momento "Boas-vindas" (que depende de saber se há
+  visitantes, estado que só o dirigente busca) — aqui um item é
+  considerado concluído se a chave normal OU a de sub-ação "visitors"
+  estiver marcada, uma aproximação razoável só pra fins de exibição.
+  Momentos "Louvor" mostram tom (que o dirigente não vê) e tocar na música
+  abre `CifraViewPage`. Acesso liberado 1h antes do horário
+  (`order.dateTime - 1h`) — antes disso mostra só "ainda não disponível";
+  um cronômetro fica visível no topo até o horário exato.
+  `ServiceOrderListPage` roteia o toque numa ordem: quem gerencia
+  (Dirigentes/admin) vai pro fluxo normal (`ServiceOrderPrecheckPage`);
+  quem só é Louvor vai direto pra `ServiceOrderPraiseViewPage`. FAB "Nova
+  Ordem" e botão "Configurar" (momentos do culto) ficaram restritos a quem
+  gerencia.
+- **Cifras** (`lib/models/cifra.dart`, `lib/data/cifra_repository.dart`,
+  `lib/util/chord_transpose.dart`, `lib/praise/cifra_*.dart`) — 1 cifra por
+  música do catálogo mestre (doc id = songId), texto livre com acordes
+  entre colchetes (`"[G]Digno é o [D]Senhor"`). `CifraEditorPage` (só
+  Cifrista/admin) define tom original + capotraste (metadados — capo é só
+  informativo, não recalcula acordes) e o texto. `CifraViewPage` (qualquer
+  um com acesso ao repertório) tem botões +/- que transpõem os acordes
+  exibidos por semitom (`chord_transpose.dart`, client-side, não altera o
+  documento salvo) — reconhece nota fundamental + baixo depois de "/" (ex.
+  "D/F#"), mantém o sufixo (m, 7, sus4...) intacto. `CifraListPage` (novo
+  tile "Cifras" no menu Mais, gate Dirigentes/Louvor/Cifrista/admin) lista
+  todas as músicas com selo de "já tem cifra".
+
+**Ordem de Culto — 9ª rodada: correções de UX + Cifras dentro de Ministério
+de Louvor + deploy das regras do Louvor/Cifrista (28/08/2026, mesma sessão,
+pedidos do usuário):**
+
+- **Zoom do texto bíblico movido pro corpo da página**
+  (`service_order_bible_text_page.dart`) — estava em `SibValAppBar.actions`,
+  espremido ao lado do ícone de login da barra fixa compartilhada em todo o
+  app; virou uma faixa própria dentro do corpo (título + botões +/-, mesmo
+  padrão do `_ReaderHeader` de `bible_reader_page.dart`).
+- **Dropdown do livro da Bíblia ainda errado**: a lista de sugestões de
+  `_BookField` (`service_order_form_page.dart`) continuava em
+  `Theme.of(context).canvasColor` — só os dropdowns de Capítulo/Versículo
+  tinham sido corrigidos na rodada anterior, não a lista de livro. Trocado
+  pra `colorScheme.surfaceContainerHighest`, mesma cor usada nos outros.
+  `devotional_form_page.dart` mantém `canvasColor` de propósito (ali é
+  numa página normal, não dentro de um diálogo — combina com o dropdown
+  padrão do Flutter nesse contexto, decisão da sessão de 26/08/2026).
+- **Tom "Menor" não refletia o "m" na lista fechada**: `DropdownButtonFormField`
+  só tem um `value`/`items` (as notas puras, sem variante "m") — o checkbox
+  "Menor" alterava o estado mas o texto exibido no botão fechado não
+  mudava. Corrigido com `selectedItemBuilder` (recurso do próprio Flutter
+  pra customizar só o que aparece fechado, sem duplicar cada nota como dois
+  itens) em `weekly_repertoire_form_page.dart`
+  (`_AssignmentRow`) e `cifra_editor_page.dart`.
+- **Ordem do culto não carregava pro Louvor + Cifras não salvava/abria**:
+  diagnosticado como as regras do Firestore desta rodada anterior
+  (`isLouvor()`/`isCifrista()`, leitura de `serviceOrders`/`praiseSongs`/
+  `weeklyRepertoires` pro Louvor, e o match block inteiro de `cifras`)
+  nunca terem sido publicadas — só o código-fonte tinha sido editado, exatamente
+  como o aviso já deixado na 8ª rodada previa. Perguntado ao usuário
+  (`AskUserQuestion`), que confirmou; `firebase deploy --only
+  firestore:rules --project sibval-app-project` publicado com sucesso.
+- **Boas-vindas mostra "há visitantes" também, não só "não há"**: antes
+  `_welcomeSummary()` (`service_order_live_page.dart`) só escrevia algo
+  automático quando a lista vinha vazia — com visitantes, o card ficava mudo
+  até o toque. Agora mostra "N visitante(s) hoje." também quando há, mantendo
+  o toque disponível pra ver a lista completa. Confirmado que isso já era
+  exclusivo do dirigente — `ServiceOrderPraiseViewPage` (visão do Louvor)
+  nunca mostrou nada pro momento Boas-vindas (`ServiceOrderItem.summary()`
+  retorna `null` pra esse tipo, e `_detailRowsFor` de lá não tem um caso pra
+  ele) — nenhuma mudança necessária ali, só o comentário do código foi
+  atualizado pra deixar isso explícito.
+- **Cifras saiu do menu Mais e entrou dentro de Ministério de Louvor**: o
+  tile próprio "Cifras" foi removido de `main_shell.dart`; em troca,
+  `PraiseMinistryPage` ganhou um ícone de menu (☰, `PopupMenuButton`) ao
+  lado do título "Ministério de Louvor" — por enquanto só com a opção
+  "Cifras" (`CifraListPage`), pensado pra crescer com mais opções depois,
+  sem precisar de mais tiles soltos no menu Mais. Como antes só quem
+  gerencia Ordem de Culto (`canManageServiceOrders`) entrava nesta tela, o
+  gate em `main_shell.dart` foi alargado pra também deixar entrar
+  Louvor/Cifrista (`canViewPraiseOrder`/`canEditCifras`) — mas as duas abas
+  de gerenciar repertório (Mensal/Semanal, com botões de criar/editar/
+  excluir música e escala) continuam exclusivas de quem gerencia; quem
+  entra só pelo papel Louvor/Cifrista vê a página sem abas, só com o menu
+  (`PraiseMinistryPage._buildBody`, decisão da sessão — não foi pedido
+  explicitamente permitir Louvor/Cifrista editar repertório, só acessar
+  Cifras).
+
+**Ordem de Culto — 10ª rodada: Cifrista deixa de ser papel, Cifras ganha
+busca/cadastro avulso/config de editores, zoom+cor dourada nas exibições
+(28/08/2026, mesma sessão, pedidos do usuário):**
+
+- **Ícone do menu ☰ "Cifras"**: ganhou `Icons.lyrics_outlined` (mesmo ícone
+  do tile solto que existia antes da 9ª rodada) — só texto sem ícone antes.
+- **Papel Cifrista removido** (existiu por uma rodada só): `UserRole.cifrista`
+  saiu de `lib/models/app_user.dart`, o chip "Cifrista" saiu de
+  `manage_users_page.dart`, `CurrentUserProfile.canEditCifras` (baseado em
+  `roles`) foi removido. Em troca — pedido explícito do usuário ("esta
+  atribuição será dada individualmente direto ao usuário que o admin
+  selecionar") — novo `CifraEditorsRepository`
+  (`lib/data/cifra_repository.dart`) guarda uma lista de uids num único
+  documento (`settings/cifraEditors.uids`), e `canEditCifrasProvider`
+  (`Provider.autoDispose<bool>`) combina `isAdmin` + essa lista, substituindo
+  o getter antigo em todo lugar que o usava. `SIBValApp2/firestore.rules`:
+  `isCifrista()` virou `isCifraEditor()` — `get()` no documento
+  `settings/cifraEditors` (com `exists()` antes, senão `get()` de doc
+  inexistente derruba a regra), usado tanto no `read` quanto no `write` de
+  `cifras` (antes só Dirigentes/Louvor liam; agora quem tá na lista também
+  lê, mesmo sem ser Dirigentes/Louvor — precisa pra poder editar).
+  **Deploy feito** — aval explícito do usuário (`AskUserQuestion`),
+  `firebase deploy --only firestore:rules --project sibval-app-project`.
+- **`CifraEditorsManagementPage`** (nova, `lib/praise/`) — botão de
+  configuração (⚙, só admin, `profile.isAdmin`) dentro de `CifraListPage`.
+  Lista usuários aprovados (`allUsersProvider`, filtrado por
+  `UserStatus.approved`) com busca por nome/e-mail, `CheckboxListTile` por
+  usuário (admin sempre marcado e travado) — toque salva na hora
+  (`CifraEditorsRepository.setUids`, mesmo padrão de toque-e-salva dos
+  `_RoleChip` de `manage_users_page.dart`).
+- **Cifra avulsa, fora do repertório mestre** (pedido do usuário: "deve ser
+  possível incluir cifras além do que está no repertório") — `Cifra`
+  (`lib/models/cifra.dart`) ganhou `songArtist` (antes só vinha do
+  `PraiseSong` linkado, uma cifra avulsa não tem de onde puxar isso).
+  `CifraRepository.newStandaloneId()` gera um id novo
+  (`_collection.doc().id`, sem gravar ainda) pra uma cifra sem `PraiseSong`
+  correspondente. `CifraEditorPage` (`song`/`existing` agora os dois
+  opcionais) ganhou um terceiro modo: os dois nulos = cifra nova avulsa,
+  com campos "Nome da música"/"Cantor/Banda" editáveis (só aparecem quando
+  `song == null` — linkada a um `PraiseSong`, nome/cantor continuam
+  travados, editados só em Ministério de Louvor). `CifraListPage` ganhou
+  FAB "+" (só `canEditCifrasProvider`) pra esse fluxo.
+- **`CifraListPage` reescrita** — combina `praiseSongs` (repertório mestre,
+  com ou sem cifra ainda) com `cifras` avulsas (`songId` sem música
+  correspondente) numa lista só (`_buildEntries`/`_CifraEntry`), ordenada
+  por nome. Barra de busca (nome/cantor, `_normalizeText` acento/case-
+  insensível, mesmo helper duplicado de outras telas) filtra a lista.
+  Editar uma entrada sem cifra ainda repassa `existing: entry.cifra`
+  mesmo quando "sem cifra" (conteúdo vazio) — evitava um bug: sem isso, uma
+  cifra avulsa com conteúdo vazio perderia o id ao reabrir pra editar
+  (`CifraEditorPage` geraria outro `newStandaloneId()`, deixando o
+  documento vazio original órfão no Firestore).
+- **`CifraViewPage` ganhou zoom de fonte** (pedido do usuário: "exibir
+  dentro da página os botões de zoom") — mesmo padrão de
+  `service_order_bible_text_page.dart` (faixa própria no corpo, não na
+  `SibValAppBar`), com preferência salva separada (`cifra_font_size`, não
+  compartilhada com Bíblia/Hinário). A tela já era tela cheia (rota própria,
+  `Navigator.push`) desde a 8ª rodada — "exibir em tela cheia" já estava
+  satisfeito, só faltava o zoom.
+- **Itens clicáveis em dourado** nas exibições de Ordem de Culto (pedido do
+  usuário) — `service_order_live_page.dart`: `_SubActionRow.sub.label`
+  (sempre navega) e `_MomentCard.item.label` (só quando o toque do card
+  abre algo — `isLink: singleAction != null`, novo parâmetro; card sem
+  navegação, só "marca concluído", continua branco) viraram
+  `SibValColors.goldAccent`. `service_order_praise_view_page.dart`:
+  `_DetailRow.label` (toda linha ali navega) idem.
+
+**Ordem de Culto — 11ª rodada: bug real de reconciliação em momento
+adicional + Ministério de Louvor fechado pra Dirigentes (28/08/2026, mesma
+sessão, pedidos do usuário):**
+
+- **Bug real encontrado — "Ceia do Senhor não atualiza ao editar"**:
+  `ServiceOrderReorderPage._buildInitialOrder` (chamada ao reabrir a 2ª
+  etapa numa edição) reconciliava um momento adicional já existente
+  acrescentando o **item antigo** de `base` (`existing.momentOrder`, os
+  dados de ANTES da edição) sempre que o `extraMomentId` já batia — e o
+  loop seguinte, que acrescentaria o item **novo** vindo de
+  `draft.momentOrder` (com o texto/nomes atualizados na 1ª etapa), pulava
+  justamente porque já havia uma entrada com o mesmo `extraMomentId`
+  em `result`. Ou seja: editar o texto de "Ceia do Senhor" e salvar
+  silenciosamente descartava a edição, mantendo o texto antigo — o usuário
+  só percebeu ao remover o momento e adicionar de novo (mesmo
+  `extraMomentId`, mesmo sintoma). Corrigido: ao reconciliar, busca o item
+  correspondente em `draft.momentOrder` (dados atuais) em vez de reusar o
+  de `base` — mantém a posição já reconciliada, troca só os dados. Isso
+  também resolve a reclamação separada "Ceia do Senhor deve exibir todos os
+  textos que forem adicionados" — não era um bug de exibição (o card já
+  mostrava todas as `extraBibleReferences` preenchidas, uma subcategoria
+  cada), era o mesmo bug de reconciliação escondendo textos novos atrás dos
+  antigos.
+- **Ministério de Louvor fechado pra Dirigentes** (pedido explícito do
+  usuário: "Dirigente não deve ter acesso a nada em Ministério de Louvor" /
+  "Acesso a Ministério de Louvor deve ser a quem tem papel Louvor") — antes
+  `canManageServiceOrders` (Dirigentes/admin) também abria o tile e as duas
+  abas de gerenciar repertório; agora é só `canViewPraiseOrder`
+  (Louvor/admin, `main_shell.dart`/`PraiseMinistryPage.canManage`). Quem o
+  admin selecionou como editor de cifra continua entrando (só pra ver o
+  menu ☰, sem abas). `SIBValApp2/firestore.rules`: `praiseSongs`/
+  `weeklyRepertoires` — `write` de `isDirigentes()` pra `isLouvor()`; `read`
+  **não mudou** (continua `isDirigentes() || isLouvor()`) — Dirigentes
+  ainda precisa ler pra ver as músicas escaladas durante o culto ao vivo
+  (`ServiceOrderLivePage._repertoireSummaryFor`), que é uma exibição da
+  Ordem de Culto, não do Ministério de Louvor em si; só a
+  escrita/gerenciamento saiu de Dirigentes. **Deploy feito** — aval
+  explícito do usuário.
+- **Cifra Club**: usuário pediu pra eu buscar as cifras de cada música já
+  salva no Repertório Mensal e gerar o conteúdo pronto pra colar em cada
+  cifra. Não tenho credencial configurada pra ler o Firestore de produção
+  direto (nem pra escrever — só edito código-fonte e faço deploy quando
+  autorizado), então pedi a lista de músicas (nome + cantor/banda) pro
+  usuário colar — ele topou. Segue como próximo passo assim que a lista
+  chegar.
+
+## Como responder "o que falta migrar"
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

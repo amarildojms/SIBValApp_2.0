@@ -71,6 +71,19 @@ class CurrentUserProfile {
   bool get canViewVisitorSummaries => isAdmin || roles.contains('dirigentes');
   bool get canViewVisitorDetails => isAdmin || roles.contains('pastor');
 
+  // NOVO (27/08/2026): Ordem de Culto — só dirigente ou admin cadastra (ver
+  // lib/models/service_order.dart). Edição/exclusão são restritas ao dono da
+  // ordem (`ServiceOrder.ownerUid`) ou admin — checado ponto a ponto na tela,
+  // não aqui, porque depende do documento, não só do papel do usuário.
+  bool get canManageServiceOrders => isAdmin || roles.contains('dirigentes');
+
+  // NOVO (28/08/2026): Ministério de Louvor — papel próprio pra quem só
+  // precisa ver a Ordem de Culto (com tom/cifra), não gerenciá-la. Quem
+  // edita cifras NÃO é um papel — é uma seleção individual do admin
+  // (`canEditCifrasProvider` em `lib/data/cifra_repository.dart`), por isso
+  // não tem getter aqui.
+  bool get canViewPraiseOrder => isAdmin || roles.contains('louvor');
+
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {

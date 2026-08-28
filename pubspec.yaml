@@ -18,11 +18,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 32, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão: anel de % de cadastro (menu Mais) numa
-# escala de cor vermelho→laranja→verde, em vez de sempre dourado
+# Play Console antes de enviar; se for maior que 33, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão: Ordem de Culto (cadastro, reordenar,
+# modo apresentação, visão do Louvor), Ministério de Louvor (repertório
+# mensal/semanal) e Cifras — tudo sob os papéis Dirigentes/Louvor/admin
 # (28/08/2026).
-version: 1.7.2+32
+version: 1.7.2+33
 
 environment:
   sdk: ^3.13.0

@@ -223,6 +223,11 @@ class _UserCard extends ConsumerWidget {
                   // Dirigente(s) (ver functions/index.js: onMemberMinistryRoleSync).
                   _RoleChip(label: 'Dirigentes', role: UserRole.dirigentes, user: user),
                   _RoleChip(label: 'Pastor', role: UserRole.pastor, user: user),
+                  // NOVO (28/08/2026): Ministério de Louvor — ver
+                  // lib/models/praise_repertoire.dart. Quem edita cifras NÃO
+                  // é um papel — é uma seleção individual do admin dentro da
+                  // própria tela de Cifras (`CifraEditorsManagementPage`).
+                  _RoleChip(label: 'Louvor', role: UserRole.louvor, user: user),
                 ],
               ),
               Align(

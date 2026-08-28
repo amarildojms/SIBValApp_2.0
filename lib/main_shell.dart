@@ -3,11 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
-import 'admin/event_email_senders_page.dart';
-import 'admin/manage_ministries_page.dart';
-import 'admin/manage_users_page.dart';
-import 'admin/members_page.dart';
-import 'admin/recurring_event_flyer_repository_page.dart';
 import 'auth/communications_consent_banner.dart';
 import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
@@ -15,6 +10,7 @@ import 'auth/required_consent_gate_page.dart';
 import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'contribute/contribute_page.dart';
+import 'data/cifra_repository.dart';
 import 'data/member_repository.dart';
 import 'data/post_repository.dart' show currentUidProvider;
 import 'data/prayer_repository.dart';
@@ -26,16 +22,17 @@ import 'events/events_page.dart';
 import 'gallery/album_list_page.dart';
 import 'data/message_repository.dart';
 import 'home/home_feed_page.dart';
-import 'hymnal/hymn_list_page.dart';
+import 'hymnal/hymnals_page.dart';
 import 'introduction/introduction_page.dart';
 import 'messages/messages_page.dart';
-import 'models/hymn.dart';
 import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
 import 'partners/partners_page.dart';
+import 'praise/praise_ministry_page.dart';
 import 'prayer/prayer_page.dart';
+import 'service_order/service_order_list_page.dart';
+import 'settings/settings_management_page.dart';
 import 'theme/app_theme.dart';
-import 'theme/theme_settings_page.dart';
 import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
 import 'widgets/update_gate.dart';
@@ -70,15 +67,18 @@ class MainShell extends ConsumerWidget {
     final index = ref.watch(mainShellTabIndexProvider);
     final uid = ref.watch(currentUidProvider);
     final profile = ref.watch(currentUserProfileProvider).asData?.value;
-    final unreadDevotionalsAsync =
-        uid != null ? ref.watch(unreadDevotionalsCountProvider) : const AsyncValue.data(0);
+    final unreadDevotionalsAsync = uid != null
+        ? ref.watch(unreadDevotionalsCountProvider)
+        : const AsyncValue.data(0);
     final unreadDevotionals = unreadDevotionalsAsync.asData?.value ?? 0;
     // Espelha HomeFragment.kt `setUpNotifications()`: pede permissão de
     // notificação e registra o token FCM assim que há um uid logado. O
     // próprio serviço deduplica por uid, então chamar em todo build é
     // seguro.
     if (uid != null) {
-      ref.read(pushNotificationServiceProvider).requestPermissionAndRegisterToken(uid);
+      ref
+          .read(pushNotificationServiceProvider)
+          .requestPermissionAndRegisterToken(uid);
     }
     // Bloqueio obrigatório de atualização (21/08/2026) — vale pra qualquer
     // um, logado ou não, ver `update_gate.dart`.
@@ -94,14 +94,18 @@ class MainShell extends ConsumerWidget {
       // Contas logadas criadas antes dos Termos de Uso/checkbox de
       // privacidade existirem (20/08/2026) ficam bloqueadas aqui até
       // aceitarem — ver `RequiredConsentGatePage`.
-      child = RequiredConsentGatePage(uid: uid, communicationsConsent: profile.communicationsConsent);
+      child = RequiredConsentGatePage(
+        uid: uid,
+        communicationsConsent: profile.communicationsConsent,
+      );
     } else {
       child = Scaffold(
         body: Column(
           children: [
             const CommunicationsConsentBanner(),
             const NotificationPermissionBanner(),
-            if (updateStatus == UpdateStatus.graceWarning && versionConfig != null)
+            if (updateStatus == UpdateStatus.graceWarning &&
+                versionConfig != null)
               UpdateAvailableBanner(config: versionConfig),
             Expanded(
               child: IndexedStack(index: index, children: _pages),
@@ -116,14 +120,19 @@ class MainShell extends ConsumerWidget {
           maxScaleFactor: 1.15,
           child: NavigationBar(
             selectedIndex: index,
-            onDestinationSelected: (newIndex) => ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
+            onDestinationSelected: (newIndex) =>
+                ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
             backgroundColor: SibValColors.navyBlue,
             destinations: [
               NavigationDestination(
                 icon: Badge(
                   label: Text('$unreadDevotionals'),
                   isLabelVisible: unreadDevotionals > 0,
-                  child: const _BoldAssetIcon('assets/icons/ic_devocional.png', size: 26, color: Colors.white70),
+                  child: const _BoldAssetIcon(
+                    'assets/icons/ic_devocional.png',
+                    size: 26,
+                    color: Colors.white70,
+                  ),
                 ),
                 selectedIcon: Badge(
                   label: Text('$unreadDevotionals'),
@@ -136,10 +145,22 @@ class MainShell extends ConsumerWidget {
                 ),
                 label: 'Devocionais',
               ),
-              const NavigationDestination(icon: Icon(Icons.event_outlined), label: 'Eventos'),
-              const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Início'),
-              const NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Contribua'),
-              const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+              const NavigationDestination(
+                icon: Icon(Icons.event_outlined),
+                label: 'Eventos',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                label: 'Início',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.favorite_border),
+                label: 'Contribua',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.more_horiz),
+                label: 'Mais',
+              ),
             ],
           ),
         ),
@@ -149,7 +170,8 @@ class MainShell extends ConsumerWidget {
     return PopScope(
       canPop: index == homeTabIndex,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) ref.read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
+        if (!didPop)
+          ref.read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
       },
       child: child,
     );
@@ -167,7 +189,13 @@ class _BoldAssetIcon extends StatelessWidget {
   final double size;
   final Color color;
 
-  static const _offsets = [Offset.zero, Offset(-0.8, 0), Offset(0.8, 0), Offset(0, -0.8), Offset(0, 0.8)];
+  static const _offsets = [
+    Offset.zero,
+    Offset(-0.8, 0),
+    Offset(0.8, 0),
+    Offset(0, -0.8),
+    Offset(0, 0.8),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +208,11 @@ class _BoldAssetIcon extends StatelessWidget {
             Positioned.fill(
               child: Transform.translate(
                 offset: offset,
-                child: Image.asset(asset, color: color, colorBlendMode: BlendMode.srcIn),
+                child: Image.asset(
+                  asset,
+                  color: color,
+                  colorBlendMode: BlendMode.srcIn,
+                ),
               ),
             ),
         ],
@@ -192,8 +224,8 @@ class _BoldAssetIcon extends StatelessWidget {
 /// Engrenagem (configuração) com um pequeno envelope no canto — remete a
 /// "configuração de e-mails" sem precisar de um ícone customizado novo (só
 /// compõe dois `Icons` do Material já usados em outros lugares do app).
-class _SettingsMailIcon extends StatelessWidget {
-  const _SettingsMailIcon({required this.color});
+class SettingsMailIcon extends StatelessWidget {
+  const SettingsMailIcon({super.key, required this.color});
 
   final Color color;
 
@@ -224,9 +256,44 @@ class _SettingsMailIcon extends StatelessWidget {
   }
 }
 
+/// Igreja com uma nota musical no canto — remete a "ordem de culto"
+/// (liturgia musical) sem precisar de um ícone customizado novo, mesma
+/// composição de `SettingsMailIcon`/`_IntroductionIcon` acima.
+class _ServiceOrderIcon extends StatelessWidget {
+  const _ServiceOrderIcon({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.church_outlined, color: color, size: 24),
+          Positioned(
+            top: -3,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.music_note, color: color, size: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Mesa de recepção (ícone `desk_outlined`, que já traz um monitor
 /// embutido no desenho) com um boneco (pessoa) no canto — mesma composição
-/// de `_SettingsMailIcon` acima, só trocando os dois ícones combinados.
+/// de `SettingsMailIcon` acima, só trocando os dois ícones combinados.
 /// Nome da classe mantido (ícone continua sendo a "mesa"), só o papel/rótulo
 /// visível virou "Introdução".
 class _IntroductionIcon extends StatelessWidget {
@@ -270,134 +337,152 @@ class _MaisPage extends ConsumerWidget {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final profile = profileAsync.asData?.value;
     final isAdmin = profile?.isAdmin ?? false;
-    final canManageEventos = profile?.canManageEventos ?? false;
     final canViewPrayerRequests = profile?.canViewPrayerRequests ?? false;
     // NOVO (24/08/2026, unificado numa só tela em 25/08/2026, papel
     // renomeado de "Recepção" pra "Introdução" depois): área Introdução — o
     // que cada um vê dentro dela depende do papel, ver introduction_page.dart.
     // Um tile só, visível pra quem tem qualquer um dos três papéis (ou admin).
-    final canAccessIntroduction = (profile?.canRegisterVisitors ?? false) ||
+    final canAccessIntroduction =
+        (profile?.canRegisterVisitors ?? false) ||
         (profile?.canViewVisitorSummaries ?? false) ||
         (profile?.canViewVisitorDetails ?? false);
-    final pendingCountAsync = isAdmin ? ref.watch(pendingUserCountProvider) : const AsyncValue.data(0);
+    final pendingCountAsync = isAdmin
+        ? ref.watch(pendingUserCountProvider)
+        : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
     final pendingPrayerCountAsync = canViewPrayerRequests
         ? ref.watch(pendingPrayerCountProvider)
         : const AsyncValue.data(0);
     final pendingPrayerCount = pendingPrayerCountAsync.asData?.value ?? 0;
-    final pendingMessagesCountAsync = uid != null ? ref.watch(pendingMessagesCountProvider) : const AsyncValue.data(0);
+    final pendingMessagesCountAsync = uid != null
+        ? ref.watch(pendingMessagesCountProvider)
+        : const AsyncValue.data(0);
     final pendingMessagesCount = pendingMessagesCountAsync.asData?.value ?? 0;
 
     final tiles = [
       // Tier 1 — disponível para todos, sem login.
-      _MoreTile(
+      MoreTile(
         icon: Icons.photo_camera_outlined,
         label: 'Galeria',
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlbumListPage())),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const AlbumListPage())),
       ),
-      _MoreTile(
+      MoreTile(
         icon: Icons.menu_book,
         label: 'Bíblia',
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibleBookListPage())),
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const BibleBookListPage())),
       ),
-      _MoreTile(
-        imageAsset: 'assets/icons/ic_cc.png',
-        imageSize: 30,
-        label: 'Cantor Cristão',
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.cantorCristao))),
+      // Hinários (28/08/2026, pedido do usuário) — antes eram dois tiles
+      // separados (Cantor Cristão / HCC), agora um só que abre a escolha.
+      MoreTile(
+        icon: Icons.library_music_outlined,
+        label: 'Hinários',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const HymnalsPage())),
       ),
-      _MoreTile(
-        imageAsset: 'assets/icons/ic_hcc.png',
-        imageSize: 30,
-        label: 'HCC',
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const HymnListPage(hymnal: Hymnal.hinarioCristao))),
-      ),
-      _MoreTile(
+      MoreTile(
         imageAsset: 'assets/icons/ic_prayer.png',
         label: 'Pedido de Oração',
         badgeCount: pendingPrayerCount,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage())),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const PrayerPage())),
       ),
-      _MoreTile(
+      MoreTile(
         icon: Icons.handshake_outlined,
         label: 'Vínculos Institucionais',
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PartnersPage())),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const PartnersPage())),
       ),
-      _MoreTile(
-        icon: Icons.brightness_6_outlined,
-        label: 'Tema',
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ThemeSettingsPage())),
+      // "Configurações e Gerenciamento" (28/08/2026, pedido do usuário) —
+      // agrupa Tema/Rol de Membros/Ministérios e Cargos/Gerenciar Usuários/
+      // Repositório de Flyers/E-mails de eventos, que antes eram 6 tiles
+      // separados aqui — cada um continua com seu próprio gate de permissão
+      // dentro de `SettingsManagementPage`, então quem não tem acesso a
+      // nenhum deles ainda vê pelo menos o Tema (sem gate). O selo de
+      // pendentes de Gerenciar Usuários borbulha pro tile de fora, pra um
+      // admin não precisar entrar só pra notar.
+      MoreTile(
+        icon: Icons.settings_outlined,
+        label: 'Configurações e Gerenciamento',
+        badgeCount: isAdmin ? pendingCount : 0,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SettingsManagementPage()),
+        ),
       ),
-      // Tier 2 — só pra quem está autenticado. Rol de Membros passa a ser
-      // visível a todo autenticado (19/08/2026) — só edição/exclusão/inserção
-      // e a seção de pendentes ficam restritas a canManageBirthdays, dentro
-      // da própria tela.
+      // Tier 2 — só pra quem está autenticado.
       if (uid != null)
-        _MoreTile(
+        MoreTile(
           icon: Icons.cake_outlined,
           label: 'Aniversariantes',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
         ),
       if (uid != null)
-        _MoreTile(
-          icon: Icons.people_outline,
-          label: 'Rol de Membros',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MembersPage())),
-        ),
-      if (uid != null)
-        _MoreTile(
+        MoreTile(
           icon: Icons.mail_outline,
           label: 'Mensagens',
           badgeCount: pendingMessagesCount,
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MessagesPage())),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const MessagesPage())),
         ),
-      if (profile?.canManageBirthdays ?? false)
-        _MoreTile(
-          icon: Icons.groups_outlined,
-          label: 'Ministérios e Cargos',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageMinistriesPage())),
-        ),
-      // Tier 3 — admin / secretaria / eventos.
-      if (isAdmin)
-        _MoreTile(
-          icon: Icons.admin_panel_settings_outlined,
-          label: 'Gerenciar Usuários',
-          badgeCount: pendingCount,
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersPage())),
-        ),
-      if (isAdmin)
-        _MoreTile(
-          icon: Icons.collections_outlined,
-          label: 'Repositório de Flyers',
-          onTap: () =>
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecurringEventFlyerRepositoryPage())),
-        ),
-      if (canManageEventos)
-        _MoreTile(
-          customIcon: _SettingsMailIcon(color: context.textPrimary),
-          label: 'E-mails de eventos',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventEmailSendersPage())),
-        ),
+      // Tier 3 — admin / secretaria / eventos / dirigentes / introdução.
+      // Introdução e Ordem de Culto sobem pro topo deste tier (28/08/2026,
+      // pedido do usuário) — antes ficavam no fim da lista inteira.
       // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
       if (canAccessIntroduction)
-        _MoreTile(
+        MoreTile(
           customIcon: _IntroductionIcon(color: context.textPrimary),
           label: 'Introdução',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IntroductionPage())),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const IntroductionPage())),
         ),
-      // Tier 4 — recursos ainda não implementados.
-      const _MoreTile(icon: Icons.church_outlined, label: 'Ordem de Culto', enabled: false, comingSoon: true),
+      // NOVO (27/08/2026): Ordem de Culto — dirigente/admin cadastra e gera;
+      // Louvor (28/08/2026, papel novo) só enxerga, numa visão própria com
+      // tom/cifra (ver `ServiceOrderListPage._openPraiseView`). Abre
+      // primeiro a lista das ordens já cadastradas — antes ia direto pro
+      // cadastro.
+      if ((profile?.canManageServiceOrders ?? false) ||
+          (profile?.canViewPraiseOrder ?? false))
+        MoreTile(
+          customIcon: _ServiceOrderIcon(color: context.textPrimary),
+          label: 'Ordem de Culto',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ServiceOrderListPage()),
+          ),
+        ),
+      // NOVO (28/08/2026): Ministério de Louvor — repertório mensal/semanal
+      // + menu ☰ com "Cifras". Gate é só Louvor/admin
+      // (`canViewPraiseOrder`) + quem o admin selecionou individualmente
+      // como editor de cifra (`canEditCifrasProvider` — não é um papel, ver
+      // `lib/data/cifra_repository.dart`) — **Dirigentes NÃO entra mais**
+      // aqui (pedido explícito do usuário: "Dirigente não deve ter acesso a
+      // nada em Ministério de Louvor"; antes `canManageServiceOrders`
+      // também dava acesso). A Ordem de Culto em si continua toda de
+      // Dirigentes — isso é só o Ministério de Louvor.
+      if ((profile?.canViewPraiseOrder ?? false) || ref.watch(canEditCifrasProvider))
+        MoreTile(
+          icon: Icons.queue_music_outlined,
+          label: 'Ministério de Louvor',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PraiseMinistryPage()),
+          ),
+        ),
     ];
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: ListView(
         children: [
-          if (uid != null && profile != null) _MoreHeader(profile: profile) else const SizedBox(height: 16),
+          if (uid != null && profile != null)
+            _MoreHeader(profile: profile)
+          else
+            const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 3,
             shrinkWrap: true,
@@ -415,7 +500,9 @@ class _MaisPage extends ConsumerWidget {
                 ? SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginPage())),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                      ),
                       child: const Text('Entrar'),
                     ),
                   )
@@ -426,7 +513,10 @@ class _MaisPage extends ConsumerWidget {
                         style: TextStyle(color: context.textSecondary),
                       ),
                       const SizedBox(height: 24),
-                      ElevatedButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Sair')),
+                      ElevatedButton(
+                        onPressed: () => FirebaseAuth.instance.signOut(),
+                        child: const Text('Sair'),
+                      ),
                     ],
                   ),
           ),
@@ -457,10 +547,14 @@ class _MoreHeader extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfilePage())),
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const EditProfilePage())),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: SibValColors.navyBlueLight, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: SibValColors.navyBlueLight,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -468,9 +562,16 @@ class _MoreHeader extends ConsumerWidget {
                 radius: 28,
                 backgroundColor: Colors.white24,
                 backgroundImage: profile.photoUrl.isNotEmpty
-                    ? NetworkImage(cacheBustedPhotoUrl(profile.photoUrl, profile.photoUpdatedAt))
+                    ? NetworkImage(
+                        cacheBustedPhotoUrl(
+                          profile.photoUrl,
+                          profile.photoUpdatedAt,
+                        ),
+                      )
                     : null,
-                child: profile.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
+                child: profile.photoUrl.isEmpty
+                    ? const Icon(Icons.person, color: Colors.white)
+                    : null,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -479,14 +580,27 @@ class _MoreHeader extends ConsumerWidget {
                   children: [
                     Text(
                       profile.shortName,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    const Text('Editar perfil', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const Text(
+                      'Editar perfil',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
                     if (membershipLabel != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text(membershipLabel, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        child: Text(
+                          membershipLabel,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -529,7 +643,10 @@ class _CompletionBadge extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Cadastro', style: TextStyle(color: Colors.white70, fontSize: 9)),
+        const Text(
+          'Cadastro',
+          style: TextStyle(color: Colors.white70, fontSize: 9),
+        ),
         const SizedBox(height: 2),
         SizedBox(
           width: 36,
@@ -545,13 +662,20 @@ class _CompletionBadge extends StatelessWidget {
               ),
               Text(
                 '$percent%',
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 2),
-        const Text('completo', style: TextStyle(color: Colors.white70, fontSize: 9)),
+        const Text(
+          'completo',
+          style: TextStyle(color: Colors.white70, fontSize: 9),
+        ),
       ],
     );
   }
@@ -563,7 +687,9 @@ class _CompletionBadge extends StatelessWidget {
 String? _membershipDurationLabel(DateTime? membershipDate) {
   if (membershipDate == null) return null;
   final now = DateTime.now();
-  var totalMonths = (now.year - membershipDate.year) * 12 + (now.month - membershipDate.month);
+  var totalMonths =
+      (now.year - membershipDate.year) * 12 +
+      (now.month - membershipDate.month);
   if (now.day < membershipDate.day) totalMonths--;
   if (totalMonths < 0) return null;
   final years = totalMonths ~/ 12;
@@ -589,12 +715,15 @@ String _forceTwoLineLabel(String label) {
   ];
   if (spaceIndexes.isEmpty) return label;
   final middle = label.length / 2;
-  final splitAt = spaceIndexes.reduce((a, b) => (a - middle).abs() <= (b - middle).abs() ? a : b);
+  final splitAt = spaceIndexes.reduce(
+    (a, b) => (a - middle).abs() <= (b - middle).abs() ? a : b,
+  );
   return label.replaceRange(splitAt, splitAt + 1, '\n');
 }
 
-class _MoreTile extends StatelessWidget {
-  const _MoreTile({
+class MoreTile extends StatelessWidget {
+  const MoreTile({
+    super.key,
     this.icon,
     this.imageAsset,
     this.customIcon,
@@ -602,15 +731,13 @@ class _MoreTile extends StatelessWidget {
     required this.label,
     this.onTap,
     this.badgeCount = 0,
-    this.enabled = true,
-    this.comingSoon = false,
   }) : assert(icon != null || imageAsset != null || customIcon != null);
 
   final IconData? icon;
   final String? imageAsset;
 
   /// Substitui `icon`/`imageAsset` quando o ícone precisa de composição (ex.:
-  /// engrenagem + envelope de "E-mails de eventos") — ver `_SettingsMailIcon`.
+  /// engrenagem + envelope de "E-mails de eventos") — ver `SettingsMailIcon`.
   final Widget? customIcon;
 
   /// Tamanho do ícone de imagem dentro do CircleAvatar (22 por padrão) — Cantor
@@ -620,17 +747,12 @@ class _MoreTile extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
   final int badgeCount;
-  final bool enabled;
-
-  /// Quando true, mostra "(Em breve)" numa linha separada abaixo do rótulo,
-  /// em vez de embutido no texto do rótulo (evita quebra estranha no meio).
-  final bool comingSoon;
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? context.textPrimary : context.textTertiary;
+    final color = context.textPrimary;
     return InkWell(
-      onTap: enabled ? onTap : null,
+      onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
@@ -642,7 +764,9 @@ class _MoreTile extends StatelessWidget {
               isLabelVisible: badgeCount > 0,
               child: CircleAvatar(
                 radius: 22,
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
                 child:
                     customIcon ??
                     (imageAsset != null
@@ -664,12 +788,6 @@ class _MoreTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: color, fontSize: 11, height: 1.0),
             ),
-            if (comingSoon)
-              Text(
-                '(Em breve)',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontSize: 10, fontStyle: FontStyle.italic, height: 1.0),
-              ),
           ],
         ),
       ),
