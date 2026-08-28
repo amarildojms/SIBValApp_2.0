@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/cifra_repository.dart';
 import '../models/cifra.dart';
+import '../models/praise_repertoire.dart' show praiseToneNotes;
 import '../theme/app_theme.dart';
 import '../util/chord_transpose.dart';
 import '../util/cifra_club_text.dart';
@@ -59,9 +60,39 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
     await prefs.setDouble(_fontSizeKey, newSize);
   }
 
+  /// Abre a lista das 12 notas cromáticas (28/08/2026, pedido do usuário:
+  /// "implementar a possibilidade de selecionar o tom além de subir e
+  /// descer pelo + e -") — só disponível quando a cifra tem `baseTone`
+  /// salvo (sem isso não há de onde calcular quantos semitons faltam pra
+  /// chegar na nota escolhida). Convive com os botões +/- já existentes,
+  /// que continuam funcionando normalmente.
+  Future<void> _openTonePicker(String baseTone) async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Selecionar tom'),
+        children: [
+          for (final note in praiseToneNotes)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(note),
+              child: Text(note, style: const TextStyle(fontSize: 16)),
+            ),
+        ],
+      ),
+    );
+    if (selected == null) return;
+    final isMinor = baseTone.endsWith('m');
+    final rootNote = isMinor ? baseTone.substring(0, baseTone.length - 1) : baseTone;
+    final baseIndex = noteIndex(rootNote);
+    final targetIndex = noteIndex(selected);
+    if (baseIndex == null || targetIndex == null) return;
+    setState(() => _semitones = (targetIndex - baseIndex + 12) % 12);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cifraAsync = ref.watch(cifraForSongProvider(widget.songId));
+    final baseTone = cifraAsync.asData?.value?.baseTone ?? '';
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -131,9 +162,20 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
                     icon: const Icon(Icons.remove_circle_outline),
                     onPressed: () => setState(() => _semitones--),
                   ),
-                  Text(
-                    _semitones == 0 ? 'Original' : (_semitones > 0 ? '+$_semitones' : '$_semitones'),
-                    style: TextStyle(color: context.textPrimary, fontSize: 16),
+                  InkWell(
+                    onTap: baseTone.isEmpty ? null : () => _openTonePicker(baseTone),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: Text(
+                        _semitones == 0 ? 'Original' : (_semitones > 0 ? '+$_semitones' : '$_semitones'),
+                        style: TextStyle(
+                          color: baseTone.isEmpty ? context.textPrimary : SibValColors.goldAccent,
+                          fontSize: 16,
+                          decoration: baseTone.isEmpty ? null : TextDecoration.underline,
+                        ),
+                      ),
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline),

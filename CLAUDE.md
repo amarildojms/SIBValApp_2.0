@@ -2034,6 +2034,75 @@ sessão, pedidos do usuário):**
   disponível neste ambiente) pra confirmar que a concorrência não deixou
   nada quebrado.
 
+**Ordem de Culto — 13ª rodada: Ceia do Senhor vazio por padrão, texto de
+import simplificado, seletor de tom na cifra, mensagem automática de escala
+e popup de bênção ao finalizar (28/08/2026, mesma sessão, pedidos do
+usuário):**
+
+- **Ceia do Senhor volta a nascer vazio** — `communionResponsible` (padrão
+  era `'Pr. Ronan'`, igual aos demais momentos com responsável fixo) virou
+  `''`. Como o momento já saía da ordem quando vazio
+  (`ServiceOrderReorderPage._isEmptyMoment`, item novo desta mesma
+  entrada), um culto comum (sem Ceia) não precisa mais que o dirigente
+  apague manualmente o nome padrão — só preenche quando o culto realmente
+  vai ter Ceia do Senhor.
+- **Texto de ajuda do import de cifra simplificado** — tirado o "formato
+  Cifra Club"/"também dá pra colar direto de um site" (`cifra_editor_page.dart`),
+  a pedido do usuário; ficou só "Letra e acordes — Formato: uma linha só com
+  os acordes, e a linha de baixo com a letra correspondente."
+- **Seletor de tom na exibição da cifra** (`CifraViewPage`) — além dos
+  botões +/- de sempre (transposição por semitom), o valor central agora é
+  tocável (só quando a cifra tem `baseTone` salvo — sem isso não há de onde
+  calcular a distância) e abre uma lista das 12 notas cromáticas
+  (`praiseToneNotes`, já usada em Ministério de Louvor); escolher uma
+  calcula direto quantos semitons faltam (`noteIndex`, novo helper em
+  `chord_transpose.dart`) e ajusta `_semitones` — mesmo mecanismo de
+  transposição de sempre, só que "de um pulo" em vez de incremento único.
+- **Mensagem automática pra quem é escalado na Participação Especial** —
+  sem equivalente no nativo. Quando o texto do campo "Participação Especial"
+  bate com o nome de um `Member` que já tem `linkedUid` (conta de app
+  vinculada), duas Cloud Functions novas em `SIBValApp2/functions/index.js`
+  (`onServiceOrderCreatedParticipationNotify`/
+  `onServiceOrderUpdatedParticipationNotify`, via helper compartilhado
+  `syncServiceOrderParticipationAssignment`) mandam uma mensagem de verdade
+  pela Central de Mensagens (coleção `messages` — não é só um push solto;
+  cria o documento e o gatilho já existente `onMessageCreated` cuida do
+  push sozinho) avisando a escala, com data/hora e o Tema (ou "o culto")
+  no texto. Casamento é por nome normalizado (`normalizeKey`, mesmo helper
+  já usado pro sync de papel por ministério), varrendo `members` em
+  memória — mesmo padrão de `getTodaysMembershipAnniversaryMembers`, sem
+  índice novo. `participationAssignedUid`/`participationReminderSent`
+  (campos só desta function, sem equivalente no model Dart — mesma família
+  de `feedRepost24hSent`) guardam quem foi avisado por último, pra um
+  `update()` que não muda a pessoa escalada não reenviar a mensagem de novo,
+  e resetam o lembrete quando a pessoa escalada muda numa edição. Novo
+  `sendServiceOrderParticipationReminders` (`onSchedule`, a cada 15 min,
+  mesmo padrão de janela/idempotência de `sendRecurringEventReminders`)
+  manda um lembrete 24h antes do culto pra quem ficou marcado como escalado.
+  **Interpretação registrada aqui pra revisar se não bater com o esperado**:
+  "enviada no momento que a ordem é salva" foi lido como "quando a pessoa
+  escalada muda" (criação, ou edição que troca quem está na Participação
+  Especial) — não a cada `update()` de qualquer campo da ordem, pra não
+  reenviar a mesma mensagem numa edição que não tem nada a ver com
+  Participação Especial.
+- **Popup de bênção ao finalizar o culto** — sem equivalente no nativo.
+  Nova `onServiceOrderFinalizedNotify` (`onDocumentUpdated`, detecta a
+  transição de `isFinalized` pra `true`) manda push pra todos, audiência
+  `all`, com o texto "Que a bênção do Senhor esteja sobre sua vida. Vá em
+  paz! 🙏" (redigido por mim — o usuário só pediu "uma mensagem de bênção",
+  sem especificar o texto exato). Novo `NotificationType.serviceOrderFinalized`
+  (`lib/models/notification.dart`). Só quem está com o app **aberto em
+  primeiro plano** no momento vê um popup de verdade
+  (`PushNotificationService._onForegroundMessage` trata esse tipo como caso
+  especial — `AlertDialog` sobre a tela atual, via `navigatorKey`, no lugar
+  do banner do sistema); em segundo plano/fechado continua sendo só o banner
+  normal (não dá pra abrir diálogo Flutter fora do app rodando) — tocar nele
+  volta pro Início, mesmo padrão de `membershipAnniversary`.
+- Nenhuma das duas rodadas de Cloud Functions desta entrada foi deployada —
+  **só editei o código-fonte**, mesma cautela de sempre; a mensagem
+  automática de escala e o popup de finalização só funcionam de verdade em
+  produção depois de um `firebase deploy` explicitamente pedido.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

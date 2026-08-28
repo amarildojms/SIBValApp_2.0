@@ -176,7 +176,10 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _praise3Controller.text = 'Ministério Adorai';
       _intercessionController.text = 'Pr. Ronan';
       _messageController.text = 'Pr. Ronan';
-      _communionController.text = 'Pr. Ronan';
+      // Ceia do Senhor fica vazio por padrão (28/08/2026, pedido do usuário)
+      // — diferente dos demais momentos com responsável fixo, porque esse
+      // momento em si só entra na ordem quando preenchido (ver
+      // `_isEmptyMoment` em `service_order_reorder_page.dart`).
     }
     if (_bibleReadingControllers.isEmpty) {
       _bibleReadingControllers.add(BibleReferenceController());

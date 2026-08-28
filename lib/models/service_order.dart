@@ -112,7 +112,7 @@ class ServiceOrder {
     this.praise2 = 'Ministério Adorai',
     this.intercessionModerator = 'Pr. Ronan',
     this.message = 'Pr. Ronan',
-    this.communionResponsible = 'Pr. Ronan',
+    this.communionResponsible = '',
     this.praise3 = 'Ministério Adorai',
     this.postludeStyle = PreludeStyle.instrumental,
     this.postludeOther = '',

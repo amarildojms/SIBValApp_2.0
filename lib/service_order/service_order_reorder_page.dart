@@ -119,6 +119,8 @@ class _ServiceOrderReorderPageState
         return draft.participation.trim().isEmpty;
       case ServiceOrderMomentType.missionMoment:
         return draft.missionMoment == MissionMoment.naoHavera;
+      case ServiceOrderMomentType.communion:
+        return draft.communionResponsible.trim().isEmpty;
       default:
         return false;
     }

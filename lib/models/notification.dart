@@ -67,6 +67,15 @@ abstract final class NotificationType {
   /// (`ServiceOrderRepository.markStarted`) — é o que libera
   /// `ServiceOrderMemberViewPage` de ficar travada no timer.
   static const serviceOrderStarted = 'service_order_started';
+
+  /// Disparada quando o dirigente toca em "Finalizar Culto"
+  /// (`ServiceOrderRepository.finalize`) — audiência `all`, com uma
+  /// mensagem de bênção no corpo (28/08/2026, pedido do usuário: "exibir
+  /// uma popup para todos os usuários"). Tratada de forma especial em
+  /// `PushNotificationService._onForegroundMessage` — quem está com o app
+  /// aberto vê um diálogo de verdade em vez do banner do sistema (ver
+  /// `navigatorKey`).
+  static const serviceOrderFinalized = 'service_order_finalized';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem

@@ -268,10 +268,9 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Letra e acordes — formato Cifra Club: uma linha só '
-                          'com os acordes, e a linha de baixo com a letra '
-                          'correspondente. Também dá pra colar direto de um '
-                          'site de cifra.',
+                          'Letra e acordes — Formato: uma linha só com os '
+                          'acordes, e a linha de baixo com a letra '
+                          'correspondente.',
                           style: TextStyle(color: context.textSecondary, fontSize: 12),
                         ),
                       ),

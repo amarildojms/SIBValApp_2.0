@@ -63,5 +63,13 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       // regra do toque numa ordem em `ServiceOrderListPage`, ver
       // `service_order_navigation.dart`.
       if (targetId.isNotEmpty) openServiceOrder(context, targetId);
+    case NotificationType.serviceOrderFinalized:
+      // Sem tela própria — quem tocar (ex.: veio pelo banner do sistema,
+      // app fechado) só volta pro Início. Quem está com o app aberto no
+      // momento do envio já viu o diálogo de bênção direto
+      // (`PushNotificationService._onForegroundMessage`), sem precisar
+      // tocar em nada.
+      ProviderScope.containerOf(context, listen: false).read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
+      Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }

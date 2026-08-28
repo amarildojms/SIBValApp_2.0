@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/notification_repository.dart';
 import '../data/user_repository.dart';
 import '../firebase_options.dart';
+import '../models/notification.dart';
 import 'notification_navigation.dart';
 
 const _pushChannelId = 'default_channel';
@@ -150,7 +151,34 @@ class PushNotificationService {
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
     if (message.data.isEmpty) return;
+    // Finalização de culto vira um popup de verdade em vez do banner do
+    // sistema, pra quem já está com o app aberto (28/08/2026, pedido do
+    // usuário: "exibir uma popup para todos os usuários") — em segundo
+    // plano/fechado, `firebaseMessagingBackgroundHandler` continua mostrando
+    // o banner normal (não dá pra abrir diálogo Flutter fora do app rodando).
+    if (message.data['type'] == NotificationType.serviceOrderFinalized) {
+      _showFinalizedBlessingDialog(message.data);
+      return;
+    }
     await showFcmLocalNotification(message.data);
+  }
+
+  void _showFinalizedBlessingDialog(Map<String, dynamic> data) {
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(data['title'] as String? ?? 'Culto finalizado'),
+        content: Text(data['body'] as String? ?? ''),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Amém'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Cancela a notificação da barra do celular — usado tanto ao tocar nela

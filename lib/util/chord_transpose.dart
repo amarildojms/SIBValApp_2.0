@@ -11,6 +11,18 @@ const _flatScale = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 
 /// `"[G]Digno é o [D]Senhor"`).
 final RegExp chordBracketPattern = RegExp(r'\[([^\]]+)\]');
 
+/// Índice cromático (0-11) de [note] (ex. "F#", "Db") na escala — `null` se
+/// não reconhecida. Usado por `CifraViewPage` (28/08/2026, pedido do
+/// usuário: "implementar a possibilidade de selecionar o tom") pra calcular
+/// quantos semitons faltam entre o tom original salvo e o tom escolhido
+/// direto numa lista, em vez de só subir/descer um semitom por vez.
+int? noteIndex(String note) {
+  final sharpIndex = _sharpScale.indexOf(note);
+  if (sharpIndex != -1) return sharpIndex;
+  final flatIndex = _flatScale.indexOf(note);
+  return flatIndex != -1 ? flatIndex : null;
+}
+
 /// Desloca a nota fundamental de [note] (ex. "F#", "Db") em [semitones] —
 /// mantém a grafia bemol/sustenido igual ao original; devolve [note] sem
 /// alteração se não reconhecer a nota.
