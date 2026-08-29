@@ -18,16 +18,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 37, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (29/08/2026): Estado civil virou dado
-# pessoal do usuário (editável em Editar perfil, saiu de "Dados
-# eclesiásticos"); Forma de Adesão e Igreja de origem também passaram a
-# ser editáveis pelo próprio usuário lá, mesmo privilégio que a Data de
-# Batismo já tinha; eventos pontuais e recorrentes só somem da lista no
-# dia seguinte ao horário marcado (antes sumiam assim que a hora passava);
-# selo "Iniciado às HH:mm" na lista de eventos, no detalhe (sobre a
-# imagem) e no post correspondente no feed Início.
-version: 1.7.2+37
+# Play Console antes de enviar; se for maior que 39, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (29/08/2026): Ordem de Culto ganhou o
+# momento fixo "Oração de Gratidão" (logo após Dedicação dos dízimos e
+# ofertas); a "Divisa" do Momento Missionário deixou de ser texto livre e
+# virou seleção de texto(s) bíblico(s) (pode ter mais de um); tocar no
+# Momento Missionário abre uma tela com o Tema em destaque no topo e a
+# Divisa (textos + referência) logo abaixo; mensagem de finalização do
+# culto passou a mostrar "Culto: {Tema}" quando há tema cadastrado.
+version: 1.7.2+39
 
 environment:
   sdk: ^3.13.0
