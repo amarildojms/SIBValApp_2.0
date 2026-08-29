@@ -18,17 +18,16 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 36, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (29/08/2026): tela "Sobre" (versão,
-# Política de Privacidade e Termos de Uso) no rodapé do Mais; Rol de
-# Membros mostra só nome/foto/aniversário pra quem só visualiza (sem
-# e-mail); Escala de Dirigentes em linha do tempo, toque simples removido
-# (só toque longo edita/exclui); Ministério de Louvor — "Ensaios" saiu do
-# menu (repertório semanal abre o ensaio direto), editar/excluir/copiar
-# virou toque longo; Cifras — capotraste removível/ajustável mantendo o
-# tom, barra de controles compacta com separador, tom e capo memorizados
-# por música, destaque do tom selecionado nos seletores.
-version: 1.7.2+36
+# Play Console antes de enviar; se for maior que 37, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (29/08/2026): Estado civil virou dado
+# pessoal do usuário (editável em Editar perfil, saiu de "Dados
+# eclesiásticos"); Forma de Adesão e Igreja de origem também passaram a
+# ser editáveis pelo próprio usuário lá, mesmo privilégio que a Data de
+# Batismo já tinha; eventos pontuais e recorrentes só somem da lista no
+# dia seguinte ao horário marcado (antes sumiam assim que a hora passava);
+# selo "Iniciado às HH:mm" na lista de eventos, no detalhe (sobre a
+# imagem) e no post correspondente no feed Início.
+version: 1.7.2+37
 
 environment:
   sdk: ^3.13.0
