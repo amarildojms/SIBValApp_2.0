@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../data/leader_schedule_repository.dart';
 import '../data/user_repository.dart';
@@ -12,19 +11,19 @@ import '../widgets/sibval_app_bar.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Cadastro/edição de uma entrada da Escala de Dirigentes — só o
-/// Pastor/admin (`canManageLeaderSchedule`) chega aqui com os campos
-/// habilitados; Dirigentes abre a mesma tela em modo somente-leitura
-/// (`readOnly: true`, sem botão Salvar/Excluir) a partir de
-/// `LeaderScheduleListPage`.
+/// Pastor/admin (`canManageLeaderSchedule`) chega aqui, via toque longo em
+/// `LeaderScheduleListPage` (Nova Escala/Editar).
+///
+/// **Revisão de 29/08/2026** — o modo `readOnly` foi removido: a linha do
+/// tempo (`LeaderScheduleListPage`, `_ScheduleTimelineTile`) já mostra
+/// data/dirigente/tema direto no card, então não fazia mais sentido abrir
+/// esta tela só pra visualizar (pedido do usuário: "não faz sentido já que
+/// na linha de tempo já se vê todas as informações"). Só quem gerencia
+/// consegue mais chegar aqui.
 class LeaderScheduleFormPage extends ConsumerStatefulWidget {
-  const LeaderScheduleFormPage({
-    super.key,
-    this.editing,
-    this.readOnly = false,
-  });
+  const LeaderScheduleFormPage({super.key, this.editing});
 
   final LeaderScheduleEntry? editing;
-  final bool readOnly;
 
   @override
   ConsumerState<LeaderScheduleFormPage> createState() =>
@@ -33,8 +32,6 @@ class LeaderScheduleFormPage extends ConsumerStatefulWidget {
 
 class _LeaderScheduleFormPageState
     extends ConsumerState<LeaderScheduleFormPage> {
-  static final _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
-
   DateTime? _date;
   String _leaderUid = '';
   String _leaderName = '';
@@ -112,58 +109,21 @@ class _LeaderScheduleFormPageState
     }
   }
 
-  Future<void> _delete() async {
-    final editing = widget.editing;
-    if (editing == null) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir escala'),
-        content: Text(
-          'Tem certeza que deseja excluir a escala de ${_dateFormat.format(editing.dateTime)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    await ref.read(leaderScheduleRepositoryProvider).delete(editing.id);
-    if (mounted) Navigator.of(context).pop();
-  }
-
   @override
   Widget build(BuildContext context) {
     final canSave = _date != null && _leaderUid.isNotEmpty;
     return Scaffold(
-      appBar: SibValAppBar(
-        isHome: false,
-        actions: [
-          if (_isEditing && !widget.readOnly)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _delete,
-            ),
-        ],
-      ),
+      // Excluir saiu daqui — agora é só via toque longo em
+      // `LeaderScheduleListPage` (28/08/2026, pedido do usuário: "remova a
+      // lixeira", mesmo padrão de `ServiceOrderListPage`).
+      appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
         bottom: true,
         top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ScreenTitle(
-              widget.readOnly
-                  ? 'Escala de Dirigentes'
-                  : (_isEditing ? 'Editar Escala' : 'Nova Escala'),
-            ),
+            ScreenTitle(_isEditing ? 'Editar Escala' : 'Nova Escala'),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -171,7 +131,6 @@ class _LeaderScheduleFormPageState
                   DateField(
                     label: 'Data do culto',
                     value: _date,
-                    enabled: !widget.readOnly,
                     firstDate: DateTime(DateTime.now().year - 1),
                     lastDate: DateTime(DateTime.now().year + 3),
                     decoration: const InputDecoration(
@@ -190,13 +149,11 @@ class _LeaderScheduleFormPageState
                   ),
                   const SizedBox(height: 4),
                   InkWell(
-                    onTap: widget.readOnly ? null : _pickLeader,
+                    onTap: _pickLeader,
                     child: InputDecorator(
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        suffixIcon: widget.readOnly
-                            ? null
-                            : const Icon(Icons.person_search_outlined),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.person_search_outlined),
                       ),
                       child: Text(
                         _leaderName.isEmpty ? 'Toque para selecionar' : _leaderName,
@@ -220,34 +177,31 @@ class _LeaderScheduleFormPageState
                   const SizedBox(height: 4),
                   TextField(
                     controller: _themeController,
-                    enabled: !widget.readOnly,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       hintText: 'Opcional',
                     ),
                   ),
-                  if (!widget.readOnly) ...[
-                    const SizedBox(height: 24),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 18,
-                          ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 18,
                         ),
-                        onPressed: (_saving || !canSave) ? null : _save,
-                        child: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Salvar'),
                       ),
+                      onPressed: (_saving || !canSave) ? null : _save,
+                      child: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Salvar'),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

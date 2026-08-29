@@ -169,49 +169,17 @@ class _WeeklyRepertoireFormPageState
     }
   }
 
-  Future<void> _delete() async {
-    final editing = widget.editing;
-    if (editing == null) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir repertório'),
-        content: Text(
-          'Tem certeza que deseja excluir o repertório de ${_dateFormat.format(editing.weekDate)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    await ref.read(praiseRepertoireRepositoryProvider).deleteWeeklyRepertoire(editing.id);
-    if (mounted) Navigator.of(context).pop();
-  }
-
   @override
   Widget build(BuildContext context) {
     final songsAsync = ref.watch(praiseSongsProvider);
     final songs = songsAsync.asData?.value ?? const [];
 
     return Scaffold(
-      appBar: SibValAppBar(
-        isHome: false,
-        actions: [
-          if (_isEditing)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _delete,
-            ),
-        ],
-      ),
+      // Excluir saiu daqui — agora é só via toque longo na lista
+      // (`_WeeklyRepertoireTab`, 28/08/2026, pedido do usuário: "Tirar
+      // lixeira do editar repertório", editar/excluir/copiar via toque
+      // longo, mesmo padrão de `ServiceOrderListPage`).
+      appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
         bottom: true,
         top: false,
@@ -426,7 +394,17 @@ class _AssignmentRow extends StatelessWidget {
                     for (final note in praiseToneNotes)
                       DropdownMenuItem(
                         value: note,
-                        child: Text(draft.toneIsMinor ? '${note}m' : note),
+                        // Tom selecionado em destaque na lista aberta, não só
+                        // no botão fechado (28/08/2026, pedido do usuário).
+                        child: Text(
+                          draft.toneIsMinor ? '${note}m' : note,
+                          style: note == draft.toneNote
+                              ? const TextStyle(
+                                  color: SibValColors.goldAccent,
+                                  fontWeight: FontWeight.bold,
+                                )
+                              : null,
+                        ),
                       ),
                   ],
                   selectedItemBuilder: (context) => [

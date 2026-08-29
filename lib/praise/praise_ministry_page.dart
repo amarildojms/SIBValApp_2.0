@@ -6,6 +6,7 @@ import '../data/praise_repertoire_repository.dart';
 import '../data/user_repository.dart';
 import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'cifra_list_page.dart';
 import 'ensaios_list_page.dart';
@@ -100,9 +101,10 @@ class PraiseMinistryPage extends ConsumerWidget {
   }
 }
 
-/// Menu (3 barras) com as opções do Ministério de Louvor — "Cifras" e
-/// "Ensaios" (28/08/2026), pensado pra crescer sem precisar de mais tiles
-/// soltos no menu Mais.
+/// Menu (3 barras) com as opções do Ministério de Louvor — só "Cifras"
+/// (28/08/2026: "Ensaios" removido a pedido do usuário — o mesmo ensaio de
+/// uma semana agora abre direto ao tocar nela em "Repertório Semanal", ver
+/// `_WeeklyRepertoireTab`, sem precisar de uma entrada própria no menu).
 class _PraiseMenuButton extends StatelessWidget {
   const _PraiseMenuButton();
 
@@ -114,10 +116,6 @@ class _PraiseMenuButton extends StatelessWidget {
         if (value == 'cifras') {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const CifraListPage()),
-          );
-        } else if (value == 'ensaios') {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const EnsaiosListPage()),
           );
         }
       },
@@ -131,16 +129,6 @@ class _PraiseMenuButton extends StatelessWidget {
               Icon(Icons.lyrics_outlined, size: 20),
               SizedBox(width: 12),
               Text('Cifras'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'ensaios',
-          child: Row(
-            children: [
-              Icon(Icons.event_repeat_outlined, size: 20),
-              SizedBox(width: 12),
-              Text('Ensaios'),
             ],
           ),
         ),
@@ -301,6 +289,12 @@ class _MonthlyRepertoireTab extends ConsumerWidget {
 /// Aba "Repertório Semanal" — lista as semanas já escaladas
 /// (`weeklyRepertoires`), mais recente primeiro; "+" cria uma nova (data
 /// padrão: próximo domingo sem repertório ainda).
+///
+/// Toque simples abre direto o ensaio daquela semana (`EnsaioDetailPage`,
+/// somente leitura) — antes ia pro formulário de edição. Editar/Excluir/
+/// Copiar viraram um menu de toque longo (28/08/2026, pedido do usuário,
+/// mesmo padrão de `ServiceOrderListPage._showActions`). "Copiar" duplica
+/// tudo (músicas + links) pedindo só a nova data.
 class _WeeklyRepertoireTab extends ConsumerWidget {
   const _WeeklyRepertoireTab();
 
@@ -349,13 +343,136 @@ class _WeeklyRepertoireTab extends ConsumerWidget {
                 ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => WeeklyRepertoireFormPage(editing: repertoire),
+                    builder: (_) => EnsaioDetailPage(repertoire: repertoire),
                   ),
                 ),
+                onLongPress: () => _showActions(context, ref, repertoire),
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  void _showActions(BuildContext context, WidgetRef ref, WeeklyRepertoire repertoire) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Editar'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => WeeklyRepertoireFormPage(editing: repertoire),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_outlined),
+              title: const Text('Copiar'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showCopyDialog(context, ref, repertoire);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Excluir'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _confirmDelete(context, ref, repertoire);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, WeeklyRepertoire repertoire) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir repertório'),
+        content: Text(
+          'Tem certeza que deseja excluir o repertório de ${_dateFormat.format(repertoire.weekDate)}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await ref
+                  .read(praiseRepertoireRepositoryProvider)
+                  .deleteWeeklyRepertoire(repertoire.id);
+            },
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCopyDialog(BuildContext context, WidgetRef ref, WeeklyRepertoire repertoire) {
+    DateTime? newDate = repertoire.weekDate.add(const Duration(days: 7));
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Copiar repertório'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Cria uma cópia com todas as músicas e links de '
+                '${_dateFormat.format(repertoire.weekDate)} na nova data '
+                'escolhida.',
+              ),
+              const SizedBox(height: 16),
+              DateField(
+                label: 'Nova data',
+                value: newDate,
+                firstDate: DateTime(DateTime.now().year - 1),
+                lastDate: DateTime(DateTime.now().year + 3),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                onChanged: (date) => setDialogState(() => newDate = date),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: newDate == null
+                  ? null
+                  : () async {
+                      Navigator.of(dialogContext).pop();
+                      final copy = WeeklyRepertoire(
+                        id: '',
+                        weekDate: newDate!,
+                        assignments: repertoire.assignments,
+                        links: repertoire.links,
+                      );
+                      await ref
+                          .read(praiseRepertoireRepositoryProvider)
+                          .saveWeeklyRepertoire(copy);
+                    },
+              child: const Text('Copiar'),
+            ),
+          ],
+        ),
       ),
     );
   }

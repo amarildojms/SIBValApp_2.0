@@ -4,88 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/cifra_repository.dart';
-import '../data/praise_repertoire_repository.dart';
 import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'cifra_view_page.dart';
-
-/// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
-/// usuário). "Ensaios": opção do menu ☰ do Ministério de Louvor
-/// (`PraiseMinistryPage`) — lista os repertórios semanais já cadastrados
-/// (`weeklyRepertoiresProvider`, mesma fonte da aba "Repertório Semanal") pra
-/// quem precisa só consultar pra ensaiar, sem entrar nas abas de
-/// gerenciamento. Toque numa semana abre `EnsaioDetailPage`.
-class EnsaiosListPage extends ConsumerWidget {
-  const EnsaiosListPage({super.key});
-
-  static final _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final repertoiresAsync = ref.watch(weeklyRepertoiresProvider);
-    return Scaffold(
-      appBar: const SibValAppBar(isHome: false),
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const ScreenTitle('Ensaios'),
-            Expanded(
-              child: repertoiresAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(
-                  child: Text(
-                    'Falha ao carregar: $error',
-                    style: TextStyle(color: context.textPrimary),
-                  ),
-                ),
-                data: (repertoires) {
-                  if (repertoires.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Nenhum repertório semanal cadastrado ainda.',
-                        style: TextStyle(color: context.textSecondary),
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: repertoires.length,
-                    itemBuilder: (context, index) {
-                      final repertoire = repertoires[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          leading: const Icon(Icons.event_repeat_outlined),
-                          title: Text(
-                            _dateFormat.format(repertoire.weekDate),
-                            style: TextStyle(color: context.textPrimary),
-                          ),
-                          subtitle: Text(
-                            '${repertoire.assignments.length} música(s)',
-                            style: TextStyle(color: context.textSecondary),
-                          ),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => EnsaioDetailPage(repertoire: repertoire),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Detalhe somente-leitura de um ensaio (semana) — músicas escaladas com
 /// nome/cantor/tom, agrupadas por momento, e os links de playlist. Toque

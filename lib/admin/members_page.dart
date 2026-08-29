@@ -144,8 +144,15 @@ class _MembersPageState extends ConsumerState<MembersPage> {
                           child: member.photoUrl.isEmpty ? const Icon(Icons.cake_outlined) : null,
                         ),
                         title: Text(member.name, style: TextStyle(color: context.textPrimary)),
+                        // Quem só visualiza (sem `canManageBirthdays`) vê
+                        // apenas nome, foto e aniversário — nada de e-mail
+                        // (29/08/2026, pedido do usuário). Quem gerencia
+                        // continua vendo o e-mail junto, útil pra achar
+                        // duplicidade/contato.
                         subtitle: Text(
-                          member.email.isNotEmpty ? '$dateLabel • ${member.email}' : dateLabel,
+                          canManage && member.email.isNotEmpty
+                              ? '$dateLabel • ${member.email}'
+                              : dateLabel,
                           style: TextStyle(color: context.textSecondary),
                         ),
                         trailing: canManage && _hasIncompleteEcclesiasticalData(member)

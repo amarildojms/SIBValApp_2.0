@@ -226,7 +226,17 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                             for (final note in praiseToneNotes)
                               DropdownMenuItem(
                                 value: note,
-                                child: Text(_toneIsMinor ? '${note}m' : note),
+                                // Tom selecionado em destaque na lista
+                                // aberta (28/08/2026, pedido do usuário).
+                                child: Text(
+                                  _toneIsMinor ? '${note}m' : note,
+                                  style: note == _toneNote
+                                      ? const TextStyle(
+                                          color: SibValColors.goldAccent,
+                                          fontWeight: FontWeight.bold,
+                                        )
+                                      : null,
+                                ),
                               ),
                           ],
                           selectedItemBuilder: (context) => [

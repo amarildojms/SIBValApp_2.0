@@ -31,6 +31,7 @@ import 'partners/partners_page.dart';
 import 'praise/praise_ministry_page.dart';
 import 'prayer/prayer_page.dart';
 import 'service_order/service_order_list_page.dart';
+import 'settings/about_page.dart';
 import 'settings/settings_management_page.dart';
 import 'theme/app_theme.dart';
 import 'util/cache_busted_image.dart';
@@ -497,7 +498,7 @@ class _MaisPage extends ConsumerWidget {
           ),
           Divider(color: Theme.of(context).colorScheme.outlineVariant),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
             child: uid == null
                 ? SizedBox(
                     width: double.infinity,
@@ -522,6 +523,19 @@ class _MaisPage extends ConsumerWidget {
                     ],
                   ),
           ),
+          // "Sobre" (29/08/2026, pedido do usuário) — informação do app em
+          // si, não uma ação de conta, por isso fica fora do bloco
+          // Entrar/Sair acima, mas ainda no rodapé — visível a qualquer
+          // usuário, logado ou em acesso convidado.
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AboutPage()),
+              ),
+              child: const Text('Sobre o app'),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );

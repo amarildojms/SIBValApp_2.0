@@ -50,8 +50,6 @@ import 'service_order_preview_page.dart';
 class ServiceOrderListPage extends ConsumerWidget {
   const ServiceOrderListPage({super.key});
 
-  static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(serviceOrdersProvider);
@@ -95,19 +93,16 @@ class ServiceOrderListPage extends ConsumerWidget {
                     ),
                   ),
                   if (canManageOrders)
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    // Só a engrenagem, sem o rótulo "Configurar" (28/08/2026,
+                    // pedido do usuário).
+                    IconButton(
+                      tooltip: 'Configurar',
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const ManageServiceOrderMomentsPage(),
                         ),
                       ),
-                      icon: const Icon(Icons.settings_outlined, size: 18),
-                      label: const Text('Configurar'),
+                      icon: const Icon(Icons.settings_outlined),
                     ),
                   if (canViewLeaderSchedule)
                     PopupMenuButton<String>(
@@ -155,70 +150,38 @@ class ServiceOrderListPage extends ConsumerWidget {
                       ),
                     );
                   }
-                  return ListView.builder(
+                  final isAdmin = profile?.isAdmin ?? false;
+                  // Compactadas por mês, mesmo padrão de
+                  // `ArchivedVisitorsPage._DayGroup` (28/08/2026, pedido do
+                  // usuário) — só o mês corrente fica solto no topo da lista;
+                  // os demais (o passado, na prática, já que `orders` vem
+                  // descendente) viram grupos recolhidos por mês.
+                  final now = DateTime.now();
+                  final currentMonthOrders = <ServiceOrder>[];
+                  final otherMonths = <DateTime, List<ServiceOrder>>{};
+                  for (final order in orders) {
+                    final d = order.dateTime;
+                    if (d.year == now.year && d.month == now.month) {
+                      currentMonthOrders.add(order);
+                    } else {
+                      otherMonths.putIfAbsent(DateTime(d.year, d.month), () => []).add(order);
+                    }
+                  }
+                  return ListView(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
-                    itemCount: orders.length,
-                    itemBuilder: (context, index) {
-                      final order = orders[index];
-                      final isOwner = order.ownerUid == uid;
-                      final isAdmin = profile?.isAdmin ?? false;
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          leading: Icon(
-                            order.isFinalized
-                                ? Icons.check_circle
-                                : Icons.church_outlined,
-                            color: order.isFinalized ? SibValColors.goldAccent : null,
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                _dateFormat.format(order.dateTime),
-                                style: TextStyle(color: context.textPrimary),
-                              ),
-                              if (order.isFinalized) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: SibValColors.goldAccent.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    'Finalizada',
-                                    style: TextStyle(
-                                      color: SibValColors.goldAccent,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          subtitle: order.ownerName.isEmpty
-                              ? null
-                              : Text(
-                                  'Dirigente: ${order.ownerName}',
-                                  style: TextStyle(color: context.textSecondary),
-                                ),
-                          onTap: () => openServiceOrder(context, order.id),
-                          onLongPress: (isOwner || isAdmin)
-                              ? () => _showActions(
-                                  context,
-                                  ref,
-                                  order,
-                                  isOwner: isOwner,
-                                  isAdmin: isAdmin,
-                                )
-                              : null,
+                    children: [
+                      for (final order in currentMonthOrders)
+                        _OrderTile(order: order, uid: uid, isAdmin: isAdmin),
+                      for (final entry in otherMonths.entries)
+                        _MonthGroup(
+                          header: _monthHeader(entry.key),
+                          count: entry.value.length,
+                          children: [
+                            for (final order in entry.value)
+                              _OrderTile(order: order, uid: uid, isAdmin: isAdmin),
+                          ],
                         ),
-                      );
-                    },
+                    ],
                   );
                 },
               ),
@@ -228,121 +191,225 @@ class ServiceOrderListPage extends ConsumerWidget {
       ),
     );
   }
+}
 
-  void _showActions(
-    BuildContext context,
-    WidgetRef ref,
-    ServiceOrder order, {
-    required bool isOwner,
-    required bool isAdmin,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+final _dateTimeFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
+final _monthFormat = DateFormat("MMMM 'de' yyyy", 'pt_BR');
+
+/// Cabeçalho do grupo de mês (28/08/2026) — mesma capitalização manual de
+/// `ArchivedVisitorsPage._dayHeader` (`DateFormat` em pt_BR não capitaliza
+/// nome de mês sozinho).
+String _monthHeader(DateTime month) {
+  final label = _monthFormat.format(month);
+  return label.isEmpty ? label : label[0].toUpperCase() + label.substring(1);
+}
+
+/// Um card de ordem de culto na lista — extraído (28/08/2026) pra ser
+/// reaproveitado tanto solto (mês corrente) quanto dentro de um `_MonthGroup`
+/// (meses anteriores, compactados).
+class _OrderTile extends ConsumerWidget {
+  const _OrderTile({required this.order, required this.uid, required this.isAdmin});
+
+  final ServiceOrder order;
+  final String? uid;
+  final bool isAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOwner = order.ownerUid == uid;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: Icon(
+          order.isFinalized ? Icons.check_circle : Icons.church_outlined,
+          color: order.isFinalized ? SibValColors.goldAccent : null,
+        ),
+        title: Row(
           children: [
-            // "Visualizar" (28/08/2026, pedido do usuário: "uma maneira do
-            // dirigente acessar uma prévia do culto") — sempre disponível,
-            // sem trava de horário, mesmo menu de conveniência de quem já
-            // pode abrir este menu (dono ou admin).
+            Text(
+              _dateTimeFormat.format(order.dateTime),
+              style: TextStyle(color: context.textPrimary),
+            ),
+            if (order.isFinalized) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: SibValColors.goldAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Finalizada',
+                  style: TextStyle(
+                    color: SibValColors.goldAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        subtitle: order.ownerName.isEmpty
+            ? null
+            : Text(
+                'Dirigente: ${order.ownerName}',
+                style: TextStyle(color: context.textSecondary),
+              ),
+        onTap: () => openServiceOrder(context, order.id),
+        onLongPress: (isOwner || isAdmin)
+            ? () => _showActions(context, ref, order, isOwner: isOwner, isAdmin: isAdmin)
+            : null,
+      ),
+    );
+  }
+}
+
+/// Grupo recolhido de um mês inteiro de ordens de culto (28/08/2026, pedido
+/// do usuário: "compactadas dentro do mês como é feito com os visitantes") —
+/// mesmo padrão visual de `ArchivedVisitorsPage._DayGroup`, só que agrupando
+/// por mês em vez de por dia. Fechado por padrão.
+class _MonthGroup extends StatelessWidget {
+  const _MonthGroup({required this.header, required this.count, required this.children});
+
+  final String header;
+  final int count;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text(header, style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+          subtitle: Text(
+            count == 1 ? '1 ordem de culto' : '$count ordens de culto',
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+void _showActions(
+  BuildContext context,
+  WidgetRef ref,
+  ServiceOrder order, {
+  required bool isOwner,
+  required bool isAdmin,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // "Visualizar" (28/08/2026, pedido do usuário: "uma maneira do
+          // dirigente acessar uma prévia do culto") — sempre disponível,
+          // sem trava de horário, mesmo menu de conveniência de quem já
+          // pode abrir este menu (dono ou admin).
+          ListTile(
+            leading: const Icon(Icons.visibility_outlined),
+            title: const Text('Visualizar'),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ServiceOrderPreviewPage(order: order),
+                ),
+              );
+            },
+          ),
+          // Editar/Excluir — exclusivos do dono (28/08/2026, pedido do
+          // usuário: "Nem mesmo admin poderá fazer estas ações").
+          if (isOwner) ...[
             ListTile(
-              leading: const Icon(Icons.visibility_outlined),
-              title: const Text('Visualizar'),
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Editar'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => ServiceOrderPreviewPage(order: order),
+                    builder: (_) => ServiceOrderFormPage(editing: order),
                   ),
                 );
               },
             ),
-            // Editar/Excluir — exclusivos do dono (28/08/2026, pedido do
-            // usuário: "Nem mesmo admin poderá fazer estas ações").
-            if (isOwner) ...[
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Editar'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ServiceOrderFormPage(editing: order),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Excluir'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _confirmDelete(context, ref, order);
-                },
-              ),
-            ],
-            // "Alterar proprietário" — exclusivo do admin, independente de
-            // quem é o dono atual (28/08/2026, pedido do usuário: "o admin
-            // poderá alterar o proprietário daquela ordem, podendo alterar
-            // inclusive para ele próprio"). Fica na própria Ordem de Culto —
-            // não é uma tela nova (pedido do usuário na revisão seguinte), só
-            // outro bottom sheet, empilhado sobre este assim que ele fecha.
-            if (isAdmin)
-              ListTile(
-                leading: const Icon(Icons.swap_horiz),
-                title: const Text('Alterar proprietário'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _showTransferOwnerSheet(context, ref, order);
-                },
-              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Excluir'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _confirmDelete(context, ref, order);
+              },
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// Bottom sheet de transferência de propriedade (28/08/2026, pedido do
-  /// usuário: "não deve ser uma nova tela") — busca + lista de candidatos
-  /// (usuários aprovados com papel Dirigentes ou admin, mesmo critério de
-  /// `isDirigentes()` no `firestore.rules` nativo, já que só quem passa
-  /// nessa checagem consegue de fato editar a ordem depois de virar dono),
-  /// toque confirma e chama `ServiceOrderRepository.transferOwner` — tudo
-  /// sem sair de `ServiceOrderListPage`.
-  void _showTransferOwnerSheet(BuildContext context, WidgetRef ref, ServiceOrder order) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _TransferOwnerSheet(order: order),
-    );
-  }
-
-  void _confirmDelete(BuildContext context, WidgetRef ref, ServiceOrder order) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir ordem de culto'),
-        content: Text(
-          'Tem certeza que deseja excluir a ordem de ${_dateFormat.format(order.dateTime)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              await ref.read(serviceOrderRepositoryProvider).delete(order.id);
-              ref.invalidate(serviceOrdersProvider);
-            },
-            child: const Text('Excluir'),
-          ),
+          // "Alterar proprietário" — exclusivo do admin, independente de
+          // quem é o dono atual (28/08/2026, pedido do usuário: "o admin
+          // poderá alterar o proprietário daquela ordem, podendo alterar
+          // inclusive para ele próprio"). Fica na própria Ordem de Culto —
+          // não é uma tela nova (pedido do usuário na revisão seguinte), só
+          // outro bottom sheet, empilhado sobre este assim que ele fecha.
+          if (isAdmin)
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Alterar proprietário'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showTransferOwnerSheet(context, ref, order);
+              },
+            ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+/// Bottom sheet de transferência de propriedade (28/08/2026, pedido do
+/// usuário: "não deve ser uma nova tela") — busca + lista de candidatos
+/// (usuários aprovados com papel Dirigentes ou admin, mesmo critério de
+/// `isDirigentes()` no `firestore.rules` nativo, já que só quem passa
+/// nessa checagem consegue de fato editar a ordem depois de virar dono),
+/// toque confirma e chama `ServiceOrderRepository.transferOwner` — tudo
+/// sem sair de `ServiceOrderListPage`.
+void _showTransferOwnerSheet(BuildContext context, WidgetRef ref, ServiceOrder order) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _TransferOwnerSheet(order: order),
+  );
+}
+
+void _confirmDelete(BuildContext context, WidgetRef ref, ServiceOrder order) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Excluir ordem de culto'),
+      content: Text(
+        'Tem certeza que deseja excluir a ordem de ${_dateTimeFormat.format(order.dateTime)}?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.of(dialogContext).pop();
+            await ref.read(serviceOrderRepositoryProvider).delete(order.id);
+            ref.invalidate(serviceOrdersProvider);
+          },
+          child: const Text('Excluir'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Conteúdo do bottom sheet "Alterar proprietário" (28/08/2026, pedido do
