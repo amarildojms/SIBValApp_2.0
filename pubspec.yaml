@@ -18,15 +18,11 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 34, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão: Ceia do Senhor e Tema na Ordem de
-# Culto, import de cifra em .txt com exibição no formato Cifra Club (com
-# seletor de tom, além do +/-), visão da Ordem de Culto pra membros/
-# acesso convidado (travada até o dirigente iniciar), prévia da ordem pro
-# dirigente, notificação 5min antes/ao iniciar/ao finalizar o culto (com
-# popup de bênção), e mensagem automática pra quem é escalado na
-# Participação Especial (28/08/2026).
-version: 1.7.2+34
+# Play Console antes de enviar; se for maior que 35, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão: correção de app duplicado na tela de
+# apps recentes (MainActivity launchMode singleTask no lugar de singleTop,
+# 28/08/2026).
+version: 1.7.2+35
 
 environment:
   sdk: ^3.13.0
