@@ -27,6 +27,7 @@ class CurrentUserProfile {
     this.phone = '',
     this.address = '',
     this.addressDetails = Address.empty,
+    this.maritalStatus = '',
     this.photoUpdatedAt,
     this.communicationsConsent = false,
     this.acceptedPrivacyPolicy = false,
@@ -43,6 +44,13 @@ class CurrentUserProfile {
   final String phone;
   final String address;
   final Address addressDetails;
+
+  /// Dado pessoal comum, não eclesiástico (29/08/2026, pedido do usuário) —
+  /// editado pelo próprio usuário em `edit_profile_page.dart`, gravado em
+  /// `users/{uid}` (`UserRepository.updateProfileDetails`). Antes de
+  /// 29/08/2026 esse campo vivia só em `Member.maritalStatus`, exclusividade
+  /// da Secretaria.
+  final String maritalStatus;
   final DateTime? photoUpdatedAt;
 
   /// Checkbox opcional do cadastro (ver `registration_consent_section.dart`)
@@ -102,22 +110,24 @@ class CurrentUserProfile {
   }
 
   /// % de cadastro preenchido: 4 campos sempre obrigatórios no registro
-  /// (nome, cpf, data de nascimento, e-mail) + phone/address aqui + os
-  /// campos da seção "Dados eclesiásticos" (admissionForm, originChurch,
-  /// maritalStatus, baptismDate, ao menos 1 ministério) e a data de
-  /// membresia, todos lidos do `Member` vinculado (ver `myMemberProvider`) —
-  /// só a Secretaria os preenche, então não existem mais em
-  /// `CurrentUserProfile`.
+  /// (nome, cpf, data de nascimento, e-mail) + phone/address/maritalStatus
+  /// aqui + os campos da seção "Dados eclesiásticos" (admissionForm,
+  /// originChurch, baptismDate, ao menos 1 ministério) e a data de
+  /// membresia, lidos do `Member` vinculado (ver `myMemberProvider`) — só a
+  /// Secretaria preenche `membershipDate`/ministérios; os demais já podem
+  /// vir do próprio usuário desde 29/08/2026 (ver `maritalStatus` acima e
+  /// `MemberRepository.updateEcclesiasticalDetails`/`updateBaptismDate`).
   int completionPercent({required Member? member}) {
     final requiredFilled = [name, cpf, email].where((v) => v.trim().isNotEmpty).length + (hasBirthdate ? 1 : 0);
-    final optionalFilled = [phone, address].where((v) => v.trim().isNotEmpty).length +
-        [member?.admissionForm ?? '', member?.originChurch ?? '', member?.maritalStatus ?? '']
+    final optionalFilled = [phone, address, maritalStatus].where((v) => v.trim().isNotEmpty).length +
+        [member?.admissionForm ?? '', member?.originChurch ?? '']
             .where((v) => v.trim().isNotEmpty)
             .length +
         (member?.baptismDate != null ? 1 : 0) +
         (member != null && member.ministries.isNotEmpty ? 1 : 0) +
         (member?.membershipDate != null ? 1 : 0);
-    const totalFields = 12; // 4 obrigatórios + phone/address(2) + eclesiásticos(3) + baptismDate(1) + ministérios(1) + membershipDate(1)
+    const totalFields =
+        12; // 4 obrigatórios + phone/address/estado civil(3) + eclesiásticos(2) + baptismDate(1) + ministérios(1) + membershipDate(1)
     return (((requiredFilled + optionalFilled) / totalFields) * 100).round();
   }
 }
@@ -139,6 +149,7 @@ final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile
     phone: data['phone'] as String? ?? '',
     address: data['address'] as String? ?? '',
     addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
+    maritalStatus: data['maritalStatus'] as String? ?? '',
     photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
     communicationsConsent: data['communicationsConsent'] as bool? ?? false,
     acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
@@ -207,18 +218,21 @@ class UserRepository {
   }
 
   /// Usado em `edit_profile_page.dart` — permite ao próprio usuário editar
-  /// telefone/endereço (regra atual já permite: `auth.uid == userId`). A
-  /// seção "Dados eclesiásticos" não entra mais aqui (20/08/2026) — é
-  /// exclusividade da Secretaria em Rol de Membros.
+  /// telefone/endereço/estado civil (regra atual já permite: `auth.uid ==
+  /// userId`). `maritalStatus` voltou pra cá em 29/08/2026 (pedido do
+  /// usuário) como dado pessoal comum — o resto da seção "Dados
+  /// eclesiásticos" continua fora daqui, em `Member`.
   Future<void> updateProfileDetails({
     required String uid,
     required String phone,
     required Address addressDetails,
+    String maritalStatus = '',
   }) {
     return _users.doc(uid).update({
       'phone': phone,
       'address': addressDetails.formatted,
       'addressDetails': addressDetails.toMap(),
+      'maritalStatus': maritalStatus,
     });
   }
 

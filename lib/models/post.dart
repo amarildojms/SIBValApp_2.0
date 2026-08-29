@@ -69,6 +69,17 @@ class Post {
         )
       : null;
 
+  /// Verdadeiro assim que chega o horário de início do evento (fuso
+  /// America/Sao_Paulo) — alimenta o selo "Iniciado às HH:mm" em
+  /// `post_card.dart` (29/08/2026, pedido do usuário; mesmo critério de
+  /// `Event.hasStarted`). Fica `true` até ser suplantado por [isPastEvent]
+  /// (5h depois), quando o selo vira "Finalizado".
+  bool get hasStarted {
+    final eventDate = eventDateSaoPaulo;
+    if (eventDate == null) return false;
+    return !toSaoPauloTimeNow().isBefore(eventDate);
+  }
+
   /// Verdadeiro a partir de 5 horas depois do horário de início do evento —
   /// critério de "Finalizado" (27/08/2026, pedido do usuário; antes era
   /// baseado no dia civil — "verdadeiro a partir do dia seguinte"). Usado

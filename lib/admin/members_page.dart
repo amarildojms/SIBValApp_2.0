@@ -36,16 +36,16 @@ class MembersPage extends ConsumerStatefulWidget {
 }
 
 /// Um membro conta como "cadastro incompleto" se faltar qualquer dado da
-/// seção eclesiástica preenchida pela Secretaria — data de membresia, forma
-/// de adesão, igreja de origem, data de batismo ou estado civil. Ministérios
-/// e cargos ficam de fora de propósito (20/08/2026): é legítimo um membro
-/// não participar de nenhum ministério.
+/// seção eclesiástica — data de membresia, forma de adesão, igreja de
+/// origem ou data de batismo. Ministérios e cargos ficam de fora de
+/// propósito (20/08/2026): é legítimo um membro não participar de nenhum
+/// ministério. "Estado civil" saiu daqui em 29/08/2026 — virou dado pessoal
+/// do usuário (`AppUser.maritalStatus`), fora do escopo de `Member`.
 bool _hasIncompleteEcclesiasticalData(Member m) {
   return m.membershipDate == null ||
       m.admissionForm.isEmpty ||
       m.originChurch.isEmpty ||
-      m.baptismDate == null ||
-      m.maritalStatus.isEmpty;
+      m.baptismDate == null;
 }
 
 class _MembersPageState extends ConsumerState<MembersPage> {
@@ -232,9 +232,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
   late String? _admissionForm = (widget.existing?.admissionForm ?? '').isNotEmpty
       ? widget.existing!.admissionForm
       : null;
-  late String? _maritalStatus = (widget.existing?.maritalStatus ?? '').isNotEmpty
-      ? widget.existing!.maritalStatus
-      : null;
   late final List<_SelectedMinistry> _selectedMinistries = [
     for (final m in widget.existing?.ministries ?? const <MemberMinistry>[])
       _SelectedMinistry(ministryId: m.ministryId, ministryName: m.ministryName, cargos: {...m.cargos}),
@@ -322,7 +319,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           admissionForm: _admissionForm ?? '',
           originChurch: _originChurchController.text.trim(),
           baptismDate: _baptismDate,
-          maritalStatus: _maritalStatus ?? '',
           ministries: ministries,
         );
       } else {
@@ -340,7 +336,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
           admissionForm: _admissionForm ?? '',
           originChurch: _originChurchController.text.trim(),
           baptismDate: _baptismDate,
-          maritalStatus: _maritalStatus ?? '',
           ministries: ministries,
         );
       }
@@ -482,13 +477,6 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
               firstDate: DateTime(DateTime.now().year - 110),
               lastDate: DateTime.now(),
               onChanged: (date) => setState(() => _baptismDate = date),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _maritalStatus,
-              decoration: const InputDecoration(labelText: 'Estado civil'),
-              items: [for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option))],
-              onChanged: (value) => setState(() => _maritalStatus = value),
             ),
             const SizedBox(height: 16),
             Align(

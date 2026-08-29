@@ -104,7 +104,6 @@ class MemberRepository {
     String admissionForm = '',
     String originChurch = '',
     DateTime? baptismDate,
-    String maritalStatus = '',
     List<MemberMinistry> ministries = const [],
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -139,7 +138,6 @@ class MemberRepository {
       'admissionForm': admissionForm,
       'originChurch': originChurch,
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
-      'maritalStatus': maritalStatus,
       'ministryIds': ministryIds,
       'ministries': ministries.map((m) => m.toMap()).toList(),
     });
@@ -163,7 +161,6 @@ class MemberRepository {
       admissionForm: admissionForm,
       originChurch: originChurch,
       baptismDate: baptismDate,
-      maritalStatus: maritalStatus,
       ministryIds: ministryIds,
       ministries: ministries,
     );
@@ -183,7 +180,6 @@ class MemberRepository {
     String admissionForm = '',
     String originChurch = '',
     DateTime? baptismDate,
-    String maritalStatus = '',
     List<MemberMinistry> ministries = const [],
   }) async {
     var photoUrl = member.photoUrl;
@@ -220,7 +216,6 @@ class MemberRepository {
       'admissionForm': admissionForm,
       'originChurch': originChurch,
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
-      'maritalStatus': maritalStatus,
       'ministryIds': ministries.map((m) => m.ministryId).toList(),
       'ministries': ministries.map((m) => m.toMap()).toList(),
       'linkedUid': member.linkedUid,
@@ -294,13 +289,31 @@ class MemberRepository {
     }
   }
 
-  /// Único campo de `members` que o próprio usuário (dono do registro via
+  /// Campo de `members` que o próprio usuário (dono do registro via
   /// `linkedUid`) pode editar sem ser Secretaria — ver `firestore.rules`
-  /// nativo, `EditProfilePage`. Os demais campos eclesiásticos continuam
-  /// exclusividade da Secretaria em Rol de Membros.
+  /// nativo, `EditProfilePage`. `admissionForm`/`originChurch`
+  /// (`updateEcclesiasticalDetails`, abaixo) ganharam o mesmo privilégio em
+  /// 29/08/2026. `membershipDate`/`ministries` continuam exclusividade da
+  /// Secretaria em Rol de Membros.
   Future<void> updateBaptismDate(String memberId, DateTime? baptismDate) {
     return _members.doc(memberId).update({
       'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+    });
+  }
+
+  /// Mesmo privilégio de `updateBaptismDate` (29/08/2026, pedido do usuário)
+  /// — o próprio dono do registro (`linkedUid`) pode preencher "Forma de
+  /// Adesão"/"Igreja de origem" em `EditProfilePage`, sem depender da
+  /// Secretaria. Ver `firestore.rules` (`members.update`,
+  /// `affectedKeys().hasOnly(['baptismDate', 'admissionForm', 'originChurch'])`).
+  Future<void> updateEcclesiasticalDetails(
+    String memberId, {
+    required String admissionForm,
+    required String originChurch,
+  }) {
+    return _members.doc(memberId).update({
+      'admissionForm': admissionForm,
+      'originChurch': originChurch,
     });
   }
 
@@ -359,8 +372,10 @@ final membersProvider = StreamProvider.autoDispose<List<Member>>((ref) {
 });
 
 /// Membro vinculado ao usuário logado — alimenta o % de cadastro, "Membro
-/// SIB Val há..." e a seção "Dados eclesiásticos" (somente leitura) da tela
-/// Mais/Editar perfil. `null` quando o usuário ainda não tem registro em
+/// SIB Val há..." e a seção "Dados eclesiásticos" (majoritariamente só
+/// leitura — `admissionForm`/`originChurch`/`baptismDate` são exceção,
+/// editáveis pelo próprio usuário desde 29/08/2026) da tela Mais/Editar
+/// perfil. `null` quando o usuário ainda não tem registro em
 /// `members` (ex.: cadastro pendente de aprovação). É um `StreamProvider`
 /// (20/08/2026, era `FutureProvider`) pra refletir em tempo real qualquer
 /// edição que a Secretaria fizer em Rol de Membros enquanto a tela estiver

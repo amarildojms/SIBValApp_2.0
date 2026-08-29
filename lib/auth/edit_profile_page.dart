@@ -10,6 +10,7 @@ import '../data/user_repository.dart';
 import '../models/member.dart';
 import '../theme/app_theme.dart';
 import '../util/cache_busted_image.dart';
+import '../util/church_membership_options.dart';
 import '../util/photo_picker.dart';
 import '../util/scroll_to_save.dart';
 import '../widgets/address_fields.dart';
@@ -17,11 +18,19 @@ import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Tela de edição de perfil aberta a partir do menu "Mais": foto, nome,
-/// telefone e endereço. A seção "Dados eclesiásticos" (forma de adesão em
-/// diante, incluindo ministérios/cargos) é só leitura aqui, vinda do
-/// `Member` vinculado (`myMemberProvider`) — desde 20/08/2026 é
-/// exclusividade do usuário autorizado (Secretaria), editada em Rol de
-/// Membros, mesmo padrão que já valia só pra `membershipDate`.
+/// telefone, endereço e estado civil (dados pessoais). A seção "Dados
+/// eclesiásticos" (forma de adesão em diante, incluindo ministérios/cargos)
+/// vem do `Member` vinculado (`myMemberProvider`) — `membershipDate` e
+/// ministérios/cargos continuam exclusividade do usuário autorizado
+/// (Secretaria), editados em Rol de Membros; "Forma de Adesão", "Igreja de
+/// origem" e "Data de Batismo" também podem ser preenchidos aqui pelo
+/// próprio usuário (29/08/2026, pedido do usuário — antes só a data de
+/// batismo tinha esse privilégio).
+///
+/// `maritalStatus` (estado civil) deixou de fazer parte da seção
+/// eclesiástica em 29/08/2026 — virou dado pessoal comum, gravado em
+/// `users/{uid}` (`AppUser.maritalStatus`), salvo junto com nome/telefone/
+/// endereço pelo botão "Salvar" desta tela.
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
 
@@ -33,16 +42,20 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressKey = GlobalKey<AddressFieldsState>();
+  final _originChurchController = TextEditingController();
   final _scrollController = ScrollController();
   File? _pickedPhoto;
   bool _initialized = false;
+  bool _memberFieldsInitialized = false;
   bool _saving = false;
   bool _dirty = false;
+  String? _maritalStatus;
+  String? _admissionForm;
 
   @override
   void initState() {
     super.initState();
-    for (final controller in [_nameController, _phoneController]) {
+    for (final controller in [_nameController, _phoneController, _originChurchController]) {
       controller.addListener(_markDirty);
     }
   }
@@ -51,6 +64,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _originChurchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -118,7 +132,16 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         uid: uid,
         phone: _phoneController.text.trim(),
         addressDetails: _addressKey.currentState!.value,
+        maritalStatus: _maritalStatus ?? '',
       );
+      final member = ref.read(myMemberProvider).asData?.value;
+      if (member != null) {
+        await ref.read(memberRepositoryProvider).updateEcclesiasticalDetails(
+              member.id,
+              admissionForm: _admissionForm ?? '',
+              originChurch: _originChurchController.text.trim(),
+            );
+      }
       final photo = _pickedPhoto;
       if (photo != null) {
         await repository.uploadProfilePhoto(uid, photo);
@@ -143,7 +166,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     if (profile != null && !_initialized) {
       _nameController.text = profile.name;
       _phoneController.text = profile.phone;
+      _maritalStatus = profile.maritalStatus.isNotEmpty ? profile.maritalStatus : null;
       _initialized = true;
+    }
+    if (member != null && !_memberFieldsInitialized) {
+      _originChurchController.text = member.originChurch;
+      _admissionForm = member.admissionForm.isNotEmpty ? member.admissionForm : null;
+      _memberFieldsInitialized = true;
     }
 
     return PopScope(
@@ -225,6 +254,18 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         initial: profile.addressDetails,
                         onAnyChange: _markDirty,
                       ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: _maritalStatus,
+                        decoration: const InputDecoration(labelText: 'Estado civil (opcional)'),
+                        items: [
+                          for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                        ],
+                        onChanged: (value) => setState(() {
+                          _maritalStatus = value;
+                          _markDirty();
+                        }),
+                      ),
                       const SizedBox(height: 24),
                       Text(
                         'Dados eclesiásticos',
@@ -232,19 +273,37 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Preenchidos pela Secretaria em Rol de Membros.',
+                        'Data de Membresia e Ministérios são preenchidos pela Secretaria em Rol de '
+                        'Membros. Os demais campos abaixo você mesmo pode preencher.',
                         style: TextStyle(color: context.textSecondary, fontSize: 12),
                       ),
                       const SizedBox(height: 12),
                       _ReadOnlyField(label: 'Data de Membresia', value: _formatDate(member?.membershipDate)),
                       const SizedBox(height: 16),
-                      _ReadOnlyField(label: 'Forma de Adesão', value: _orDash(member?.admissionForm)),
+                      DropdownButtonFormField<String>(
+                        initialValue: _admissionForm,
+                        decoration: const InputDecoration(labelText: 'Forma de Adesão'),
+                        items: [
+                          for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                        ],
+                        onChanged: member == null
+                            ? null
+                            : (value) => setState(() {
+                                  _admissionForm = value;
+                                  if (value == 'Batismo') {
+                                    _originChurchController.text = 'Segunda Igreja Batista em Valparaíso';
+                                  }
+                                  _markDirty();
+                                }),
+                      ),
                       const SizedBox(height: 16),
-                      _ReadOnlyField(label: 'Igreja de origem', value: _orDash(member?.originChurch)),
+                      TextField(
+                        controller: _originChurchController,
+                        enabled: member != null && _admissionForm != 'Batismo',
+                        decoration: const InputDecoration(labelText: 'Igreja de origem'),
+                      ),
                       const SizedBox(height: 16),
                       _BaptismDateField(member: member),
-                      const SizedBox(height: 16),
-                      _ReadOnlyField(label: 'Estado civil', value: _orDash(member?.maritalStatus)),
                       const SizedBox(height: 16),
                       _ReadOnlyField(label: 'Ministérios e Cargos', value: _ministriesLabel(member?.ministries)),
                       const SizedBox(height: 24),
@@ -261,8 +320,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       ),
     );
   }
-
-  static String _orDash(String? value) => (value == null || value.isEmpty) ? '—' : value;
 
   static String _ministriesLabel(List<MemberMinistry>? ministries) {
     if (ministries == null || ministries.isEmpty) return '—';

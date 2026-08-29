@@ -16,11 +16,22 @@ class EventRepository {
 
   CollectionReference<Map<String, dynamic>> get _events => _firestore.collection('events');
 
+  /// Piso da consulta: início do dia atual em America/Sao_Paulo, não o
+  /// instante exato de agora (29/08/2026, pedido do usuário) — um evento só
+  /// deve sumir da lista no dia seguinte ao seu horário, não assim que o
+  /// relógio passa da hora marcada. A limpeza de verdade (exclusão do
+  /// documento) continua por conta da Cloud Function `deleteExpiredEvents`
+  /// (roda 1x por dia, 3h da manhã em America/Sao_Paulo, apaga tudo com
+  /// `dateTimeMillis` anterior àquele instante) — já tinha esse mesmo
+  /// comportamento de "só no dia seguinte", o filtro client-side é que
+  /// escondia o evento cedo demais.
   Future<List<Event>> getPublishedUpcoming() async {
-    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    final spNow = toSaoPauloTimeNow();
+    final spMidnight = DateTime.utc(spNow.year, spNow.month, spNow.day);
+    final thresholdMillis = spMidnight.add(const Duration(hours: 3)).millisecondsSinceEpoch;
     final snapshot = await _events
         .where('status', isEqualTo: EventStatus.published)
-        .where('dateTimeMillis', isGreaterThanOrEqualTo: nowMillis)
+        .where('dateTimeMillis', isGreaterThanOrEqualTo: thresholdMillis)
         .orderBy('dateTimeMillis')
         .get();
     return snapshot.docs.map(Event.fromFirestore).toList();

@@ -7,9 +7,14 @@ import 'address.dart';
 /// classe User do firebase_auth, já usada em outros arquivos.
 ///
 /// A seção "Dados eclesiásticos" (admissionForm, originChurch, baptismDate,
-/// maritalStatus, ministérios/cargos) não existe mais aqui (20/08/2026) —
-/// virou exclusividade da Secretaria, editada direto em `Member`
-/// (`members_page.dart`), desacoplada do fluxo de aprovação de cadastro.
+/// ministérios/cargos) não existe mais aqui (20/08/2026) — virou exclusividade
+/// da Secretaria, editada direto em `Member` (`members_page.dart`),
+/// desacoplada do fluxo de aprovação de cadastro.
+///
+/// `maritalStatus` (29/08/2026, pedido do usuário) é a exceção: voltou a
+/// existir aqui como dado pessoal comum, preenchido/editado livremente pelo
+/// próprio usuário em `edit_profile_page.dart` — nunca foi (e não é) parte
+/// da seção eclesiástica gerida pela Secretaria.
 class AppUser {
   final String uid;
   final String name;
@@ -26,6 +31,7 @@ class AppUser {
   final String address;
   final Address addressDetails;
   final DateTime? baptismDate;
+  final String maritalStatus;
 
   const AppUser({
     required this.uid,
@@ -43,6 +49,7 @@ class AppUser {
     this.address = '',
     this.addressDetails = Address.empty,
     this.baptismDate,
+    this.maritalStatus = '',
   });
 
   factory AppUser.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -63,6 +70,7 @@ class AppUser {
       address: data['address'] as String? ?? '',
       addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
       baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
+      maritalStatus: data['maritalStatus'] as String? ?? '',
     );
   }
 
@@ -83,6 +91,7 @@ class AppUser {
       address: address,
       addressDetails: addressDetails,
       baptismDate: baptismDate,
+      maritalStatus: maritalStatus,
     );
   }
 }

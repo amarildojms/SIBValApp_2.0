@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../util/weekday_format.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'event_form_page.dart';
+import 'event_started_tag.dart';
 
 const _appShareLink = 'https://sibval-app-project.web.app/eventos';
 
@@ -106,11 +107,21 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: event.flyerUrl.isNotEmpty
-                ? Image.network(event.flyerUrl, fit: BoxFit.cover)
-                : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: event.flyerUrl.isNotEmpty
+                    ? Image.network(event.flyerUrl, fit: BoxFit.cover)
+                    : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+              ),
+              if (event.hasStarted)
+                Positioned(
+                  left: 8,
+                  top: 8,
+                  child: EventStartedTag(time: localDate),
+                ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.all(20),

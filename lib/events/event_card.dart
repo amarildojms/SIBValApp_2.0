@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../theme/app_theme.dart';
 import '../models/event.dart';
+import 'event_started_tag.dart';
 
 /// Espelha item_event_card.xml/EventAdapter.kt: thumbnail 64dp, título, data
 /// (sempre em America/Sao_Paulo) e curtir.
@@ -66,6 +67,10 @@ class EventCard extends StatelessWidget {
                       _dateFormat.format(localDate),
                       style: TextStyle(color: context.textSecondary, fontSize: 12),
                     ),
+                    if (event.hasStarted) ...[
+                      const SizedBox(height: 4),
+                      EventStartedTag(time: localDate),
+                    ],
                   ],
                 ),
               ),

@@ -39,6 +39,17 @@ class Event {
 
   DateTime get dateTimeUtc => DateTime.fromMillisecondsSinceEpoch(dateTimeMillis, isUtc: true);
 
+  DateTime get dateTimeSaoPaulo => toSaoPauloTime(dateTimeUtc);
+
+  /// Verdadeiro assim que chega o horário de início do evento (fuso
+  /// America/Sao_Paulo) — alimenta o selo "Iniciado às HH:mm" em
+  /// `event_card.dart`/`event_detail_page.dart` (29/08/2026, pedido do
+  /// usuário). Continua verdadeiro pelo resto do dia — o evento só sai da
+  /// lista no dia seguinte (ver `EventRepository.getPublishedUpcoming`), não
+  /// existe aqui um critério de "finalizado" como o que `Post.isPastEvent`
+  /// usa pro feed "Início".
+  bool get hasStarted => !toSaoPauloTimeNow().isBefore(dateTimeSaoPaulo);
+
   Event copyWith({
     String? title,
     String? description,

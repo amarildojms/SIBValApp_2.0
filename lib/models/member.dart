@@ -40,6 +40,15 @@ class MemberMinistry {
 /// Toda a seção "Dados eclesiásticos" (admissionForm em diante, incluindo
 /// `ministries`) passou a ser exclusividade da Secretaria em Rol de Membros
 /// (20/08/2026) — não existe mais em `users/{uid}`/`AppUser`.
+///
+/// Revisado em 29/08/2026, a pedido do usuário: `maritalStatus` saiu daqui —
+/// virou dado pessoal do próprio usuário (`AppUser.maritalStatus`, em
+/// `users/{uid}`), não mais eclesiástico. `admissionForm`/`originChurch`
+/// continuam aqui (ainda editados pela Secretaria pra membros sem conta),
+/// mas passaram a também ser editáveis pelo próprio usuário vinculado
+/// (`linkedUid`), mesmo padrão que `baptismDate` já tinha — ver
+/// `MemberRepository.updateEcclesiasticalDetails`/`updateBaptismDate` e
+/// `firestore.rules` (`members.update`, `affectedKeys().hasOnly([...])`).
 class Member {
   final String id;
   final String name;
@@ -58,7 +67,6 @@ class Member {
   final String admissionForm;
   final String originChurch;
   final DateTime? baptismDate;
-  final String maritalStatus;
   final List<String> ministryIds;
   final List<MemberMinistry> ministries;
   final String linkedUid;
@@ -82,7 +90,6 @@ class Member {
     this.admissionForm = '',
     this.originChurch = '',
     this.baptismDate,
-    this.maritalStatus = '',
     this.ministryIds = const [],
     this.ministries = const [],
     this.linkedUid = '',
@@ -109,7 +116,6 @@ class Member {
       admissionForm: data['admissionForm'] as String? ?? '',
       originChurch: data['originChurch'] as String? ?? '',
       baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
-      maritalStatus: data['maritalStatus'] as String? ?? '',
       ministryIds: List<String>.from(data['ministryIds'] as List? ?? const []),
       ministries: (data['ministries'] as List? ?? const [])
           .map((m) => MemberMinistry.fromMap(Map<String, dynamic>.from(m as Map)))

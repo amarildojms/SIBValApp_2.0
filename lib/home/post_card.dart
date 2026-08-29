@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
+import '../events/event_started_tag.dart';
 import '../theme/app_theme.dart';
 import '../models/post.dart';
 
@@ -22,6 +23,12 @@ import '../models/post.dart';
 /// 24h/6h antes do evento — reposte removido no mesmo dia). Post de
 /// devocional ganha o mesmo sombreamento leve assim que deixa de ser
 /// `isFromToday` (devocional de um dia anterior).
+///
+/// Selo "Iniciado às HH:mm" (29/08/2026, pedido do usuário) — aparece em cima
+/// da imagem assim que chega o horário de início do evento (`Post.hasStarted`,
+/// `event_started_tag.dart`, compartilhado com `event_card.dart`/
+/// `event_detail_page.dart`) e some quando o selo "Finalizado" assume (5h
+/// depois, `isPastEvent`) — os dois nunca aparecem juntos.
 ///
 /// Post manual (`PostType.manual`) publicado no próprio dia (`isFromToday`)
 /// é tratado como urgente (27/08/2026, pedido do usuário) — ganha a faixa
@@ -211,6 +218,12 @@ class PostCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                      )
+                    else if (isEvent && eventDate != null && post.hasStarted)
+                      Positioned(
+                        left: 8,
+                        top: 8,
+                        child: EventStartedTag(time: eventDate),
                       ),
                   ],
                 ),
