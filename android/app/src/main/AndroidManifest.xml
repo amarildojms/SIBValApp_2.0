@@ -3,10 +3,21 @@
         android:label="SIBVal Connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- singleTask (era singleTop): usuários relatavam o app aparecendo
+             2-3 vezes na tela de apps recentes. singleTop só reaproveita a
+             Activity se ela já estiver no topo da pilha da task atual — um
+             toque em notificação (FCM/flutter_local_notifications) enquanto
+             o app está em segundo plano chega via um PendingIntent que abre
+             uma task nova, gerando um card duplicado nos recentes a cada
+             notificação tocada assim. singleTask garante uma única
+             instância em todo o sistema, roteando qualquer novo lançamento
+             (notificação, ícone, etc.) para a instância existente via
+             onNewIntent — o FlutterActivity/firebase_messaging já repassam
+             onNewIntent normalmente, sem mudança de código nativo. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
