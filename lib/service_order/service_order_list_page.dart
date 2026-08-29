@@ -28,17 +28,19 @@ import 'service_order_preview_page.dart';
 /// somente-leitura — Louvor pra `ServiceOrderPraiseViewPage`, qualquer outro
 /// pra `ServiceOrderMemberViewPage` (travada num timer até o dono iniciar).
 /// Toque e segure abre um menu Editar/Excluir/Visualizar/
-/// Alterar proprietário (`_showActions`) — **revisão de 28/08/2026, pedido do
-/// usuário**: Editar/Excluir/Iniciar Culto/marcar momento são exclusivos do
-/// dono da ordem (`ownerUid`), nem mesmo admin escapa dessa regra (ver
-/// `firestore.rules` nativo — `update`/`delete` checam `resource.data.
-/// ownerUid == request.auth.uid`, sem exceção pra `isAdmin()` nesses casos);
-/// o único privilégio exclusivo do admin é "Alterar proprietário"
-/// (`_showTransferOwnerSheet`/`_TransferOwnerSheet` — bottom sheet direto
-/// nesta tela, não uma página própria, pedido do usuário numa revisão
-/// seguinte), sempre disponível independente de quem é o dono atual — é
-/// assim que o admin manipula uma ordem indiretamente, transferindo-a pra si
-/// mesmo primeiro. "Visualizar" (prévia, sempre
+/// Alterar proprietário (`_showActions`) — **revisão de 29/08/2026, pedido
+/// do usuário**: admin recuperou Editar/Excluir de qualquer ordem, dono ou
+/// não (era exclusivo do dono desde a 15ª rodada de 28/08/2026); só
+/// "manipular durante o culto" (`markStarted`/`updateProgress`/`finalize` —
+/// Iniciar Culto e marcar cada momento como concluído, em
+/// `ServiceOrderLivePage`) continua exclusivo de quem é dono da ordem
+/// (`ownerUid`) — ver `firestore.rules` nativo, `update` de `serviceOrders`:
+/// admin passa contanto que o diff não toque
+/// `startedAt`/`completedMomentKeys`/`isFinalized`/`finalizedAt`.
+/// "Alterar proprietário" (`_showTransferOwnerSheet`/`_TransferOwnerSheet` —
+/// bottom sheet direto nesta tela, não uma página própria) continua exclusivo
+/// do admin, sempre disponível independente de quem é o dono atual.
+/// "Visualizar" (prévia, sempre
 /// disponível a quem abre o menu) usa o mesmo menu por conveniência. O ícone
 /// de engrenagem, ao lado do título (28/08/2026 — antes ficava na app bar,
 /// movido pra cá a pedido do usuário, mesmo padrão de "Contribua" +
@@ -326,9 +328,12 @@ void _showActions(
               );
             },
           ),
-          // Editar/Excluir — exclusivos do dono (28/08/2026, pedido do
-          // usuário: "Nem mesmo admin poderá fazer estas ações").
-          if (isOwner) ...[
+          // Editar/Excluir — dono ou admin (29/08/2026, pedido do usuário:
+          // admin recuperou a capacidade de editar/excluir qualquer ordem de
+          // culto, revendo a exclusividade do dono da 15ª rodada — só
+          // "manipular durante o culto" continua exclusivo do dono, ver
+          // `firestore.rules`/`serviceOrders`).
+          if (isOwner || isAdmin) ...[
             ListTile(
               leading: const Icon(Icons.edit_outlined),
               title: const Text('Editar'),
@@ -436,7 +441,7 @@ class _TransferOwnerSheetState extends ConsumerState<_TransferOwnerSheet> {
         content: Text(
           'Transferir esta ordem de culto para ${user.name}? '
           'A partir daí, só ${user.name} (ou outra transferência do admin) '
-          'poderá editar, excluir, iniciar o culto ou marcar os momentos.',
+          'poderá iniciar o culto ou marcar os momentos.',
         ),
         actions: [
           TextButton(

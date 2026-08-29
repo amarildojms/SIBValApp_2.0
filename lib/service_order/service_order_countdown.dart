@@ -32,6 +32,17 @@ String formatServiceOrderCountdown(Duration d) {
   return '${parts.sublist(0, parts.length - 1).join(', ')} e ${parts.last}';
 }
 
+/// Janela de visualização antecipada da Ordem de Culto (29/08/2026, pedido
+/// do usuário) — Louvor, admin e o próprio dono da ordem podem visualizar o
+/// conteúdo completo a partir de 2 horas antes do horário marcado (antes só
+/// Louvor/admin tinham essa visão, com 1 hora de antecedência). Compartilhado
+/// entre `ServiceOrderPraiseViewPage` (Louvor/admin) e
+/// `ServiceOrderPrecheckPage` (dono) — o dono continua só podendo marcar
+/// momento como concluído depois de tocar "Iniciar Culto", esta janela só
+/// libera a leitura.
+bool isServiceOrderViewableEarly(DateTime dateTime) =>
+    !DateTime.now().isBefore(dateTime.subtract(const Duration(hours: 2)));
+
 /// Card com o contador regressivo — usado por `ServiceOrderMemberViewPage`
 /// (28/08/2026, pedido do usuário: visão dos demais membros/visitantes).
 /// [label] é o texto acima do número, [value] é o texto central (contagem

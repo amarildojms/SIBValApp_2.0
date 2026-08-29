@@ -12,18 +12,30 @@ import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'service_order_countdown.dart';
 import 'service_order_live_page.dart';
+import 'service_order_praise_view_page.dart' show ServiceOrderReadOnlyBody;
 import 'service_order_preview_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Toque simples numa ordem de `ServiceOrderListPage` abre esta
 /// tela (toque e segure abre o menu Editar/Excluir, ver
-/// `ServiceOrderListPage._showActions`). **Revisão da mesma sessão:** não
-/// mostra mais a ordem completa — só a data/hora, o contador regressivo e
-/// os dois botões centralizados ("Iniciar Culto" em cima, "Voltar" embaixo),
-/// pedido explícito do usuário. O botão "Iniciar Culto" só fica clicável na
-/// hora exata (`_canStart`) — antes disso leva pro "modo apresentação"
-/// (`ServiceOrderLivePage`), que aí sim mostra a ordem completa, num layout
-/// diferente pensado pra acompanhar o culto ao vivo.
+/// `ServiceOrderListPage._showActions`). O botão "Iniciar Culto" só fica
+/// clicável na hora exata (`_canStart`) — a partir daí leva pro "modo
+/// apresentação" (`ServiceOrderLivePage`), que grava o progresso de verdade.
+///
+/// **Revisão de 29/08/2026, pedido do usuário:** o dono passou a poder
+/// visualizar a ordem completa (`ServiceOrderReadOnlyBody`, somente leitura,
+/// sem tom — mesmo recorte que o dirigente já via em
+/// `ServiceOrderLivePage`) a partir de `isServiceOrderViewableEarly` (2h
+/// antes, mesma janela de Louvor/admin em `ServiceOrderPraiseViewPage`) —
+/// antes disso continua vendo só a contagem regressiva + botões
+/// (`_buildWaiting`). Isso não adianta a permissão de marcar momento como
+/// concluído, que continua exclusiva de depois de tocar "Iniciar Culto" —
+/// só a leitura foi liberada mais cedo. Passou a observar
+/// `serviceOrderStreamProvider` (era só o `order` estático recebido por
+/// parâmetro) pra refletir o progresso em tempo real assim que o culto é
+/// retomado ("Continuar Culto"); `widget.order` vira só o valor inicial
+/// (`orderAsync.valueOrNull ?? widget.order`), sem tela de carregamento —
+/// já se tem dado suficiente pra renderizar de imediato.
 class ServiceOrderPrecheckPage extends ConsumerStatefulWidget {
   const ServiceOrderPrecheckPage({super.key, required this.order});
 
@@ -55,12 +67,12 @@ class _ServiceOrderPrecheckPageState
     super.dispose();
   }
 
-  bool get _canStart => !DateTime.now().isBefore(widget.order.dateTime);
+  bool _canStart(ServiceOrder order) => !DateTime.now().isBefore(order.dateTime);
 
   /// "Continuar Culto" em vez de "Iniciar Culto" (28/08/2026, pedido do
   /// usuário) quando já existe progresso salvo (`ServiceOrderLivePage`
   /// grava em `ServiceOrder.completedMomentKeys` a cada momento marcado).
-  bool get _hasProgress => widget.order.completedMomentKeys.isNotEmpty;
+  bool _hasProgress(ServiceOrder order) => order.completedMomentKeys.isNotEmpty;
 
   /// Grava `startedAt` (28/08/2026, pedido do usuário) antes de entrar no
   /// modo apresentação — é o que libera `ServiceOrderMemberViewPage` (demais
@@ -68,31 +80,29 @@ class _ServiceOrderPrecheckPageState
   /// notificação `onServiceOrderStartedNotify` (Cloud Function). Não
   /// bloqueia a navegação se falhar (mesmo padrão não-fatal de
   /// `_prefillDateTime`/`service_order_form_page.dart`).
-  Future<void> _startService() async {
+  Future<void> _startService(ServiceOrder order) async {
     try {
-      await ref
-          .read(serviceOrderRepositoryProvider)
-          .markStarted(widget.order.id);
+      await ref.read(serviceOrderRepositoryProvider).markStarted(order.id);
     } catch (_) {
       // Segue pro modo apresentação de qualquer jeito.
     }
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => ServiceOrderLivePage(order: widget.order)),
+      MaterialPageRoute(builder: (_) => ServiceOrderLivePage(order: order)),
     );
   }
 
-  void _openPreview() {
+  void _openPreview(ServiceOrder order) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ServiceOrderPreviewPage(order: widget.order),
-      ),
+      MaterialPageRoute(builder: (_) => ServiceOrderPreviewPage(order: order)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final order = widget.order;
+    final orderAsync = ref.watch(serviceOrderStreamProvider(widget.order.id));
+    final order = orderAsync.valueOrNull ?? widget.order;
+    final viewable = isServiceOrderViewableEarly(order.dateTime);
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -103,75 +113,188 @@ class _ServiceOrderPrecheckPageState
           children: [
             ScreenTitle(serviceOrderDisplayName(order)),
             Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _dateFormat.format(order.dateTime),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: context.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      if (order.ownerName.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Dirigente: ${order.ownerName}',
-                          style: TextStyle(color: context.textSecondary, fontSize: 13),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      if (order.isFinalized)
-                        _FinalizedCard(finalizedAt: order.finalizedAt)
-                      else
-                        _CountdownCard(canStart: _canStart, target: order.dateTime),
-                      const SizedBox(height: 32),
-                      if (!order.isFinalized)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                            ),
-                            onPressed: _canStart ? _startService : null,
-                            child: Text(_hasProgress ? 'Continuar Culto' : 'Iniciar Culto'),
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                          ),
-                          onPressed: _openPreview,
-                          child: const Text('Ver Prévia'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Voltar'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: order.isFinalized
+                  ? _buildFinalized(order)
+                  : viewable
+                  ? _buildViewable(order)
+                  : _buildWaiting(order),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWaiting(ServiceOrder order) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _dateFormat.format(order.dateTime),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            if (order.ownerName.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Dirigente: ${order.ownerName}',
+                style: TextStyle(color: context.textSecondary, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 24),
+            _CountdownCard(canStart: _canStart(order), target: order.dateTime),
+            const SizedBox(height: 32),
+            _actionButtons(order),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinalized(ServiceOrder order) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _dateFormat.format(order.dateTime),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            if (order.ownerName.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Dirigente: ${order.ownerName}',
+                style: TextStyle(color: context.textSecondary, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 24),
+            _FinalizedCard(finalizedAt: order.finalizedAt),
+            const SizedBox(height: 32),
+            _actionButtons(order),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ordem completa, somente leitura, liberada 2h antes do horário
+  /// (29/08/2026, pedido do usuário) — `showPraiseDetails: false` porque o
+  /// tom é escondido do dirigente por decisão anterior (só o perfil Louvor
+  /// vê, ver doc comment de `ServiceOrderLivePage._repertoireSummaryFor`).
+  /// Envolvida num `Container` navy porque `ServiceOrderReadOnlyBody` foi
+  /// desenhada pro fundo escuro do "modo apresentação" — o resto desta
+  /// página continua no tema claro/escuro padrão do app.
+  Widget _buildViewable(ServiceOrder order) {
+    final started = order.isStarted;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ORDEM DO CULTO',
+                style: TextStyle(
+                  color: SibValColors.goldAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _dateFormat.format(order.dateTime),
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (order.ownerName.isNotEmpty)
+                Text(
+                  'Dirigente: ${order.ownerName}',
+                  style: TextStyle(color: context.textSecondary, fontSize: 13),
+                ),
+            ],
+          ),
+        ),
+        if (!started)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: _CountdownCard(canStart: _canStart(order), target: order.dateTime),
+          ),
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            decoration: BoxDecoration(
+              color: SibValColors.navyBlue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ServiceOrderReadOnlyBody(order: order, showPraiseDetails: false),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          child: _actionButtons(order),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionButtons(ServiceOrder order) {
+    return Column(
+      children: [
+        if (!order.isFinalized)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              onPressed: _canStart(order) ? () => _startService(order) : null,
+              child: Text(_hasProgress(order) ? 'Continuar Culto' : 'Iniciar Culto'),
+            ),
+          ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+            ),
+            onPressed: () => _openPreview(order),
+            child: const Text('Ver Prévia'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Voltar'),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -58,6 +58,15 @@ final resolvedBibleVersesProvider = FutureProvider.autoDispose
 /// preferência salva com `BibleReaderPage`, mesmo texto/tamanho entre as
 /// duas leituras).
 ///
+/// **Mais de um texto de uma vez** (29/08/2026, pedido do usuário: "ao tocar
+/// no momento carregue todos os textos na tela de uma vez", pra qualquer
+/// momento com texto bíblico — exceto Momento Missionário, que já tinha sua
+/// própria tela, `ServiceOrderMissionMomentPage`, desde antes) — recebe
+/// [references] (era [reference], singular) e mostra todas empilhadas numa
+/// lista só, cada uma com sua própria referência/crédito. Com só 1 texto
+/// (o caso mais comum — "Texto bíblico" da Dedicação dos dízimos nunca passa
+/// disso), mantém o layout de sempre, sem cabeçalho por texto.
+///
 /// **Fonte do texto** (28/08/2026, pedido do usuário — ver doc comment de
 /// `BlivreRepository`): busca primeiro na Bíblia Livre (BLIVRE, online, com
 /// crédito exibido abaixo do título); só essa tela usa essa fonte — a aba
@@ -71,9 +80,9 @@ final resolvedBibleVersesProvider = FutureProvider.autoDispose
 /// ao `_ReaderHeader` de `bible_reader_page.dart`: uma faixa fixa dentro do
 /// corpo, abaixo da app bar, com o título e os botões +/- lado a lado.
 class ServiceOrderBibleTextPage extends ConsumerStatefulWidget {
-  const ServiceOrderBibleTextPage({super.key, required this.reference});
+  const ServiceOrderBibleTextPage({super.key, required this.references});
 
-  final BibleReference reference;
+  final List<BibleReference> references;
 
   @override
   ConsumerState<ServiceOrderBibleTextPage> createState() =>
@@ -108,13 +117,8 @@ class _ServiceOrderBibleTextPageState
 
   @override
   Widget build(BuildContext context) {
-    final reference = widget.reference;
-    final resolvedAsync = ref.watch(
-      resolvedBibleVersesProvider((
-        bookId: reference.bookId!,
-        chapter: reference.chapter!,
-      )),
-    );
+    final refs = widget.references.where((r) => r.isFilled).toList();
+    final single = refs.length == 1 ? refs.first : null;
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -129,7 +133,7 @@ class _ServiceOrderBibleTextPageState
                 children: [
                   Expanded(
                     child: Text(
-                      reference.reference ?? '',
+                      single?.reference ?? 'Textos bíblicos',
                       style: const TextStyle(
                         color: SibValColors.goldAccent,
                         fontWeight: FontWeight.bold,
@@ -148,84 +152,150 @@ class _ServiceOrderBibleTextPageState
                 ],
               ),
             ),
-            // Crédito da fonte (28/08/2026, pedido do usuário) — só aparece
-            // com a BLIVRE; o Almeida 1911 (fallback offline) é domínio
-            // público, sem exigência de crédito, mas o rótulo "(offline)"
-            // ajuda a entender por que o texto pode ler diferente do
-            // normal quando a busca online falha.
-            resolvedAsync.maybeWhen(
-              data: (resolved) => Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  resolved.fromBlivre
-                      ? 'Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0'
-                      : 'Fonte: Almeida 1911 (offline)',
-                  style: TextStyle(color: context.textSecondary, fontSize: 12),
-                ),
-              ),
-              orElse: () => const SizedBox.shrink(),
-            ),
             Expanded(
-              child: resolvedAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(
-                  child: Text(
-                    'Falha ao carregar: $error',
-                    style: TextStyle(color: context.textPrimary),
-                  ),
-                ),
-                data: (resolved) {
-                  final verses = resolved.verses;
-                  final start = reference.verseStart!;
-                  final end = reference.verseEnd ?? start;
-                  final filtered = verses
-                      .where((v) => v.number >= start && v.number <= end)
-                      .toList();
-                  if (filtered.isEmpty) {
-                    return Center(
+              child: refs.isEmpty
+                  ? Center(
                       child: Text(
-                        'Versículo não encontrado.',
+                        'Nenhum texto selecionado.',
                         style: TextStyle(color: context.textSecondary),
                       ),
-                    );
-                  }
-                  return ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      for (final verse in filtered)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: RichText(
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${verse.number} ',
-                                  style: TextStyle(
-                                    color: SibValColors.goldAccent,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: _fontSize * 0.75,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: verse.text,
-                                  style: TextStyle(
-                                    color: context.textPrimary,
-                                    fontSize: _fontSize,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: refs.length,
+                      separatorBuilder: (_, __) => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Divider(height: 1),
+                      ),
+                      itemBuilder: (context, index) => _BibleTextSection(
+                        reference: refs[index],
+                        fontSize: _fontSize,
+                        // Cabeçalho por texto só quando há mais de um — com
+                        // só 1 (o caso mais comum), o título já fixo no topo
+                        // da página já basta (29/08/2026, pedido do usuário).
+                        showHeading: refs.length > 1,
+                      ),
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Um texto bíblico dentro de `ServiceOrderBibleTextPage` — extraído
+/// (29/08/2026) pra a página poder empilhar mais de um quando o momento tem
+/// vários textos ("ao tocar no momento carregue todos os textos na tela de
+/// uma vez", pedido do usuário). Cada seção resolve/mostra sua própria fonte
+/// e crédito (podem divergir entre si — ex.: um capítulo cacheado da BLIVRE e
+/// outro ainda não).
+class _BibleTextSection extends ConsumerWidget {
+  const _BibleTextSection({
+    required this.reference,
+    required this.fontSize,
+    required this.showHeading,
+  });
+
+  final BibleReference reference;
+  final double fontSize;
+  final bool showHeading;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resolvedAsync = ref.watch(
+      resolvedBibleVersesProvider((
+        bookId: reference.bookId!,
+        chapter: reference.chapter!,
+      )),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showHeading) ...[
+          Text(
+            reference.reference ?? '',
+            style: const TextStyle(
+              color: SibValColors.goldAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        // Crédito da fonte (28/08/2026, pedido do usuário) — só aparece com
+        // a BLIVRE; o Almeida 1911 (fallback offline) é domínio público, sem
+        // exigência de crédito, mas o rótulo "(offline)" ajuda a entender
+        // por que o texto pode ler diferente do normal quando a busca
+        // online falha.
+        resolvedAsync.maybeWhen(
+          data: (resolved) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              resolved.fromBlivre
+                  ? 'Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0'
+                  : 'Fonte: Almeida 1911 (offline)',
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            ),
+          ),
+          orElse: () => const SizedBox.shrink(),
+        ),
+        resolvedAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) => Text(
+            'Falha ao carregar: $error',
+            style: TextStyle(color: context.textPrimary),
+          ),
+          data: (resolved) {
+            final verses = resolved.verses;
+            final start = reference.verseStart!;
+            final end = reference.verseEnd ?? start;
+            final filtered = verses
+                .where((v) => v.number >= start && v.number <= end)
+                .toList();
+            if (filtered.isEmpty) {
+              return Text(
+                'Versículo não encontrado.',
+                style: TextStyle(color: context.textSecondary),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final verse in filtered)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${verse.number} ',
+                            style: TextStyle(
+                              color: SibValColors.goldAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: fontSize * 0.75,
+                            ),
+                          ),
+                          TextSpan(
+                            text: verse.text,
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontSize: fontSize,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

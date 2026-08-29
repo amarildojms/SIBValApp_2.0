@@ -62,7 +62,13 @@ class ServiceOrder {
   /// momento) e `ServiceOrderItem.summary`.
   final List<BibleReference> missionMottoReferences;
 
-  final BibleReference tithesBibleReading;
+  /// "Texto bíblico" da Dedicação dos dízimos e ofertas — era campo único
+  /// (`BibleReference`), virou lista repetível (29/08/2026, pedido do
+  /// usuário; mesmo mecanismo de `bibleReadings`/`missionMottoReferences`).
+  /// `ServiceOrder.fromFirestore` cai pro campo antigo `tithesBibleReading`
+  /// (singular) quando `tithesBibleReadings` não existe, pra não quebrar
+  /// ordens salvas antes desta mudança.
+  final List<BibleReference> tithesBibleReadings;
   final String congregationalHymn;
 
   final String praise2;
@@ -132,7 +138,7 @@ class ServiceOrder {
     this.missionMoment = MissionMoment.naoHavera,
     this.missionTheme = '',
     this.missionMottoReferences = const [],
-    this.tithesBibleReading = const BibleReference(),
+    this.tithesBibleReadings = const [],
     this.congregationalHymn = '',
     this.praise2 = 'Ministério Adorai',
     this.intercessionModerator = 'Pr. Ronan',
@@ -173,7 +179,7 @@ class ServiceOrder {
       missionMoment: missionMoment,
       missionTheme: missionTheme,
       missionMottoReferences: missionMottoReferences,
-      tithesBibleReading: tithesBibleReading,
+      tithesBibleReadings: tithesBibleReadings,
       congregationalHymn: congregationalHymn,
       praise2: praise2,
       intercessionModerator: intercessionModerator,
@@ -215,7 +221,7 @@ class ServiceOrder {
       'missionMottoReferences': missionMottoReferences
           .map((r) => r.toMap())
           .toList(),
-      'tithesBibleReading': tithesBibleReading.toMap(),
+      'tithesBibleReadings': tithesBibleReadings.map((r) => r.toMap()).toList(),
       'congregationalHymn': congregationalHymn,
       'praise2': praise2,
       'intercessionModerator': intercessionModerator,
@@ -259,9 +265,15 @@ class ServiceOrder {
               ?.map((e) => BibleReference.fromMap(e as Map<String, dynamic>?))
               .toList() ??
           const [],
-      tithesBibleReading: BibleReference.fromMap(
-        data['tithesBibleReading'] as Map<String, dynamic>?,
-      ),
+      tithesBibleReadings:
+          (data['tithesBibleReadings'] as List<dynamic>?)
+              ?.map((e) => BibleReference.fromMap(e as Map<String, dynamic>?))
+              .toList() ??
+          [
+            BibleReference.fromMap(
+              data['tithesBibleReading'] as Map<String, dynamic>?,
+            ),
+          ].where((r) => r.isFilled).toList(),
       congregationalHymn: data['congregationalHymn'] as String? ?? '',
       praise2: data['praise2'] as String? ?? '',
       intercessionModerator: data['intercessionModerator'] as String? ?? '',
@@ -470,9 +482,12 @@ class ServiceOrderItem {
         ].where((p) => p.isNotEmpty);
         return '${order.missionMoment.label} — ${parts.join(' · ')}';
       case ServiceOrderMomentType.tithesOffering:
+        final refs = order.tithesBibleReadings
+            .map((r) => r.reference)
+            .whereType<String>()
+            .join('; ');
         final parts = [
-          if (order.tithesBibleReading.reference != null)
-            order.tithesBibleReading.reference!,
+          if (refs.isNotEmpty) refs,
           if (order.congregationalHymn.isNotEmpty) order.congregationalHymn,
         ];
         return parts.isEmpty ? null : parts.join(' · ');
@@ -606,9 +621,11 @@ enum MissionMoment {
 }
 
 /// Livro/capítulo/versículo (faixa opcional) — mesma lógica do "Texto base"
-/// de `Devotional`, reaproveitada aqui pra "Leitura bíblica" (lista, pode ter
-/// mais de uma) e pro "Texto bíblico" da Dedicação dos dízimos e ofertas
-/// (campo único). `null`/vazio quando não preenchido.
+/// de `Devotional`, reaproveitada aqui em toda lista repetível de texto
+/// bíblico da Ordem de Culto: "Leitura bíblica", "Divisa" do Momento
+/// Missionário e "Texto bíblico" da Dedicação dos dízimos e ofertas (lista
+/// desde 29/08/2026, era campo único antes). `null`/vazio quando não
+/// preenchido.
 class BibleReference {
   final int? bookId;
   final String bookName;

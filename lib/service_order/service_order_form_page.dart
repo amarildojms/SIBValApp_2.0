@@ -40,8 +40,9 @@ import 'service_order_reorder_page.dart';
 /// `_BookField`/`_ChapterDropdown`/`_VerseDropdown` são cópias adaptadas
 /// (mesmo padrão de duplicação local já usado entre
 /// `devotional_form_page.dart` e `introduction_page.dart`), empacotadas num
-/// `BibleReferenceController` reaproveitável tanto pro campo único de
-/// dízimos quanto pra lista repetível de leituras.
+/// `BibleReferenceController` reaproveitável por toda lista repetível de
+/// texto bíblico do formulário (29/08/2026 — dízimos também virou lista,
+/// era campo único antes).
 ///
 /// Aviso de saída sem salvar (28/08/2026, pedido do usuário): `_dirty`
 /// (flag explícita, não um cálculo "algum campo não vazio" — vários campos
@@ -111,7 +112,11 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   /// com a seção escondida enquanto `_missionMoment == naoHavera`).
   final List<BibleReferenceController> _missionMottoControllers = [];
 
-  final _tithesBibleController = BibleReferenceController();
+  /// "Texto bíblico" da Dedicação dos dízimos e ofertas — lista repetível
+  /// (29/08/2026, pedido do usuário; era um `BibleReferenceController` só),
+  /// mesmo padrão de `_bibleReadingControllers`/`_missionMottoControllers`
+  /// (sempre com pelo menos 1 controller).
+  final List<BibleReferenceController> _tithesBibleControllers = [];
   final _congregationalHymnController = TextEditingController();
   final _congregationalHymnFocusNode = FocusNode();
 
@@ -169,7 +174,10 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _missionMottoControllers.isEmpty
           ? null
           : _missionMottoControllers.first.bookFocusNode,
-    _RequiredField.tithesBible => _tithesBibleController.bookFocusNode,
+    _RequiredField.tithesBible =>
+      _tithesBibleControllers.isEmpty
+          ? null
+          : _tithesBibleControllers.first.bookFocusNode,
     _RequiredField.congregationalHymn => _congregationalHymnFocusNode,
     _RequiredField.postludeOther => _postludeOtherFocusNode,
   };
@@ -206,7 +214,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       for (final motto in editing.missionMottoReferences) {
         _missionMottoControllers.add(_controllerFor(motto));
       }
-      _tithesBibleController.applyReference(editing.tithesBibleReading);
+      for (final reading in editing.tithesBibleReadings) {
+        _tithesBibleControllers.add(_controllerFor(reading));
+      }
       _congregationalHymnController.text = editing.congregationalHymn;
       _praise2Controller.text = editing.praise2;
       _intercessionController.text = editing.intercessionModerator;
@@ -233,6 +243,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     }
     if (_missionMottoControllers.isEmpty) {
       _missionMottoControllers.add(BibleReferenceController());
+    }
+    if (_tithesBibleControllers.isEmpty) {
+      _tithesBibleControllers.add(BibleReferenceController());
     }
     // Listeners adicionados só depois dos valores padrão/edição acima, senão
     // disparariam `_markDirty` antes mesmo do usuário tocar em qualquer campo.
@@ -371,6 +384,19 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     setState(() => _dirty = true);
   }
 
+  void _addTithesBible() {
+    setState(() {
+      _tithesBibleControllers.add(BibleReferenceController());
+      _dirty = true;
+    });
+  }
+
+  void _removeTithesBible(int index) {
+    final controller = _tithesBibleControllers.removeAt(index);
+    controller.dispose();
+    setState(() => _dirty = true);
+  }
+
   Future<void> _pickExtraMoments() async {
     // Duas tentativas anteriores (asData?.value, depois .future do
     // provider) não resolveram o bug relatado — momentos adicionais já
@@ -462,7 +488,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
         errors.add(_RequiredField.missionMotto);
       }
     }
-    if (!_tithesBibleController.toReference().isFilled) {
+    if (!_tithesBibleControllers.any((c) => c.toReference().isFilled)) {
       errors.add(_RequiredField.tithesBible);
     }
     if (_congregationalHymnController.text.trim().isEmpty) {
@@ -526,7 +552,10 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                 .map((c) => c.toReference())
                 .where((r) => r.isFilled)
                 .toList(),
-      tithesBibleReading: _tithesBibleController.toReference(),
+      tithesBibleReadings: _tithesBibleControllers
+          .map((c) => c.toReference())
+          .where((r) => r.isFilled)
+          .toList(),
       congregationalHymn: _congregationalHymnController.text.trim(),
       praise2: _praise2Controller.text.trim(),
       intercessionModerator: _intercessionController.text.trim(),
@@ -593,7 +622,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     for (final controller in _missionMottoControllers) {
       controller.dispose();
     }
-    _tithesBibleController.dispose();
+    for (final controller in _tithesBibleControllers) {
+      controller.dispose();
+    }
     _congregationalHymnController.dispose();
     _congregationalHymnFocusNode.dispose();
     _praise2Controller.dispose();
@@ -774,7 +805,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                             child: OutlinedButton.icon(
                               onPressed: _addBibleReading,
                               icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Adicionar leitura'),
+                              label: const Text('+ Texto bíblico'),
                             ),
                           ),
                         ]),
@@ -891,7 +922,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                               child: OutlinedButton.icon(
                                 onPressed: _addMissionMotto,
                                 icon: const Icon(Icons.add, size: 18),
-                                label: const Text('Adicionar texto'),
+                                label: const Text('+ Texto bíblico'),
                               ),
                             ),
                           ],
@@ -905,11 +936,37 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                           const SizedBox(height: 6),
                           _sectionLabel(context, 'Texto bíblico'),
                           const SizedBox(height: 4),
-                          _BibleReferenceFields(
-                            controller: _tithesBibleController,
-                            onChanged: _markDirty,
-                            isError: _fieldErrors.contains(
-                              _RequiredField.tithesBible,
+                          for (
+                            var i = 0;
+                            i < _tithesBibleControllers.length;
+                            i++
+                          )
+                            Padding(
+                              key: ValueKey(_tithesBibleControllers[i]),
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _BibleReferenceFields(
+                                controller: _tithesBibleControllers[i],
+                                onRemove: _tithesBibleControllers.length > 1
+                                    ? () => _removeTithesBible(i)
+                                    : null,
+                                onChanged: _markDirty,
+                                // Só a 1ª linha mostra vermelho — o erro é
+                                // "nenhum texto preenchido", não "esta linha
+                                // específica" (mesmo padrão de "Leitura
+                                // bíblica"/"Divisa").
+                                isError:
+                                    i == 0 &&
+                                    _fieldErrors.contains(
+                                      _RequiredField.tithesBible,
+                                    ),
+                              ),
+                            ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: _addTithesBible,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('+ Texto bíblico'),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1688,8 +1745,11 @@ class _MultiNameDialogState extends State<_MultiNameDialog> {
 /// Diálogo de coletar 1+ textos bíblicos pra um momento adicional com
 /// `ExtraMomentFieldKind.bibleReference` (28/08/2026, pedido do usuário —
 /// suportar mais de um, cada um virando subcategoria própria em
-/// `ServiceOrderLivePage`) — mesmo botão "+ Adicionar leitura"/lista
-/// dinâmica já usado em "Leitura bíblica" no formulário principal.
+/// `ServiceOrderLivePage`) — mesmo botão "+ Texto bíblico" (29/08/2026,
+/// pedido do usuário — rótulo unificado em toda lista repetível de texto
+/// bíblico do app, era "Adicionar leitura"/"Adicionar texto" cada uma com o
+/// seu próprio texto antes) e lista dinâmica já usados em "Leitura bíblica"
+/// no formulário principal.
 class _MultiBibleReferenceDialog extends StatefulWidget {
   const _MultiBibleReferenceDialog({
     required this.title,
@@ -1771,7 +1831,7 @@ class _MultiBibleReferenceDialogState
                 child: OutlinedButton.icon(
                   onPressed: _add,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Adicionar texto'),
+                  label: const Text('+ Texto bíblico'),
                 ),
               ),
             ],
@@ -1799,8 +1859,11 @@ class _MultiBibleReferenceDialogState
 }
 
 /// Empacota controller/focusNode + os valores de livro/capítulo/versículo de
-/// uma referência bíblica — reaproveitado tanto pelo campo único "Texto
-/// bíblico" (dízimos) quanto pela lista repetível "Leitura bíblica".
+/// uma referência bíblica — reaproveitado por toda lista repetível de texto
+/// bíblico do formulário ("Leitura bíblica", "Divisa" do Momento
+/// Missionário, "Texto bíblico" da Dedicação dos dízimos e ofertas desde
+/// 29/08/2026 — era campo único antes, ver `ServiceOrder.tithesBibleReadings`)
+/// e pelo diálogo de momento adicional (`_MultiBibleReferenceDialog`).
 class BibleReferenceController {
   final bookController = TextEditingController();
   final bookFocusNode = FocusNode();

@@ -38,7 +38,13 @@ import 'service_order_mission_moment_page.dart';
 /// `ServiceOrderBibleTextPage` (28/08/2026, pedido do usuário — só o
 /// versículo selecionado, não a página inteira da Bíblia como
 /// `BibleReaderPage` mostrava antes); o hino continua em `HymnDetailPage`
-/// (reaproveitado do Hinário). "Dedicação dos dízimos e ofertas" sempre
+/// (reaproveitado do Hinário). **29/08/2026, pedido do usuário**: quando o
+/// momento tem mais de um texto bíblico (Leitura bíblica, momento adicional
+/// com texto bíblico), 1 toque já abre todos juntos em
+/// `ServiceOrderBibleTextPage` — deixou de ser 1 sub-ação por referência,
+/// vira 1 sub-ação só pro momento inteiro (mesmo padrão que a "Divisa" do
+/// Momento Missionário já usava, que fica de fora dessa mudança por já ter
+/// regra própria). "Dedicação dos dízimos e ofertas" sempre
 /// renderiza como grupo com as subcategorias Texto bíblico/Hino
 /// Congregacional (`_MomentGroupCard`), mesmo que só uma esteja preenchida
 /// — quando as duas ficam concluídas, o próprio momento também aparece
@@ -159,36 +165,47 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
         ),
       ];
     }
+    // "Leitura bíblica" (29/08/2026, pedido do usuário: "ao tocar no momento
+    // carregue todos os textos na tela de uma vez") — 1 única sub-ação
+    // mesmo com várias referências, mesmo padrão já usado pela "Divisa" do
+    // Momento Missionário (`ServiceOrderMissionMomentPage`). Antes cada
+    // referência virava uma sub-ação própria (`bible$j`), forçando
+    // `_MomentGroupCard`; agora `subs.length` nunca passa de 1 aqui, então o
+    // momento vira um `_MomentCard` normal, de toque único.
     if (item.type == ServiceOrderMomentType.bibleReading) {
-      final subs = <_SubAction>[];
-      for (var j = 0; j < order.bibleReadings.length; j++) {
-        final r = order.bibleReadings[j];
-        if (!r.isFilled) continue;
-        subs.add(
-          _SubAction(
-            key: '$baseKey:bible$j',
-            label: r.reference ?? '',
-            open: (ctx) => Navigator.of(ctx).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ServiceOrderBibleTextPage(reference: r),
-              ),
+      final refs = order.bibleReadings.where((r) => r.isFilled).toList();
+      if (refs.isEmpty) return const [];
+      return [
+        _SubAction(
+          key: '$baseKey:bible',
+          label: 'Leitura bíblica',
+          open: (ctx) => Navigator.of(ctx).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ServiceOrderBibleTextPage(references: refs),
             ),
           ),
-        );
-      }
-      return subs;
+        ),
+      ];
     }
     if (item.type == ServiceOrderMomentType.tithesOffering) {
       final subs = <_SubAction>[];
-      final bibleRef = order.tithesBibleReading;
-      if (bibleRef.isFilled) {
+      // "Texto bíblico" dos dízimos ganhou lista repetível (29/08/2026,
+      // pedido do usuário) — mesma regra de "Leitura bíblica": 1 sub-ação só,
+      // mesmo com vários textos, abrindo todos juntos.
+      final bibleRefs = order.tithesBibleReadings
+          .where((r) => r.isFilled)
+          .toList();
+      if (bibleRefs.isNotEmpty) {
         subs.add(
           _SubAction(
             key: '$baseKey:tithesBible',
-            label: 'Texto bíblico: ${bibleRef.reference}',
+            label:
+                'Texto bíblico: '
+                '${bibleRefs.map((r) => r.reference).whereType<String>().join('; ')}',
             open: (ctx) => Navigator.of(ctx).push<void>(
               MaterialPageRoute(
-                builder: (_) => ServiceOrderBibleTextPage(reference: bibleRef),
+                builder: (_) =>
+                    ServiceOrderBibleTextPage(references: bibleRefs),
               ),
             ),
           ),
@@ -247,26 +264,22 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     // Momento adicional com `ExtraMomentFieldKind.bibleReference` (ex.:
     // "Ceia do Senhor" — pedido do usuário: "parecido com os dízimos e
     // ofertas") — mesmo tratamento de leitura bíblica de verdade. Pode ter
-    // mais de um texto (28/08/2026, pedido do usuário) — cada um vira uma
-    // subcategoria própria, mesmo mecanismo de "Leitura bíblica".
+    // mais de um texto — 1 única sub-ação que abre todos juntos (29/08/2026,
+    // pedido do usuário), mesmo ajuste de "Leitura bíblica" acima.
     if (item.type == null && item.extraBibleReferences.isNotEmpty) {
-      final subs = <_SubAction>[];
-      for (var j = 0; j < item.extraBibleReferences.length; j++) {
-        final r = item.extraBibleReferences[j];
-        if (!r.isFilled) continue;
-        subs.add(
-          _SubAction(
-            key: '$baseKey:bible$j',
-            label: r.reference ?? '',
-            open: (ctx) => Navigator.of(ctx).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ServiceOrderBibleTextPage(reference: r),
-              ),
+      final refs = item.extraBibleReferences.where((r) => r.isFilled).toList();
+      if (refs.isEmpty) return const [];
+      return [
+        _SubAction(
+          key: '$baseKey:bible',
+          label: item.label,
+          open: (ctx) => Navigator.of(ctx).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ServiceOrderBibleTextPage(references: refs),
             ),
           ),
-        );
-      }
-      return subs;
+        ),
+      ];
     }
     return const [];
   }

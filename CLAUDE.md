@@ -2531,6 +2531,143 @@ ajustes finos (28/08/2026, mesma sessão, pedidos do usuário):**
   botões) alinhado à direita via `MainAxisAlignment.end`, no lugar do
   `Spacer()` antigo que separava rótulo (esquerda) dos botões (direita).
 
+**Ordem de Culto — janela de visualização antecipada unificada em 2h pra
+Louvor/admin/dono; botão "Ver Prévia" na tela de espera de Louvor/admin
+(29/08/2026, pedidos do usuário):** antes só Louvor/admin (`canViewPraiseOrder`
+inclui `isAdmin`, então os dois sempre caíram na mesma visão) tinham acesso
+antecipado à ordem completa, liberado 1h antes do horário — o dono (owner) só
+via a tela de contagem regressiva (`ServiceOrderPrecheckPage`), sem o
+conteúdo em si, até tocar "Iniciar Culto" exatamente na hora marcada.
+
+- Nova `isServiceOrderViewableEarly(dateTime)`
+  (`lib/service_order/service_order_countdown.dart`) — janela única de 2h
+  (era 1h só pra Louvor/admin), compartilhada entre
+  `ServiceOrderPraiseViewPage` (Louvor/admin) e `ServiceOrderPrecheckPage`
+  (dono).
+- `ServiceOrderPrecheckPage` (dono) ganhou um terceiro estado, entre a
+  "espera" (`_buildWaiting`, mais de 2h antes — layout de sempre, já tinha
+  "Ver Prévia") e o "finalizado" (`_buildFinalized`): dentro da janela de 2h
+  e ainda não finalizado, `_buildViewable` mostra a ordem completa
+  (`ServiceOrderReadOnlyBody`, reaproveitada de
+  `service_order_praise_view_page.dart`, `showPraiseDetails: false` — sem
+  tom, mesmo recorte que o dirigente já via no modo apresentação) dentro de
+  um `Container` navy (a lista foi desenhada pro fundo escuro; o resto da
+  página continua no tema claro/escuro padrão), com os botões
+  "Iniciar/Continuar Culto"/"Ver Prévia"/"Voltar" fixos embaixo — **a
+  permissão de marcar momento como concluído continua exclusiva de depois de
+  tocar "Iniciar Culto"** (pedido explícito do usuário: "o dono da ordem só
+  poderá marcar os momentos como concluído após iniciar o culto"), essa
+  visão antecipada é só leitura, igual à de Louvor/admin. A página passou a
+  observar `serviceOrderStreamProvider` (antes usava só o `order` estático
+  recebido por parâmetro) pra refletir progresso em tempo real ao reabrir um
+  culto já iniciado ("Continuar Culto") — `widget.order` virou só o valor
+  inicial (`orderAsync.valueOrNull ?? widget.order`, sem tela de
+  carregamento própria).
+- `ServiceOrderPraiseViewPage._NotYetAvailable` (tela de espera de
+  Louvor/admin antes da janela) ganhou o mesmo botão "Ver Prévia" que o dono
+  já tinha em `ServiceOrderPrecheckPage` — pedido explícito do usuário ("na
+  tela de espera coloque o botão de prévia para Louvor, admin e dono").
+  Texto do aviso atualizado de "1 hora" pra "2 horas".
+
+**Ordem de Culto — admin recupera Editar/Excluir de qualquer ordem; "manipular
+durante o culto" continua exclusivo do dono (29/08/2026, pedido do
+usuário):** revisão da regra "Nem mesmo admin poderá fazer estas ações" da
+15ª rodada (28/08/2026) — o usuário pediu pra afrouxar só a parte de
+edição/exclusão, mantendo Iniciar Culto/marcar momento como concluído
+travado ao dono. Perguntado explicitamente (`AskUserQuestion`) se Excluir
+também deveria acompanhar Editar — confirmado que sim, os dois juntos.
+
+- `SIBValApp2/firestore.rules` (`serviceOrders`): `update` agora aceita
+  `isAdmin()` desde que o diff não toque nenhum dos 4 campos de "manipular
+  durante o culto" (`startedAt`/`completedMomentKeys`/`isFinalized`/
+  `finalizedAt` — os mesmos que só `markStarted`/`updateProgress`/`finalize`
+  escrevem, nunca uma edição normal via `toFieldsMap()`) — cobre tanto uma
+  edição normal quanto a transferência de propriedade (`ownerUid`/
+  `ownerName`), que deixou de precisar de uma exceção `hasOnly` própria.
+  `delete` ganhou `|| isAdmin()` solto, sem restrição de campo (exclusão não
+  tem "diff" pra restringir). **Só editei o código-fonte das regras — não fiz
+  `firebase deploy`**, mesma cautela de sempre.
+- `lib/service_order/service_order_list_page.dart` (`_showActions`):
+  Editar/Excluir passaram de `if (isOwner)` pra `if (isOwner || isAdmin)` —
+  "Alterar proprietário" continua exclusivo do admin, inalterado. Texto de
+  confirmação de `_TransferOwnerSheet` atualizado (não menciona mais
+  editar/excluir como algo que só o novo dono ganha, já que o admin edita
+  direto agora).
+- `lib/data/service_order_repository.dart`: doc comment de `transferOwner`
+  atualizado — não é mais a única via de o admin editar uma ordem alheia,
+  só a via de passar quem pode efetivamente conduzir o culto ao vivo.
+- Nenhuma mudança em `ServiceOrderFormPage` (preserva `editing?.ownerUid`/
+  `.ownerName` ao salvar, já era assim desde a 12ª rodada — admin editando a
+  ordem de outro dono não rouba a propriedade) nem em `openServiceOrder`
+  (roteamento pro modo apresentação continua só pelo dono de verdade).
+
+**Ordem de Culto — 1 toque abre todos os textos bíblicos do mesmo momento de
+uma vez (29/08/2026, pedido do usuário):** antes só a "Divisa" do Momento
+Missionário (`ServiceOrderMissionMomentPage`, sessão de 28/08/2026) fazia
+isso — "Leitura bíblica" e momento adicional com texto bíblico (ex.: "Ceia do
+Senhor") ainda abriam uma referência por vez, uma sub-ação/linha própria por
+texto. Momento Missionário ficou de fora desta mudança por já ter a própria
+regra. "Texto bíblico" da Dedicação dos dízimos e ofertas é sempre um único
+campo (`ServiceOrder.tithesBibleReading`, não uma lista) — não tinha "mais de
+um texto" pra consolidar, só precisou trocar a chamada pro novo formato.
+
+- `ServiceOrderBibleTextPage` (`lib/service_order/service_order_bible_text_page.dart`)
+  passou a receber `references` (lista, era `reference` singular) — com 1 só,
+  mantém o layout de sempre (título = a referência, zoom, versículos); com
+  mais de uma, empilha uma seção por texto (`_BibleTextSection`, extraído do
+  `build()` antigo), cada uma com seu próprio cabeçalho/crédito (podem vir de
+  fontes diferentes — BLIVRE cacheada vs. ainda não), separadas por
+  `Divider`. Zoom continua único, compartilhado por todas as seções.
+- `ServiceOrderLivePage._subActionsFor`: "Leitura bíblica" e momento
+  adicional com `extraBibleReferences` passaram de N sub-ações (uma por
+  referência, chave `bible$j`) pra 1 só (chave `bible`, sem índice) que abre
+  todos os textos filled de uma vez — como `subs.length` nunca passa de 1
+  pra esses dois tipos agora, o momento vira um `_MomentCard` de toque único
+  em vez de `_MomentGroupCard` (que ainda existe, só que agora só pra
+  "Dedicação dos dízimos e ofertas", que tem duas subcategorias de natureza
+  diferente — texto bíblico e hino — que não fazem sentido combinadas numa
+  tela só).
+- `ServiceOrderReadOnlyBody` (`service_order_praise_view_page.dart`,
+  reaproveitada por Louvor/membro comum/dono no early-view): `_leafKeysFor`
+  atualizada pra gerar a mesma chave única `'$baseKey:bible'` (tinha que
+  bater exatamente com `ServiceOrderLivePage`, senão o progresso aparecia
+  sempre pendente nessas visões); `_detailRowsFor` consolidou as N linhas
+  cliáveis em 1 só, com o rótulo listando todas as referências ("João
+  3:16-18; Salmos 23:1-6") e o toque abrindo todas juntas.
+- Nenhuma mudança de `firestore.rules`/Cloud Functions — é só reorganização
+  do lado do cliente (chaves de progresso, navegação).
+
+**Ordem de Culto — "Texto bíblico" dos dízimos também vira lista repetível;
+botão "+ Texto bíblico" unificado em toda lista de texto bíblico
+(29/08/2026, pedidos do usuário):**
+
+- `ServiceOrder.tithesBibleReading` (`BibleReference` único) virou
+  `tithesBibleReadings` (`List<BibleReference>`) — mesmo mecanismo de
+  `bibleReadings`/`missionMottoReferences`. `ServiceOrder.fromFirestore` cai
+  pro campo antigo `tithesBibleReading` (singular) quando o novo
+  `tithesBibleReadings` não existe no documento, sem backfill (mesmo padrão
+  de sempre — só ordens salvas a partir de agora ganham a lista de verdade,
+  as antigas continuam lendo certo via fallback).
+- `ServiceOrderFormPage`: `_tithesBibleController` (um só) virou
+  `_tithesBibleControllers` (lista) — mesmo padrão de
+  `_bibleReadingControllers`/`_missionMottoControllers` (sempre 1 controller
+  no mínimo, `_addTithesBible`/`_removeTithesBible` novos, validação via
+  `.any(isFilled)` em vez de checar 1 campo só).
+- Mesma regra de "carregar todos de uma vez" da rodada anterior (que já
+  cobria "Leitura bíblica" e momento adicional) — `ServiceOrderLivePage`
+  (Texto bíblico dos dízimos vira 1 sub-ação só, `'$baseKey:tithesBible'`,
+  abrindo todas as referências junto) e `ServiceOrderReadOnlyBody`
+  (`_leafKeysFor`/`_detailRowsFor`, mesmo ajuste). "Hino Congregacional"
+  continua como sub-ação própria e separada — não é texto bíblico, fora do
+  pedido.
+- Botão de adicionar renomeado pra **"+ Texto bíblico"** em toda lista
+  repetível de texto bíblico do app — "Leitura bíblica" (era "Adicionar
+  leitura"), "Divisa" do Momento Missionário e o diálogo de momento
+  adicional com `ExtraMomentFieldKind.bibleReference` (as duas eram
+  "Adicionar texto"), e "Texto bíblico" dos dízimos (novo, mesmo rótulo
+  desde o início). Só o texto do botão mudou — nenhuma mudança de
+  comportamento nos outros três.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

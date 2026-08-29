@@ -16,7 +16,9 @@ import '../notifications/notification_read_sync.dart';
 import '../praise/cifra_view_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
+import 'service_order_countdown.dart';
 import 'service_order_mission_moment_page.dart';
+import 'service_order_preview_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Visão da Ordem de Culto pra quem tem o papel Louvor — mesma
@@ -32,9 +34,12 @@ import 'service_order_mission_moment_page.dart';
 /// - Momentos "Louvor" mostram o tom de cada música (o dirigente não vê
 ///   isso, por pedido do usuário — "por hora, regra a ajustar depois") e
 ///   tocar numa música leva pra `CifraViewPage`.
-/// - Acesso liberado 1h antes do horário do culto (`_isAvailable`) — antes
-///   disso mostra só a contagem regressiva. Um cronômetro fica visível no
-///   topo até o horário exato, mesmo depois de já poder ver a ordem.
+/// - Acesso liberado 2h antes do horário do culto
+///   (`isServiceOrderViewableEarly`, 29/08/2026 — era 1h, mesma janela agora
+///   compartilhada com o dono da ordem em `ServiceOrderPrecheckPage`) — antes
+///   disso mostra só a contagem regressiva (com botão "Ver Prévia", pedido do
+///   usuário na mesma sessão). Um cronômetro fica visível no topo até o
+///   horário exato, mesmo depois de já poder ver a ordem.
 ///
 /// A lista de momentos somente-leitura (`ServiceOrderReadOnlyBody`, abaixo)
 /// foi extraída pra cá pra ser reaproveitada também por
@@ -109,9 +114,7 @@ class _ServiceOrderPraiseViewPageState
                 ),
               );
             }
-            final available = !DateTime.now().isBefore(
-              order.dateTime.subtract(const Duration(hours: 1)),
-            );
+            final available = isServiceOrderViewableEarly(order.dateTime);
             if (!available)
               return _NotYetAvailable(order: order, dateFormat: _dateFormat);
             return _buildOrder(order);
@@ -221,25 +224,29 @@ class _ServiceOrderReadOnlyBodyState
     ServiceOrderItem item,
     ServiceOrder order,
   ) {
+    // "Leitura bíblica"/momento adicional com texto bíblico (29/08/2026,
+    // pedido do usuário: "carregue todos os textos de uma vez") — 1 chave só
+    // pro momento inteiro, mesmo com várias referências — precisa bater com
+    // a mesma chave única gravada por `ServiceOrderLivePage._subActionsFor`
+    // (`'$baseKey:bible'`, sem sufixo de índice), senão o progresso aparece
+    // sempre pendente nesta visão somente-leitura.
     if (item.type == ServiceOrderMomentType.bibleReading) {
-      final keys = <String>[];
-      for (var j = 0; j < order.bibleReadings.length; j++) {
-        if (order.bibleReadings[j].isFilled) keys.add('$baseKey:bible$j');
-      }
-      return keys.isEmpty ? [baseKey] : keys;
+      return order.bibleReadings.any((r) => r.isFilled)
+          ? ['$baseKey:bible']
+          : [baseKey];
     }
     if (item.type == ServiceOrderMomentType.tithesOffering) {
       final keys = <String>[];
-      if (order.tithesBibleReading.isFilled) keys.add('$baseKey:tithesBible');
+      if (order.tithesBibleReadings.any((r) => r.isFilled)) {
+        keys.add('$baseKey:tithesBible');
+      }
       if (order.congregationalHymn.isNotEmpty) keys.add('$baseKey:tithesHymn');
       return keys;
     }
     if (item.type == null && item.extraBibleReferences.isNotEmpty) {
-      final keys = <String>[];
-      for (var j = 0; j < item.extraBibleReferences.length; j++) {
-        if (item.extraBibleReferences[j].isFilled) keys.add('$baseKey:bible$j');
-      }
-      return keys.isEmpty ? [baseKey] : keys;
+      return item.extraBibleReferences.any((r) => r.isFilled)
+          ? ['$baseKey:bible']
+          : [baseKey];
     }
     // "Divisa" (29/08/2026) — mesma chave única gravada por
     // `ServiceOrderLivePage._subActionsFor` (`'$baseKey:motto'`), não o
@@ -302,10 +309,10 @@ class _ServiceOrderReadOnlyBodyState
     );
   }
 
-  void _openBibleText(BibleReference reference) {
+  void _openBibleText(List<BibleReference> references) {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ServiceOrderBibleTextPage(reference: reference),
+        builder: (_) => ServiceOrderBibleTextPage(references: references),
       ),
     );
   }
@@ -334,9 +341,16 @@ class _ServiceOrderReadOnlyBodyState
   ) {
     final rows = <_DetailRow>[];
     if (item.type == ServiceOrderMomentType.bibleReading) {
-      for (final r in order.bibleReadings.where((r) => r.isFilled)) {
+      // 1 linha só, mesmo com várias referências (29/08/2026, pedido do
+      // usuário: "carregue todos os textos na tela de uma vez") — mesmo
+      // padrão já usado pela "Divisa" do Momento Missionário logo abaixo.
+      final refs = order.bibleReadings.where((r) => r.isFilled).toList();
+      if (refs.isNotEmpty) {
         rows.add(
-          _DetailRow(label: r.reference ?? '', onTap: () => _openBibleText(r)),
+          _DetailRow(
+            label: refs.map((r) => r.reference).whereType<String>().join('; '),
+            onTap: () => _openBibleText(refs),
+          ),
         );
       }
     } else if (item.type == ServiceOrderMomentType.missionMoment) {
@@ -354,12 +368,18 @@ class _ServiceOrderReadOnlyBodyState
         );
       }
     } else if (item.type == ServiceOrderMomentType.tithesOffering) {
-      final bibleRef = order.tithesBibleReading;
-      if (bibleRef.isFilled) {
+      // 1 linha só, mesmo com vários textos (29/08/2026, pedido do usuário)
+      // — mesmo ajuste de "Leitura bíblica" acima.
+      final bibleRefs = order.tithesBibleReadings
+          .where((r) => r.isFilled)
+          .toList();
+      if (bibleRefs.isNotEmpty) {
         rows.add(
           _DetailRow(
-            label: 'Texto bíblico: ${bibleRef.reference}',
-            onTap: () => _openBibleText(bibleRef),
+            label:
+                'Texto bíblico: '
+                '${bibleRefs.map((r) => r.reference).whereType<String>().join('; ')}',
+            onTap: () => _openBibleText(bibleRefs),
           ),
         );
       }
@@ -372,9 +392,15 @@ class _ServiceOrderReadOnlyBodyState
         );
       }
     } else if (item.type == null && item.extraBibleReferences.isNotEmpty) {
-      for (final r in item.extraBibleReferences.where((r) => r.isFilled)) {
+      // Mesmo ajuste de "Leitura bíblica" acima — 1 linha só, mesmo com mais
+      // de um texto.
+      final refs = item.extraBibleReferences.where((r) => r.isFilled).toList();
+      if (refs.isNotEmpty) {
         rows.add(
-          _DetailRow(label: r.reference ?? '', onTap: () => _openBibleText(r)),
+          _DetailRow(
+            label: refs.map((r) => r.reference).whereType<String>().join('; '),
+            onTap: () => _openBibleText(refs),
+          ),
         );
       }
     } else if (item.type != null) {
@@ -569,11 +595,26 @@ class _NotYetAvailable extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'A ordem de culto fica disponível 1 hora antes do início.',
+              'A ordem de culto fica disponível 2 horas antes do início.',
               style: TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
+            // "Ver Prévia" na tela de espera (29/08/2026, pedido do usuário)
+            // — mesmo botão que o dono já tinha em `ServiceOrderPrecheckPage`,
+            // agora também disponível pra Louvor/admin antes da janela de 2h.
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ServiceOrderPreviewPage(order: order),
+                  ),
+                ),
+                child: const Text('Ver Prévia'),
+              ),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Voltar'),
