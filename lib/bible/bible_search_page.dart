@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/bible_repository.dart';
+import '../data/bible_source_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -9,6 +10,8 @@ import 'bible_reader_page.dart';
 
 /// Espelha BibleSearchFragment.kt: busca por trecho de texto com escopo
 /// (Toda a Bíblia / Antigo Testamento / Novo Testamento / livro específico).
+/// Busca na versão escolhida em `BibleBookListPage`
+/// (`bibleVersionProvider`) — ver `BibleSourceRepository.search`.
 class BibleSearchPage extends ConsumerStatefulWidget {
   const BibleSearchPage({super.key});
 
@@ -19,6 +22,7 @@ class BibleSearchPage extends ConsumerStatefulWidget {
 class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
   final _queryController = TextEditingController();
   List<BibleVerseRef>? _results;
+  bool _resultsFromBlivre = false;
   bool _loading = false;
   BibleSearchScopeKind _scopeKind = BibleSearchScopeKind.allBible;
   int? _selectedBookId;
@@ -54,10 +58,14 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
       return;
     }
     setState(() => _loading = true);
-    final results = await ref.read(bibleRepositoryProvider).search(trimmed, scope: _scope);
+    final version = ref.read(bibleVersionProvider);
+    final resolved = await ref
+        .read(bibleSourceRepositoryProvider)
+        .search(version, trimmed, scope: _scope);
     if (!mounted) return;
     setState(() {
-      _results = results;
+      _results = resolved.results;
+      _resultsFromBlivre = resolved.fromBlivre;
       _loading = false;
     });
   }
@@ -144,6 +152,17 @@ class _BibleSearchPageState extends ConsumerState<BibleSearchPage> {
                       if (_queryController.text.trim().isNotEmpty) _search(_queryController.text);
                     },
                   ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            // Crédito da fonte (28/08/2026, pedido do usuário) — só aparece
+            // quando os resultados vieram da BLIVRE.
+            if (_results != null && _results!.isNotEmpty && _resultsFromBlivre)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0',
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
                 ),
               ),
             const SizedBox(height: 8),

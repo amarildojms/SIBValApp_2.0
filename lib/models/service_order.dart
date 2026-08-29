@@ -29,9 +29,22 @@ class ServiceOrder {
 
   final String prayerText;
 
+  /// Anotação livre do dirigente pro momento "Boas-vindas" (28/08/2026,
+  /// pedido do usuário) — exibida logo abaixo desse momento (formulário,
+  /// prévia, modo apresentação e as duas visões somente-leitura) só quando
+  /// não vazia. Não é um "momento" em si — não entra em `momentOrder`, não é
+  /// reordenável nem marcável como concluído, só um texto informativo fixo
+  /// na posição de Boas-vindas.
+  final String welcomeNotes;
+
   final List<BibleReference> bibleReadings;
 
   final String praise1;
+
+  /// Mesma ideia de `welcomeNotes`, só que pro momento "Avisos/Comunicações"
+  /// (28/08/2026, pedido do usuário — "implemente o campo anotações abaixo
+  /// de avisos também com as mesmas funcionalidades").
+  final String announcementsNotes;
 
   final String participation;
 
@@ -101,8 +114,10 @@ class ServiceOrder {
     this.preludeStyle = PreludeStyle.instrumental,
     this.preludeOther = '',
     this.prayerText = 'Dirigente',
+    this.welcomeNotes = '',
     this.bibleReadings = const [],
     this.praise1 = 'Ministério Adorai',
+    this.announcementsNotes = '',
     this.participation = '',
     this.missionMoment = MissionMoment.naoHavera,
     this.missionTheme = '',
@@ -140,8 +155,10 @@ class ServiceOrder {
       preludeStyle: preludeStyle,
       preludeOther: preludeOther,
       prayerText: prayerText,
+      welcomeNotes: welcomeNotes,
       bibleReadings: bibleReadings,
       praise1: praise1,
+      announcementsNotes: announcementsNotes,
       participation: participation,
       missionMoment: missionMoment,
       missionTheme: missionTheme,
@@ -178,8 +195,10 @@ class ServiceOrder {
       'preludeStyle': preludeStyle.name,
       'preludeOther': preludeOther,
       'prayerText': prayerText,
+      'welcomeNotes': welcomeNotes,
       'bibleReadings': bibleReadings.map((r) => r.toMap()).toList(),
       'praise1': praise1,
+      'announcementsNotes': announcementsNotes,
       'participation': participation,
       'missionMoment': missionMoment.name,
       'missionTheme': missionTheme,
@@ -212,12 +231,14 @@ class ServiceOrder {
       preludeStyle: PreludeStyle.fromName(data['preludeStyle'] as String?),
       preludeOther: data['preludeOther'] as String? ?? '',
       prayerText: data['prayerText'] as String? ?? '',
+      welcomeNotes: data['welcomeNotes'] as String? ?? '',
       bibleReadings:
           (data['bibleReadings'] as List<dynamic>?)
               ?.map((e) => BibleReference.fromMap(e as Map<String, dynamic>?))
               .toList() ??
           const [],
       praise1: data['praise1'] as String? ?? '',
+      announcementsNotes: data['announcementsNotes'] as String? ?? '',
       participation: data['participation'] as String? ?? '',
       missionMoment: MissionMoment.fromName(data['missionMoment'] as String?),
       missionTheme: data['missionTheme'] as String? ?? '',

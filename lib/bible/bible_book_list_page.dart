@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/bible_repository.dart';
+import '../data/bible_source_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -12,6 +13,15 @@ import 'bible_search_page.dart';
 /// Espelha BibleBookListFragment.kt: lista de livros dividida em Antigo e
 /// Novo Testamento (a divisão vem do `testament_reference_id` do Gênesis,
 /// não existe uma tabela de testamentos separada no banco OpenLP).
+///
+/// **Seletor de versão** (28/08/2026, pedido do usuário — ver doc comment de
+/// `BibleVersion`/`bible_source_repository.dart`) — **revisão da mesma
+/// sessão**: os dois `ChoiceChip`s soltos na tela viraram um menu ☰ ao lado
+/// do título (`_BibleVersionMenuButton`, mesmo padrão de `PraiseMinistryPage`/
+/// `_PraiseMenuButton`), pedido explícito do usuário pra "deixar as opções
+/// de versão mais escondidas". A escolha continua persistida
+/// (`bibleVersionProvider`) e valendo pra toda a aba — capítulos, leitura,
+/// busca e favoritos.
 class BibleBookListPage extends ConsumerWidget {
   const BibleBookListPage({super.key});
 
@@ -27,7 +37,24 @@ class BibleBookListPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ScreenTitle('Bíblia'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Bíblia',
+                      style: TextStyle(
+                        color: SibValColors.goldAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 19,
+                      ),
+                    ),
+                  ),
+                  const _BibleVersionMenuButton(),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -91,6 +118,49 @@ class BibleBookListPage extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Menu (3 barras) com a escolha de versão (28/08/2026, pedido do usuário —
+/// mesmo padrão de `PraiseMinistryPage`/`_PraiseMenuButton`) — um traço
+/// (`PopupMenuDivider`), o rótulo "Versões" (item desabilitado, só
+/// cabeçalho) e as duas opções, com `CheckedPopupMenuItem` marcando a
+/// selecionada.
+class _BibleVersionMenuButton extends ConsumerWidget {
+  const _BibleVersionMenuButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(bibleVersionProvider);
+    return PopupMenuButton<BibleVersion>(
+      icon: Icon(Icons.menu, color: context.textPrimary),
+      onSelected: (value) =>
+          ref.read(bibleVersionProvider.notifier).set(value),
+      itemBuilder: (context) => [
+        const PopupMenuDivider(),
+        PopupMenuItem<BibleVersion>(
+          enabled: false,
+          child: Text(
+            'Versões',
+            style: TextStyle(
+              color: context.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        CheckedPopupMenuItem<BibleVersion>(
+          value: BibleVersion.blivre,
+          checked: version == BibleVersion.blivre,
+          child: const Text('Bíblia Livre'),
+        ),
+        CheckedPopupMenuItem<BibleVersion>(
+          value: BibleVersion.almeida1911,
+          checked: version == BibleVersion.almeida1911,
+          child: const Text('Almeida 1911'),
+        ),
+      ],
     );
   }
 }

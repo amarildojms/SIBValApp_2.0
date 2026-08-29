@@ -341,7 +341,24 @@ class _ServiceOrderReadOnlyBodyState extends ConsumerState<ServiceOrderReadOnlyB
         final leaves = _leafKeysFor(baseKey, item, order);
         final isDone = _isDone(completed, baseKey, leaves, item);
         final rows = _detailRowsFor(item, order, repertoire);
-        return _PraiseMomentCard(index: index, item: item, order: order, isDone: isDone, rows: rows);
+        final momentCard =
+            _PraiseMomentCard(index: index, item: item, order: order, isDone: isDone, rows: rows);
+        // Anotação livre logo abaixo de "Boas-vindas"/"Avisos/Comunicações"
+        // (28/08/2026, pedido do usuário) — mesma exibição somente-leitura
+        // pras duas visões que reaproveitam este widget (Louvor e membro
+        // comum).
+        final momentNotes = switch (item.type) {
+          ServiceOrderMomentType.welcome => order.welcomeNotes,
+          ServiceOrderMomentType.announcements => order.announcementsNotes,
+          _ => '',
+        };
+        if (momentNotes.isNotEmpty) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [momentCard, _MomentNotesCard(text: momentNotes)],
+          );
+        }
+        return momentCard;
       },
     );
   }
@@ -491,6 +508,29 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.communion => '🍷',
   _ => null,
 };
+
+/// Caixa com a anotação livre do dirigente pro momento "Boas-vindas"/"Avisos/
+/// Comunicações" (28/08/2026, pedido do usuário) — mesmo widget de
+/// `service_order_live_page.dart`, duplicado aqui por ser privado ao arquivo
+/// (Dart não exporta classes `_Foo` entre libraries).
+class _MomentNotesCard extends StatelessWidget {
+  const _MomentNotesCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+    );
+  }
+}
 
 class _PraiseMomentCard extends StatelessWidget {
   const _PraiseMomentCard({

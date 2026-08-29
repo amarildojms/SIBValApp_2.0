@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/bible_repository.dart';
+import '../data/bible_source_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'bible_reader_page.dart';
 
 /// Espelha BibleChapterPickerFragment.kt: grade de capítulos (5 por linha).
+/// Contagem de capítulos vem da versão escolhida (28/08/2026,
+/// `versionedChapterCountProvider`) — na prática sempre bate entre as duas
+/// (mesma versificação canônica), mas evita mostrar um capítulo que a fonte
+/// escolhida não tem.
 class BibleChapterPickerPage extends ConsumerWidget {
   const BibleChapterPickerPage({super.key, required this.bookId, required this.bookName});
 
@@ -15,7 +19,7 @@ class BibleChapterPickerPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final countAsync = ref.watch(bibleChapterCountProvider(bookId));
+    final countAsync = ref.watch(versionedChapterCountProvider(bookId));
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -31,14 +35,14 @@ class BibleChapterPickerPage extends ConsumerWidget {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) =>
                   Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-              data: (count) => GridView.builder(
+              data: (resolved) => GridView.builder(
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 5,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
                 ),
-                itemCount: count,
+                itemCount: resolved.count,
                 itemBuilder: (context, index) {
                   final chapter = index + 1;
                   return _ChapterButton(

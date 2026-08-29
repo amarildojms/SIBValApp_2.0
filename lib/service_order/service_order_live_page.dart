@@ -517,7 +517,7 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                     final extraSummary = item.type == ServiceOrderMomentType.welcome
                         ? _welcomeSummary()
                         : (item.type != null ? _repertoireSummaryFor(item.type!) : null);
-                    return _MomentCard(
+                    final momentCard = _MomentCard(
                       index: index,
                       item: item,
                       order: order,
@@ -531,6 +531,22 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                       extraSummary: extraSummary,
                       onTap: () => _onTapLeaf(key, singleAction),
                     );
+                    // Anotação livre logo abaixo de "Boas-vindas"/"Avisos/
+                    // Comunicações" (28/08/2026, pedido do usuário) — ver doc
+                    // comment de `ServiceOrder.welcomeNotes`/
+                    // `.announcementsNotes`. Não é marcável, só texto.
+                    final momentNotes = switch (item.type) {
+                      ServiceOrderMomentType.welcome => order.welcomeNotes,
+                      ServiceOrderMomentType.announcements => order.announcementsNotes,
+                      _ => '',
+                    };
+                    if (momentNotes.isNotEmpty) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [momentCard, _MomentNotesCard(text: momentNotes)],
+                      );
+                    }
+                    return momentCard;
                   },
                 ),
               ),
@@ -753,6 +769,28 @@ class _MomentCard extends StatelessWidget {
 /// ofertas" (sempre, mesmo com só uma subcategoria preenchida): cabeçalho
 /// não-tocável + uma linha por sub-ação, cada uma marcando concluído só
 /// depois de abrir a leitura de verdade.
+/// Caixa com a anotação livre do dirigente pro momento "Boas-vindas"/"Avisos/
+/// Comunicações" (28/08/2026, pedido do usuário) — logo abaixo do card do
+/// momento, sem nenhuma interação (não marca concluído, não navega).
+class _MomentNotesCard extends StatelessWidget {
+  const _MomentNotesCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+    );
+  }
+}
+
 class _MomentGroupCard extends StatelessWidget {
   const _MomentGroupCard({
     required this.index,

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_favorites_repository.dart';
 import '../data/bible_repository.dart';
+import '../data/bible_source_repository.dart';
 import '../models/bible.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -19,6 +20,12 @@ const _fontSizeStep = 2.0;
 /// em sobrescrito/dourado, navegação Anterior/Próximo cruzando limites de
 /// livro, fonte ajustável e persistida, e favoritar versículo (toque no texto
 /// seleciona, toque na estrela do cabeçalho confirma o favorito).
+///
+/// **Fonte do texto** (28/08/2026, pedido do usuário — ver doc comment de
+/// `BibleVersion`): lê da versão escolhida em `BibleBookListPage`
+/// (`bibleVersionProvider`), com crédito exibido abaixo do cabeçalho quando
+/// o texto veio da BLIVRE (`resolved.fromBlivre`) — mesmo padrão já usado em
+/// `ServiceOrderBibleTextPage`.
 class BibleReaderPage extends ConsumerStatefulWidget {
   const BibleReaderPage({super.key, required this.bookId, required this.bookName, required this.chapter});
 
@@ -109,13 +116,16 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
     }
     if (_bookId > BibleRepository.firstBookId) {
       final previousBookId = _bookId - 1;
-      final count = await ref.read(bibleRepositoryProvider).getChapterCount(previousBookId);
+      final version = ref.read(bibleVersionProvider);
+      final resolved = await ref
+          .read(bibleSourceRepositoryProvider)
+          .getChapterCount(version, previousBookId);
       final books = await ref.read(bibleBooksProvider.future);
       final name = books.firstWhere((b) => b.id == previousBookId).name;
       setState(() {
         _bookId = previousBookId;
         _bookName = name;
-        _chapter = count;
+        _chapter = resolved.count;
       });
       _loadFavorites();
     }
@@ -142,9 +152,9 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final versesAsync = ref.watch(bibleVersesProvider((bookId: _bookId, chapter: _chapter)));
-    final chapterCountAsync = ref.watch(bibleChapterCountProvider(_bookId));
-    final chapterCount = chapterCountAsync.asData?.value;
+    final versesAsync = ref.watch(versionedVersesProvider((bookId: _bookId, chapter: _chapter)));
+    final chapterCountAsync = ref.watch(versionedChapterCountProvider(_bookId));
+    final chapterCount = chapterCountAsync.asData?.value.count;
 
     final hasPrevious = !(_bookId == BibleRepository.firstBookId && _chapter == 1);
     final hasNext = !(_bookId == BibleRepository.lastBookId && chapterCount != null && _chapter == chapterCount);
@@ -165,16 +175,31 @@ class _BibleReaderPageState extends ConsumerState<BibleReaderPage> {
                   onDecreaseFont: () => _changeFontSize(-_fontSizeStep),
                   onIncreaseFont: () => _changeFontSize(_fontSizeStep),
                 ),
+                // Crédito da fonte (28/08/2026, pedido do usuário) — só
+                // aparece com a BLIVRE; o Almeida 1911 é domínio público,
+                // sem exigência de crédito.
+                versesAsync.maybeWhen(
+                  data: (resolved) => resolved.fromBlivre
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                          child: Text(
+                            'Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0',
+                            style: TextStyle(color: context.textSecondary, fontSize: 12),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                  orElse: () => const SizedBox.shrink(),
+                ),
                 Expanded(
                   child: versesAsync.when(
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (error, _) =>
                         Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
-                    data: (verses) => SingleChildScrollView(
+                    data: (resolved) => SingleChildScrollView(
                       key: ValueKey('$_bookId-$_chapter'),
                       padding: const EdgeInsets.all(20),
                       child: _VersesText(
-                        verses: verses,
+                        verses: resolved.verses,
                         fontSize: _fontSize,
                         selectedVerses: _selectedVerses,
                         favoriteVerses: _favoriteVerses,

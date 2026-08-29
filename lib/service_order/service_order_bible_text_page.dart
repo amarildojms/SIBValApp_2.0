@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_repository.dart';
+import '../data/blivre_repository.dart';
+import '../models/bible.dart';
 import '../models/service_order.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -12,6 +14,38 @@ const _defaultFontSize = 16.0;
 const _minFontSize = 12.0;
 const _maxFontSize = 26.0;
 const _fontSizeStep = 2.0;
+
+/// Texto bíblico resolvido pra um capítulo — de qual fonte veio, pra
+/// `ServiceOrderBibleTextPage` decidir o que mostrar na linha de crédito
+/// (28/08/2026, pedido do usuário: "buscando de um site específico, e
+/// colocando os devidos créditos"). Tenta a BLIVRE primeiro
+/// (`BlivreRepository`, online, cacheada em disco após a 1ª busca); se
+/// falhar (sem internet e sem cache ainda) ou o capítulo não existir lá por
+/// algum motivo, cai pro Almeida 1911 local (`BibleRepository`, sempre
+/// disponível, offline).
+typedef _ResolvedVerses = ({List<BibleVerse> verses, bool fromBlivre});
+
+final _resolvedBibleVersesProvider =
+    FutureProvider.autoDispose.family<_ResolvedVerses, BibleReaderKey>((
+      ref,
+      key,
+    ) async {
+      try {
+        final blivre = await ref
+            .watch(blivreRepositoryProvider)
+            .getVerses(key.bookId, key.chapter);
+        if (blivre != null && blivre.isNotEmpty) {
+          return (verses: blivre, fromBlivre: true);
+        }
+      } catch (_) {
+        // Sem internet, sem cache ainda, ou falha de rede — cai pro Almeida
+        // 1911 local abaixo, sem quebrar a leitura.
+      }
+      final local = await ref
+          .watch(bibleRepositoryProvider)
+          .getVerses(key.bookId, key.chapter);
+      return (verses: local, fromBlivre: false);
+    });
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Ao tocar num texto bíblico dentro do modo apresentação
@@ -23,6 +57,13 @@ const _fontSizeStep = 2.0;
 /// os mesmos botões de zoom da leitura normal (`_fontSizeKey` compartilha a
 /// preferência salva com `BibleReaderPage`, mesmo texto/tamanho entre as
 /// duas leituras).
+///
+/// **Fonte do texto** (28/08/2026, pedido do usuário — ver doc comment de
+/// `BlivreRepository`): busca primeiro na Bíblia Livre (BLIVRE, online, com
+/// crédito exibido abaixo do título); só essa tela usa essa fonte — a aba
+/// "Bíblia" principal e o restante da Ordem de Culto (seleção de livro/
+/// capítulo/versículo) continuam no Almeida 1911 local, inclusive como
+/// fallback aqui se a BLIVRE não responder.
 ///
 /// Zoom dentro do corpo, não na `SibValAppBar` (28/08/2026, correção — a
 /// barra superior é fixa/compartilhada em todo o app, só com o logo e
@@ -66,8 +107,8 @@ class _ServiceOrderBibleTextPageState
   @override
   Widget build(BuildContext context) {
     final reference = widget.reference;
-    final versesAsync = ref.watch(
-      bibleVersesProvider((bookId: reference.bookId!, chapter: reference.chapter!)),
+    final resolvedAsync = ref.watch(
+      _resolvedBibleVersesProvider((bookId: reference.bookId!, chapter: reference.chapter!)),
     );
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -102,8 +143,25 @@ class _ServiceOrderBibleTextPageState
                 ],
               ),
             ),
+            // Crédito da fonte (28/08/2026, pedido do usuário) — só aparece
+            // com a BLIVRE; o Almeida 1911 (fallback offline) é domínio
+            // público, sem exigência de crédito, mas o rótulo "(offline)"
+            // ajuda a entender por que o texto pode ler diferente do
+            // normal quando a busca online falha.
+            resolvedAsync.maybeWhen(
+              data: (resolved) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  resolved.fromBlivre
+                      ? 'Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0'
+                      : 'Fonte: Almeida 1911 (offline)',
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
+                ),
+              ),
+              orElse: () => const SizedBox.shrink(),
+            ),
             Expanded(
-              child: versesAsync.when(
+              child: resolvedAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => Center(
                   child: Text(
@@ -111,7 +169,8 @@ class _ServiceOrderBibleTextPageState
                     style: TextStyle(color: context.textPrimary),
                   ),
                 ),
-                data: (verses) {
+                data: (resolved) {
+                  final verses = resolved.verses;
                   final start = reference.verseStart!;
                   final end = reference.verseEnd ?? start;
                   final filtered = verses

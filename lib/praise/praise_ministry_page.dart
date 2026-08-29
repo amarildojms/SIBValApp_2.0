@@ -8,6 +8,7 @@ import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'cifra_list_page.dart';
+import 'ensaios_list_page.dart';
 import 'weekly_repertoire_form_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
@@ -99,9 +100,9 @@ class PraiseMinistryPage extends ConsumerWidget {
   }
 }
 
-/// Menu (3 barras) com as opções do Ministério de Louvor — só "Cifras" por
-/// enquanto, pensado pra crescer sem precisar de mais tiles soltos no menu
-/// Mais.
+/// Menu (3 barras) com as opções do Ministério de Louvor — "Cifras" e
+/// "Ensaios" (28/08/2026), pensado pra crescer sem precisar de mais tiles
+/// soltos no menu Mais.
 class _PraiseMenuButton extends StatelessWidget {
   const _PraiseMenuButton();
 
@@ -113,6 +114,10 @@ class _PraiseMenuButton extends StatelessWidget {
         if (value == 'cifras') {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const CifraListPage()),
+          );
+        } else if (value == 'ensaios') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const EnsaiosListPage()),
           );
         }
       },
@@ -126,6 +131,16 @@ class _PraiseMenuButton extends StatelessWidget {
               Icon(Icons.lyrics_outlined, size: 20),
               SizedBox(width: 12),
               Text('Cifras'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'ensaios',
+          child: Row(
+            children: [
+              Icon(Icons.event_repeat_outlined, size: 20),
+              SizedBox(width: 12),
+              Text('Ensaios'),
             ],
           ),
         ),

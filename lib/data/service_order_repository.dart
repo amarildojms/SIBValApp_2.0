@@ -63,6 +63,20 @@ class ServiceOrderRepository {
 
   Future<void> delete(String id) => _serviceOrders.doc(id).delete();
 
+  /// Transferência de propriedade (28/08/2026, pedido do usuário) — só o
+  /// admin consegue de fato gravar isso em produção (`firestore.rules`:
+  /// `update` de quem não é dono da ordem só passa quando os únicos campos
+  /// alterados são `ownerUid`/`ownerName`). Quem passa a ser dono ganha o
+  /// direito de editar/excluir/iniciar culto/marcar momentos dessa ordem; o
+  /// dono anterior perde esse acesso — nem o admin escapa dessa regra, só
+  /// pode manipular a ordem transferindo-a pra si mesmo primeiro.
+  Future<void> transferOwner(String id, String ownerUid, String ownerName) {
+    return _serviceOrders.doc(id).update({
+      'ownerUid': ownerUid,
+      'ownerName': ownerName,
+    });
+  }
+
   /// Progresso do modo apresentação (`ServiceOrderLivePage`, 28/08/2026,
   /// pedido do usuário) — grava só `completedMomentKeys`, nunca os outros
   /// campos, pra uma edição normal (`update`) nunca resetar isso e vice-versa.

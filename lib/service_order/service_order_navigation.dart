@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/post_repository.dart' show currentUidProvider;
 import '../data/service_order_repository.dart';
 import '../data/user_repository.dart';
 import 'service_order_member_view_page.dart';
@@ -8,12 +9,18 @@ import 'service_order_praise_view_page.dart';
 import 'service_order_precheck_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
-/// usuário). Despacho por papel pra uma ordem de culto — Dirigentes/admin
-/// vão pro Precheck (contagem regressiva + "Iniciar Culto"), Louvor vai pra
-/// visão própria com tom/cifra, os demais (membro comum ou acesso
-/// convidado, sem conta — `profile` pode ser `null`) vão pra
-/// `ServiceOrderMemberViewPage` (travada num timer até o dirigente
-/// iniciar). Compartilhado entre o toque numa ordem em
+/// usuário). Despacho por papel/dono pra uma ordem de culto — **revisão de
+/// 28/08/2026, mesma sessão**: só o dono da ordem (`ServiceOrder.ownerUid`)
+/// vai pro Precheck (contagem regressiva + "Iniciar Culto") — antes bastava
+/// ser Dirigentes/admin, mas edição/exclusão/iniciar/marcar momento viraram
+/// exclusivos do dono ("Nem mesmo admin poderá fazer estas ações", pedido do
+/// usuário), então mandar um Dirigentes/admin que não é dono pro Precheck só
+/// mostraria um botão "Iniciar Culto" que falharia por permissão — em vez
+/// disso, qualquer um que não seja o dono (dirigente não-dono, admin
+/// não-dono, Louvor, membro comum ou acesso convidado) cai nas mesmas visões
+/// somente-leitura de sempre: Louvor vai pra visão própria com tom/cifra, os
+/// demais vão pra `ServiceOrderMemberViewPage` (travada num timer até o
+/// dono tocar em "Iniciar Culto"). Compartilhado entre o toque numa ordem em
 /// `ServiceOrderListPage` e o toque numa notificação de Ordem de Culto
 /// (`NotificationType.serviceOrderReminder`/`.serviceOrderStarted`, em
 /// `notification_navigation.dart`).
@@ -32,23 +39,27 @@ import 'service_order_precheck_page.dart';
 Future<void> openServiceOrder(BuildContext context, String orderId) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final profile = container.read(currentUserProfileProvider).asData?.value;
-  final canManageOrders = profile?.canManageServiceOrders ?? false;
+  final uid = container.read(currentUidProvider);
   final canViewPraise = profile?.canViewPraiseOrder ?? false;
 
-  if (!canManageOrders) {
+  final order = await container
+      .read(serviceOrderRepositoryProvider)
+      .watchOne(orderId)
+      .first;
+  if (!context.mounted || order == null) return;
+
+  if (order.ownerUid.isNotEmpty && order.ownerUid == uid) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => canViewPraise
-            ? ServiceOrderPraiseViewPage(orderId: orderId)
-            : ServiceOrderMemberViewPage(orderId: orderId),
-      ),
+      MaterialPageRoute(builder: (_) => ServiceOrderPrecheckPage(order: order)),
     );
     return;
   }
 
-  final order = await container.read(serviceOrderRepositoryProvider).watchOne(orderId).first;
-  if (!context.mounted || order == null) return;
   Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => ServiceOrderPrecheckPage(order: order)),
+    MaterialPageRoute(
+      builder: (_) => canViewPraise
+          ? ServiceOrderPraiseViewPage(orderId: orderId)
+          : ServiceOrderMemberViewPage(orderId: orderId),
+    ),
   );
 }

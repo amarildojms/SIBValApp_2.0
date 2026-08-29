@@ -2136,6 +2136,401 @@ pedidos do usuário):**
   levando pra `MessageDetailPage(messageId: targetId)` desde antes desta
   feature existir. Já funcionava por construção.
 
+**Ordem de Culto — 15ª rodada: "Ensaios" no Ministério de Louvor,
+propriedade exclusiva do dono (nem admin escapa), notificação "Culto"+tema,
+Anotações após Boas-vindas e Escala de Dirigentes (28/08/2026, mesma sessão,
+pedidos do usuário):**
+
+- **"Ensaios"** — nova opção no menu ☰ do Ministério de Louvor
+  (`_PraiseMenuButton`, ao lado de "Cifras"), mesma audiência
+  (`canViewPraiseOrder`/`canEditCifrasProvider`). `EnsaiosListPage`
+  (`lib/praise/ensaios_list_page.dart`) lista os repertórios semanais já
+  cadastrados (`weeklyRepertoiresProvider`, mesma fonte da aba "Repertório
+  Semanal") — toque abre `EnsaioDetailPage`, somente leitura: músicas
+  escaladas com nome/cantor/tom (`PraiseAssignment.toneDisplay`) e os links
+  de playlist (tocáveis, `url_launcher`, mesmo padrão de
+  `partners_page.dart`). Toque numa música só navega pra `CifraViewPage`
+  quando existe cifra com conteúdo pra ela (`cifrasProvider`, cruzado por
+  `songId` — sem cifra, a linha fica sem link, "se houver cifra, ao tocar
+  ele irá abrir a cifra", pedido literal do usuário).
+
+- **Propriedade exclusiva do dono — nem admin escapa.** Pedido do usuário:
+  "Uma ordem de culto deve ser Editada/Excluída, Iniciar culto e até
+  marcado cada momento como concluído SOMENTE pelo seu criador. Nem mesmo
+  admin poderá fazer estas ações." `SIBValApp2/firestore.rules`
+  (`serviceOrders`): `update` passou a exigir
+  `isDirigentes() && resource.data.ownerUid == request.auth.uid` — a
+  exceção antiga `isAdmin() ||` foi retirada; admin só consegue gravar
+  quando o `update` toca **só** `ownerUid`/`ownerName`
+  (`request.resource.data.diff(resource.data).affectedKeys().hasOnly([...])`),
+  ou seja, só a transferência de propriedade. `delete` virou
+  `isDirigentes() && resource.data.ownerUid == request.auth.uid`, sem
+  exceção nenhuma pro admin. Como `markStarted`/`updateProgress`/`finalize`
+  (`ServiceOrderRepository`) também passam por `update()` nesse documento,
+  a mesma regra cobre iniciar o culto e marcar momentos automaticamente,
+  sem precisar de campos/regras extras.
+
+  `ServiceOrderListPage._showActions`: Editar/Excluir só aparecem se
+  `isOwner`; novo item "Alterar proprietário" só aparece se `isAdmin`
+  (independente de quem é o dono atual) — leva pra
+  `ServiceOrderTransferOwnerPage` (nova, `lib/service_order/
+  service_order_transfer_owner_page.dart`), lista usuários aprovados com
+  papel Dirigentes ou admin (mesmo critério de `isDirigentes()` nativo — só
+  quem passa nessa checagem consegue editar depois de virar dono), toque
+  confirma e chama `ServiceOrderRepository.transferOwner` (novo método, só
+  `ownerUid`/`ownerName`). "A visão do admin para a ordem de culto será a
+  mesma de um usuário comum, com o privilégio de poder alterar o
+  proprietário" — `openServiceOrder` (`service_order_navigation.dart`)
+  passou a despachar por **dono**, não mais por papel: só quem tem
+  `order.ownerUid == uid` vai pro Precheck/"Iniciar Culto"; qualquer outro
+  (Dirigentes não-dono, admin não-dono, Louvor, membro comum, convidado) cai
+  nas mesmas visões somente-leitura de sempre (Louvor ou membro comum) — um
+  Dirigentes/admin que não é dono nunca mais vê um botão "Iniciar Culto" que
+  falharia por permissão.
+
+- **Notificação de início: "Culto" + tema.** Pedido do usuário: "Quanto
+  houver um tema coloque Culto+tema, quando não houver mantenha somente
+  Culto." `onServiceOrderStartedNotify`
+  (`SIBValApp2/functions/index.js`) — `displayName` virou
+  `` `Culto — ${after.theme}` `` quando há tema, `"Culto"` sozinho quando
+  não há (antes era só o tema puro, sem a palavra "Culto", ou "O culto"
+  minúsculo sem tema). Só esse gatilho foi ajustado — o pedido foi
+  especificamente sobre "notificações de início de culto"; o lembrete de 5
+  minutos antes (`sendServiceOrderReminders`) e o aviso de finalização
+  continuam com o texto de antes.
+
+- **Campo "Anotações" após Boas-vindas** — `ServiceOrder.welcomeNotes`
+  (String, vazio por padrão) — texto livre do dirigente, sem equivalente no
+  nativo. Não é um "momento" (não entra em `momentOrder`, não reordenável,
+  não marcável) — só aparece, quando preenchido, logo abaixo do card de
+  "Boas-vindas" nas quatro telas que renderizam a liturgia:
+  `ServiceOrderFormPage` (campo multi-linha logo após o rótulo "Boas-
+  vindas"), `ServiceOrderPreviewPage`, `ServiceOrderLivePage` (novo widget
+  privado `_WelcomeNotesCard`) e `ServiceOrderReadOnlyBody`
+  (`service_order_praise_view_page.dart`, reaproveitada por Louvor e membro
+  comum — mesmo widget duplicado localmente, privado por arquivo).
+
+- **Escala de Dirigentes** (novo, sem equivalente no nativo) — planejamento
+  antecipado de quem vai dirigir cada culto + tema, distinto da
+  `ServiceOrder` em si (que só existe quando o dirigente de fato monta a
+  liturgia daquele culto específico). Acessível pelo novo menu ☰ dentro de
+  "Ordem de Culto" (`ServiceOrderListPage`, mesmo padrão visual do menu do
+  Ministério de Louvor), item "Escala de Dirigentes" — visível a quem tem
+  `canViewLeaderSchedule` (`CurrentUserProfile`, novo getter: admin, Pastor
+  ou Dirigentes). Modelo `LeaderScheduleEntry`
+  (`lib/models/leader_schedule.dart`): data (horário fixo 19h, sem seletor
+  próprio — mesmo padrão do culto de domingo à noite), `leaderUid`/
+  `leaderName`, `theme` (prévia do tema pretendido — não sincroniza
+  automaticamente com `ServiceOrder.theme` quando a ordem é criada depois).
+  Repositório em `lib/data/leader_schedule_repository.dart`, coleção
+  `leaderSchedules`, ordenada ascendente (agenda de planejamento futuro, ao
+  contrário do histórico descendente de `serviceOrders`).
+
+  `LeaderScheduleListPage` lista as entradas; FAB "Nova Escala" só pra
+  `canManageLeaderSchedule` (novo getter: admin ou Pastor — "o pastor terá
+  autorização para inserir os escalados"); toque abre
+  `LeaderScheduleFormPage` editável pra quem gerencia, ou em modo
+  `readOnly: true` (sem Salvar/Excluir) pra Dirigentes ("terão o acesso de
+  visualização"). Seleção do dirigente escalado via bottom sheet de busca
+  (`_LeaderPickerSheet`) — candidatos são usuários aprovados com papel
+  Dirigentes ou admin, mesmo critério já usado em
+  `ServiceOrderTransferOwnerPage`.
+
+  Duas mensagens automáticas pro dirigente escalado (Central de Mensagens,
+  `SIBValApp2/functions/index.js`, só código-fonte — **não fiz `firebase
+  deploy`**, mesma cautela de sempre): `sendLeaderScheduleTuesdayNotice`
+  (cron toda terça-feira 8h, horário de Brasília) avisa quem está escalado
+  pra alguma data dentro dos próximos 7 dias que é um bom momento pra
+  preparar a direção do culto — idempotente via `tuesdayNoticeSent`, nunca
+  se repete pra mesma entrada; `sendLeaderScheduleReminders` (cron a cada 15
+  min, mesmo padrão de janela/idempotência de
+  `sendServiceOrderParticipationReminders`) manda o lembrete 24h antes,
+  idempotente via `reminder24hSent`. `SIBValApp2/firestore.rules` ganhou
+  `match /leaderSchedules` (`read` pra Dirigentes/Pastor/admin, `write` só
+  Pastor/admin) — também só código-fonte, sem deploy.
+
+**Ordem de Culto — 16ª rodada: Anotações também abaixo de Avisos, "Alterar
+proprietário" virou bottom sheet em vez de tela (28/08/2026, mesma sessão,
+pedidos do usuário):**
+
+- **Segundo campo de anotações.** `ServiceOrder.announcementsNotes` — mesma
+  ideia de `welcomeNotes` (texto livre, opcional, sem entrar em
+  `momentOrder`, não reordenável nem marcável), só que pro momento "Avisos/
+  Comunicações". Mesmas quatro telas: campo no formulário logo abaixo do
+  rótulo "Avisos/Comunicações", exibição condicional em
+  `ServiceOrderPreviewPage`, `ServiceOrderLivePage` e
+  `ServiceOrderReadOnlyBody` (Louvor/membro comum). O widget que exibe a
+  anotação (antes `_WelcomeNotesCard`, só pra Boas-vindas) virou
+  `_MomentNotesCard` (renomeado nos dois arquivos que o duplicam,
+  `service_order_live_page.dart`/`service_order_praise_view_page.dart`) —
+  genérico o bastante pra servir aos dois momentos via um `switch
+  (item.type)` que escolhe `welcomeNotes` ou `announcementsNotes`.
+
+- **"Alterar proprietário" deixou de ser uma tela.** O usuário corrigiu a
+  1ª versão (`ServiceOrderTransferOwnerPage`, uma página própria,
+  removida): "A funcionalidade de alterar proprietário deve ser uma opção
+  direto na ordem de culto, não deve ser uma nova tela." Virou
+  `_showTransferOwnerSheet`/`_TransferOwnerSheet`, um `showModalBottomSheet`
+  chamado direto de dentro de `ServiceOrderListPage._showActions` (mesmo
+  arquivo, mesma tela) — busca + lista de candidatos, confirmação e
+  `ServiceOrderRepository.transferOwner`, sem nenhuma navegação
+  (`Navigator.push`) envolvida. Mesmo critério de candidatos de antes
+  (aprovado + Dirigentes/admin).
+
+**Deploy feito (mesma sessão):** aval explícito do usuário — `firebase
+deploy --only
+firestore:rules,functions:onServiceOrderStartedNotify,functions:sendLeaderScheduleTuesdayNotice,functions:sendLeaderScheduleReminders
+--project sibval-app-project`. Publicou a regra de `serviceOrders`
+(propriedade exclusiva do dono, admin só transfere) + `match
+/leaderSchedules`, o texto novo de `onServiceOrderStartedNotify`
+("Culto"+tema) e as duas Cloud Functions da Escala de Dirigentes (aviso de
+terça, lembrete de 24h) — as três funções desta entrada e da anterior estão
+ativas em produção a partir de agora.
+
+**Ordem de Culto — 17ª rodada: texto bíblico via internet (BLIVRE), com
+crédito e fallback offline (28/08/2026, mesma sessão, pedido do usuário):**
+
+Pedido: "Enquanto não temos versões da bíblia mais atualizadas, é possível
+que a busca dos textos bíblicos na ordem de culto seja feita na internet,
+buscando de um site específico, e colocando os devidos créditos?" — só a
+tela que exibe o texto lido durante o culto (`ServiceOrderBibleTextPage`,
+aberta a partir de Leitura bíblica/Texto bíblico dos dízimos/momento
+adicional com referência bíblica), não a aba "Bíblia" principal nem a
+seleção de livro/capítulo/versículo (que continuam 100% locais, Almeida
+1911, `bible_database.dart`).
+
+**Pesquisa antes de implementar** (registrada porque mudou a recomendação
+inicial): a primeira ideia foi a API `abibliadigital.com.br`, mas foi
+**descontinuada em 01/08/2026** (confirmado via WebFetch no GitHub do
+projeto — site retornando 503). Alternativas pesquisadas: `wldeh/bible-api`
+(CDN estático, MIT, mas cobertura em português inutilizável — só uma edição
+parcial do NT e uma pasta vazia) e `damarals/biblias` (coletânea de 18
+Bíblias em português, JSON baixável por URL direta). Dentro dessa segunda,
+identificada a edição certa: **Bíblia Livre (BLIVRE), Textus Receptus**
+(mesma linhagem textual do Almeida — atualização da tradução de 1819,
+Bíblia completa AT+NT), licença **Creative Commons Atribuição 4.0**
+(permite uso comercial, exige só crédito — confirmado em
+https://ebible.org/details.php?id=porbr2018, que também confirmou não ser a
+edição alternativa de texto crítico/Nestle do mesmo projeto). Antes de
+implementar, o arquivo de verdade (`BLIVRE.json`, release `v1.0.0`) foi
+baixado e validado por script (`node`): 66 livros, nenhum livro/capítulo
+vazio, Salmos com 150 capítulos, Gênesis 1 com 31 versículos, João 3:16
+conferido palavra por palavra — e a lista de abreviações dos 66 livros
+comparada item a item com a real (achou 1 divergência: "Êxodo" é `"Êx"`,
+com acento, não `"Ex"` como se assumiria).
+
+**Implementação:** `lib/data/blivre_repository.dart` (`BlivreRepository`,
+sem provider de estado — só um `Provider` simples) baixa o `BLIVRE.json`
+inteiro (~3,8 MB) **uma vez só**, na primeira consulta, de uma URL de
+release **fixada em `v1.0.0`** (não "latest" — evita quebrar em silêncio se
+o formato mudar numa versão futura sem revisão manual), e cacheia em disco
+(`getDatabasesPath()/blivre.json`, mesmo diretório do `alm1911.sqlite` —
+reaproveita o diretório gravável do `sqflite`, sem precisar do pacote
+`path_provider`). Chamadas seguintes leem do cache em disco, sem rede.
+`_abbrevs` (lista fixa de 66 siglas, validada acima) mapeia `bookId` 1..66
+(mesmo id do banco local) pro `abbrev` da BLIVRE, sem tabela de conversão.
+
+`ServiceOrderBibleTextPage` ganhou `_resolvedBibleVersesProvider`
+(`FutureProvider.family`, privado ao arquivo) — tenta `BlivreRepository`
+primeiro; se falhar (sem internet e sem cache ainda) ou o capítulo não
+existir lá por algum motivo, cai pro Almeida 1911 local
+(`BibleRepository`, sempre disponível). Uma linha de crédito aparece
+abaixo do título: "Fonte: Bíblia Livre (BLIVRE), licença CC BY 4.0" quando
+o texto veio de lá, ou "Fonte: Almeida 1911 (offline)" no fallback (esse
+segundo não é exigência legal — Almeida 1911 é domínio público — só
+transparência sobre por que o texto pode ler diferente do normal quando a
+busca online falha).
+
+`http`/`path`/`sqflite` já eram dependências do projeto — nenhum pacote
+novo em `pubspec.yaml`. Sem mudança em `AndroidManifest.xml` — a permissão
+de internet já é herdada por outros plugins (Firebase etc.), confirmado
+porque o app já faz outras chamadas de rede (ex. ViaCEP via `http`).
+
+**Bug corrigido no primeiro teste real (mesma sessão):** usuário reportou
+"vários caracteres especiais nos textos" ao testar no celular. Causa:
+`response.body` do pacote `http` decodifica pelo charset do cabeçalho
+`Content-Type` da resposta; o GitHub serve o `BLIVRE.json` como
+`application/octet-stream`, sem charset declarado, então o pacote caía no
+padrão ISO-8859-1 (Latin-1) pra decodificar um arquivo que na verdade é
+UTF-8 — corrompendo todo acento. Trocado por `utf8.decode(response.bodyBytes)`
+(ignora o cabeçalho, decodifica os bytes brutos como UTF-8 de propósito) em
+`BlivreRepository._ensureLoaded`. O nome do arquivo de cache em disco
+também mudou de `blivre.json` pra `blivre_v2.json` — só trocar o código não
+bastava, quem já tinha testado (o próprio celular do usuário) já tinha um
+cache local corrompido gravado; o nome novo garante um download limpo, sem
+precisar de lógica de limpeza do cache antigo (ele só fica órfão, inofensivo,
+no armazenamento do app).
+
+**Aba "Bíblia" ganha as duas versões, BLIVRE como padrão (28/08/2026, mesma
+sessão, pedido do usuário: "é possível implementar esta mesma versão para a
+bíblia completa, mantendo as duas versões, porém a livre como padrão?"):**
+
+Estende o que já existia só na Ordem de Culto pra aba "Bíblia" inteira
+(lista de livros, capítulos, leitura, busca, favoritos) — usuário escolhe
+entre **Bíblia Livre (BLIVRE)**, padrão, e **Almeida 1911** (local, sempre
+disponível offline), com a mesma fonte/crédito/fallback já validados.
+
+- `lib/data/bible_source_repository.dart` (novo): `BibleVersion` enum
+  (`blivre`/`almeida1911`) + `BibleVersionNotifier`/`bibleVersionProvider`
+  — mesmo padrão de `ThemeModeNotifier` (`theme_preference.dart`): estado
+  síncrono já nasce em `BibleVersion.blivre` (padrão pedido), sobrescrito de
+  forma assíncrona se havia escolha salva (`shared_preferences`, chave
+  `bible_version`). `BibleSourceRepository` combina `BibleRepository`
+  (Almeida 1911) e `BlivreRepository` (BLIVRE) atrás de uma API única —
+  todo método tenta a BLIVRE quando `version == blivre` e cai pro Almeida
+  1911 se falhar, devolvendo sempre `fromBlivre` (pra tela saber qual
+  fonte respondeu de verdade, que pode divergir da escolha do usuário no
+  fallback). `versionedChapterCountProvider`/`versionedVersesProvider`
+  (`FutureProvider.family`) recalculam sozinhos quando `bibleVersionProvider`
+  muda — trocar a versão atualiza a leitura na hora.
+- `BlivreRepository` ganhou `getChapterCount`/`search`/`resolveRefs` — a
+  busca é uma varredura em memória (~31 mil versículos já cacheados depois
+  da 1ª leitura, sem SQL), cortada em 200 resultados como o Almeida 1911;
+  `books` (nome/ordem/testamento) sempre vem de `BibleRepository.getBooks()`
+  — estrutural, igual nas duas versões, sem motivo pra depender de rede.
+- `BibleBookListPage`: dois `ChoiceChip`s ("Bíblia Livre"/"Almeida 1911"),
+  mesmo padrão visual do escopo de busca — escolha persistida, vale pra
+  toda a aba.
+- `BibleChapterPickerPage`/`BibleReaderPage`/`BibleSearchPage`/
+  `BibleFavoritesPage`: trocados pros providers/repositório versionados;
+  `BibleReaderPage`/`BibleSearchPage`/`BibleFavoritesPage` ganharam a mesma
+  linha de crédito da Ordem de Culto ("Fonte: Bíblia Livre (BLIVRE), licença
+  CC BY 4.0"), só quando o texto exibido veio de lá. Favoritos guardam só a
+  referência (`bookId:chapter:verse`), nunca o texto — trocar de versão
+  muda o texto mostrado ali automaticamente, sem precisar refavoritar.
+- Nenhuma mudança nos seletores de livro/capítulo/versículo da Ordem de
+  Culto/Devocional (`_ChapterDropdown` etc.) nem no banco local em si — só
+  a leitura de texto corrido passou a respeitar a versão escolhida.
+
+**Ordem de Culto — realce sutil de campo vazio no formulário (28/08/2026,
+mesma sessão, pedido do usuário: "destaque os campos que estão sem
+preenchimento... que não fique muito gritante"):** novo helper top-level
+`highlightIfEmpty(InputDecoration base, String text)`
+(`service_order_form_page.dart`) — quando `text` está vazio, tinge fundo e
+borda do campo em âmbar bem fraco (`alpha` 0.08 no fundo, 0.55 na borda),
+deliberadamente discreto pra não parecer erro de validação (que usaria
+vermelho).
+
+Aplicado nos campos de texto livre "de conteúdo" (Prelúdio/Poslúdio
+"Outro" quando visíveis, Oração, Louvor x3, Participação Especial, Tema/
+Divisa do Momento Missionário, Hino Congregacional, Momento de
+Intercessão, Mensagem) — **excluídos de propósito**: Tema do culto (hint já
+diz "só pra cultos especiais"), as duas Anotações (Boas-vindas/Avisos, hint
+já diz "opcional") e Ceia do Senhor (nasce vazio de propósito desde a 13ª
+rodada — só é preenchido quando o culto realmente vai ter Ceia; destacá-lo
+soaria como "faltando" toda vez, o que não é o caso na maioria dos cultos).
+`_BibleReferenceFields` (Leitura bíblica, Texto bíblico dos dízimos) e os
+dropdowns (Prelúdio/Poslúdio/Momento Missionário, sempre têm algum valor
+selecionado) ficaram de fora desta rodada — não avaliado se fazem falta.
+
+Pra o realce acompanhar o que o dirigente digita em tempo real,
+`_markDirty()` (chamada pelos listeners de `_textControllersToTrack`)
+passou a chamar `setState` em toda tecla — antes só na 1ª interação
+(`if (!_dirty)`), o suficiente pro aviso de "sair sem salvar?" mas não pro
+realce, que precisa recalcular a cada mudança. `_participationController`/
+`_congregationalHymnController` (dentro de `_ParticipationField`/
+`_HymnField`) já se reconstroem sozinhos a cada tecla via o próprio
+listener interno desses widgets — não precisaram desse ajuste.
+
+**Ordem de Culto — cada momento do formulário numa caixa (28/08/2026, mesma
+sessão, pedido do usuário: "colocar cada momento do formulário dentro de
+caixas, separando assim melhor cada um deles"):** novo helper top-level
+`_momentBox(BuildContext context, List<Widget> children)`
+(`service_order_form_page.dart`) — `Container` com borda discreta
+(`Theme.of(context).colorScheme.outlineVariant`, mesmo tom neutro já usado
+em `weekly_repertoire_form_page.dart`/`_AssignmentRow`), sem preencher o
+fundo, `margin` inferior própria (substituiu os `SizedBox` que separavam os
+momentos antes). Todo bloco do formulário — de "Data e horário" (agrupado
+com "Tema" numa caixa só, exemplo dado pelo usuário) até "Momentos
+Adicionais" — virou uma chamada a `_momentBox`, um por momento (inclusive
+"Oração pelas crianças"/"Benção Apostólica", que não têm campo próprio —
+viraram caixas só com o rótulo, pra manter a sequência visual consistente).
+`highlightIfEmpty` (rodada anterior) continua funcionando igual dentro das
+caixas — é só a decoração do campo, não muda com o agrupamento.
+
+**Ordem de Culto — Leitura bíblica e Dedicação dos dízimos obrigatórios,
+caixas com fundo tingido e largura consistente, texto do Tema ajustado
+(28/08/2026, mesma sessão, pedidos do usuário):**
+
+- `ServiceOrderFormPage._continue()` ganhou três validações novas, mesmo
+  padrão de `_showError` já usado pra data/prelúdio/poslúdio/momento
+  missionário: "Leitura bíblica" precisa de pelo menos 1 referência
+  preenchida (`_bibleReadingControllers.any((c) =>
+  c.toReference().isFilled)`); "Dedicação dos dízimos e ofertas" precisa
+  dos dois sub-campos — Texto bíblico E Hino Congregacional (antes os dois
+  eram opcionais).
+- `_momentBox` (rodada anterior) ganhou `width: double.infinity` — sem
+  isso, uma caixa cujo único filho é um `Text` sem campo (Oração pelas
+  crianças/Benção Apostólica) encolhia pra largura do texto, já que nada
+  ali força a largura máxima como um `TextField` faz; agora todas as
+  caixas têm a mesma largura.
+- `_momentBox` também ganhou fundo levemente tingido — `Color.alphaBlend`
+  de um branco (tema escuro) ou preto (tema claro) em baixíssima opacidade
+  (0.05/0.04) sobre `Theme.of(context).scaffoldBackgroundColor`, em vez de
+  uma cor fixa tipo `surfaceContainerHighest` — garante que a diferença
+  seja "um pouco" (pedido literal do usuário), nunca um tom muito diferente
+  do fundo real da tela, e se adapta sozinho a qualquer futura mudança de
+  paleta.
+- Campo "Tema": hint mudou de "Preencha apenas para cultos especiais" pra
+  "Preencha com tema ou cultos especiais" (pedido literal do usuário).
+
+**Cifras — tom real no lugar de "Original", "Tom" numa linha própria,
+seleção de tom com destaque dourado no original, cantor/banda no cabeçalho
+(mesma sessão, pedidos do usuário):**
+
+- `CifraViewPage`: o rótulo "Tom" saiu da mesma linha dos botões +/- (que
+  usava `Spacer()` pra empurrar os botões pra direita) e virou uma linha
+  própria acima deles. O texto central, quando não há transposição
+  (`_semitones == 0`), mostra o tom de verdade da cifra (`baseTone`) em vez
+  de "Original" — deslocado por +/-, continua mostrando o delta ("+2"/"-1"
+  etc., não alterado).
+- `_openTonePicker` (lista das 12 notas cromáticas): a opção que bate com o
+  tom original da cifra (`rootNote`) ganhou um `Container` com borda
+  dourada (`SibValColors.goldAccent`, `width: 1.5`) e cantos arredondados
+  (`BorderRadius.circular(8)`) — destaque visual pra saber qual é o tom
+  original sem precisar fechar o diálogo e olhar de novo.
+- Cabeçalho de `CifraViewPage` ganhou o cantor/banda (`Cifra.songArtist`,
+  já buscado por `cifraForSongProvider` — não precisou de parâmetro novo no
+  construtor) abaixo do nome da música, mesmo padrão visual (cor
+  secundária, fonte menor) já usado em outras telas desta base.
+  `CifraListPage` já mostrava isso como `subtitle` do `ListTile` desde a
+  10ª rodada — só a tela de visualização em si não tinha.
+
+**Ordem de Culto — foco no primeiro campo obrigatório pendente + Cifras,
+ajustes finos (28/08/2026, mesma sessão, pedidos do usuário):**
+
+- **Validação da Ordem de Culto revisada** — em vez de parar no primeiro
+  erro (`_showError` + `return`), `_continue()` agora junta **todos** os
+  campos obrigatórios pendentes num `Set<_RequiredField>`
+  (`_fieldErrors`, novo enum privado — declarado na mesma ordem em que os
+  campos aparecem no formulário, servindo de ordem de prioridade) e só
+  então decide: se houver algum, marca todos em vermelho e move o foco só
+  pro primeiro (`_focusNodeFor`, novos `FocusNode` pros campos que ainda
+  não tinham: `_preludeOtherFocusNode`, `_missionThemeFocusNode`,
+  `_missionMottoFocusNode`, `_postludeOtherFocusNode` — os que já tinham
+  `_congregationalHymnFocusNode`/`BibleReferenceController.bookFocusNode`
+  foram reaproveitados). `requestFocus()` já basta pro Flutter rolar a
+  tela até o campo sozinho (`Scrollable.ensureVisible` automático em
+  `TextField` dentro de `SingleChildScrollView`) — não precisou de scroll
+  manual.
+- `highlightIfEmpty` ganhou `isError`/`highlightEmpty` — vermelho
+  (`Colors.red`, borda mais grossa) sobrepõe o âmbar quando o campo está
+  em `_fieldErrors` **e** ainda vazio (um campo sai do vermelho sozinho ao
+  ganhar conteúdo, sem precisar tirar de `_fieldErrors` manualmente).
+  `highlightEmpty: false` desliga o âmbar geral num campo que só participa
+  do vermelho de erro — usado no campo "Livro" de `_BibleReferenceFields`/
+  `_BookField` (Leitura bíblica, Texto bíblico dos dízimos), que nunca teve
+  destaque de campo vazio antes de virar obrigatório. `_BibleReferenceFields`/
+  `_BookField`/`_HymnField` ganharam o parâmetro `isError` pra repassar.
+  Leitura bíblica (lista) só marca a 1ª linha em vermelho — o erro é "nenhuma
+  preenchida", não uma linha específica.
+
+- **Cifras** — cantor/banda no cabeçalho de `CifraViewPage` virou negrito +
+  itálico. "Tom" voltou pra mesma linha dos botões +/- (rodada anterior
+  tinha posto numa linha própria acima) — só que agora tudo (rótulo +
+  botões) alinhado à direita via `MainAxisAlignment.end`, no lugar do
+  `Spacer()` antigo que separava rótulo (esquerda) dos botões (direita).
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

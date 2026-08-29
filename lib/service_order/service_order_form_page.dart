@@ -82,6 +82,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
 
   PreludeStyle _preludeStyle = PreludeStyle.naoHavera;
   final _preludeOtherController = TextEditingController();
+  final _preludeOtherFocusNode = FocusNode();
 
   final _prayerController = TextEditingController();
 
@@ -89,12 +90,22 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
 
   final _praise1Controller = TextEditingController();
 
+  /// Anotação livre pro momento "Boas-vindas" (28/08/2026, pedido do
+  /// usuário) — ver doc comment de `ServiceOrder.welcomeNotes`.
+  final _welcomeNotesController = TextEditingController();
+
+  /// Mesma ideia, pro momento "Avisos/Comunicações" — ver doc comment de
+  /// `ServiceOrder.announcementsNotes`.
+  final _announcementsNotesController = TextEditingController();
+
   final _participationController = TextEditingController();
   final _participationFocusNode = FocusNode();
 
   MissionMoment _missionMoment = MissionMoment.naoHavera;
   final _missionThemeController = TextEditingController();
+  final _missionThemeFocusNode = FocusNode();
   final _missionMottoController = TextEditingController();
+  final _missionMottoFocusNode = FocusNode();
 
   final _tithesBibleController = BibleReferenceController();
   final _congregationalHymnController = TextEditingController();
@@ -108,6 +119,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
 
   PreludeStyle _postludeStyle = PreludeStyle.instrumental;
   final _postludeOtherController = TextEditingController();
+  final _postludeOtherFocusNode = FocusNode();
 
   /// Momentos especiais escolhidos (28/08/2026, pedido do usuário — o
   /// "Adicionar momento" saiu da 2ª etapa e passou pra cá). Carregam pra
@@ -130,6 +142,28 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   /// `true` assim que o usuário interage com algum campo — ver doc comment
   /// da classe. Controla o `PopScope` (aviso "sair sem salvar?").
   bool _dirty = false;
+
+  /// Campos obrigatórios pendentes na última tentativa de avançar
+  /// (28/08/2026, pedido do usuário) — populado por `_continue()`, lido por
+  /// `highlightIfEmpty` (via `isError:`) em cada campo pra desenhar borda
+  /// vermelha só nos que ainda faltam. Um campo sai da lista sozinho (visual,
+  /// sem precisar remover daqui) assim que deixa de estar vazio — `isError`
+  /// só é aplicado quando o campo *também* está vazio.
+  Set<_RequiredField> _fieldErrors = {};
+
+  /// `FocusNode` do primeiro campo pendente de cada tipo — usado por
+  /// `_continue()` pra levar o cursor até lá quando a validação falha.
+  FocusNode? _focusNodeFor(_RequiredField field) => switch (field) {
+    _RequiredField.preludeOther => _preludeOtherFocusNode,
+    _RequiredField.bibleReading => _bibleReadingControllers.isEmpty
+        ? null
+        : _bibleReadingControllers.first.bookFocusNode,
+    _RequiredField.missionTheme => _missionThemeFocusNode,
+    _RequiredField.missionMotto => _missionMottoFocusNode,
+    _RequiredField.tithesBible => _tithesBibleController.bookFocusNode,
+    _RequiredField.congregationalHymn => _congregationalHymnFocusNode,
+    _RequiredField.postludeOther => _postludeOtherFocusNode,
+  };
 
   bool get _isEditing => widget.editing != null;
 
@@ -155,6 +189,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
         _bibleReadingControllers.add(_controllerFor(reading));
       }
       _praise1Controller.text = editing.praise1;
+      _welcomeNotesController.text = editing.welcomeNotes;
+      _announcementsNotesController.text = editing.announcementsNotes;
       _participationController.text = editing.participation;
       _missionMoment = editing.missionMoment;
       _missionThemeController.text = editing.missionTheme;
@@ -219,6 +255,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _preludeOtherController,
     _prayerController,
     _praise1Controller,
+    _welcomeNotesController,
+    _announcementsNotesController,
     _participationController,
     _missionThemeController,
     _missionMottoController,
@@ -231,8 +269,13 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _postludeOtherController,
   ];
 
+  /// Reconstrói a cada tecla (28/08/2026, pedido do usuário: realce de campo
+  /// vazio precisa acompanhar o que o dirigente está digitando em tempo
+  /// real) — antes só reconstruía na 1ª interação (`if (!_dirty)`), suficiente
+  /// só pro aviso de "sair sem salvar?"; `_dirty = true` continua idempotente
+  /// nas chamadas seguintes, então nada muda pro `PopScope`.
   void _markDirty() {
-    if (!_dirty) setState(() => _dirty = true);
+    setState(() => _dirty = true);
   }
 
   Future<void> _confirmDiscardAndPop() async {
@@ -365,22 +408,50 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _showError('Selecione a data e o horário.');
       return;
     }
+    // NOVO (28/08/2026, pedido do usuário): em vez de parar no 1º erro
+    // encontrado, junta TODOS os campos obrigatórios pendentes — marca todos
+    // em vermelho (`_fieldErrors`, lido por `highlightIfEmpty` em cada
+    // campo) e move o cursor só pro primeiro deles, na ordem em que aparecem
+    // no formulário (`_RequiredField.values`, declarado nessa mesma ordem).
+    final errors = <_RequiredField>{};
     if (_preludeStyle == PreludeStyle.outro &&
         _preludeOtherController.text.trim().isEmpty) {
-      _showError('Informe o responsável pelo prelúdio (opção "Outro").');
-      return;
+      errors.add(_RequiredField.preludeOther);
+    }
+    if (!_bibleReadingControllers.any((c) => c.toReference().isFilled)) {
+      errors.add(_RequiredField.bibleReading);
+    }
+    if (_missionMoment != MissionMoment.naoHavera) {
+      if (_missionThemeController.text.trim().isEmpty) {
+        errors.add(_RequiredField.missionTheme);
+      }
+      if (_missionMottoController.text.trim().isEmpty) {
+        errors.add(_RequiredField.missionMotto);
+      }
+    }
+    if (!_tithesBibleController.toReference().isFilled) {
+      errors.add(_RequiredField.tithesBible);
+    }
+    if (_congregationalHymnController.text.trim().isEmpty) {
+      errors.add(_RequiredField.congregationalHymn);
     }
     if (_postludeStyle == PreludeStyle.outro &&
         _postludeOtherController.text.trim().isEmpty) {
-      _showError('Descreva o poslúdio (opção "Outro").');
+      errors.add(_RequiredField.postludeOther);
+    }
+
+    if (errors.isNotEmpty) {
+      setState(() => _fieldErrors = errors);
+      _showError('Preencha os campos obrigatórios.');
+      for (final field in _RequiredField.values) {
+        if (errors.contains(field)) {
+          _focusNodeFor(field)?.requestFocus();
+          break;
+        }
+      }
       return;
     }
-    if (_missionMoment != MissionMoment.naoHavera &&
-        (_missionThemeController.text.trim().isEmpty ||
-            _missionMottoController.text.trim().isEmpty)) {
-      _showError('Informe o Tema e a Divisa do Momento Missionário.');
-      return;
-    }
+    if (_fieldErrors.isNotEmpty) setState(() => _fieldErrors = {});
 
     final uid = ref.read(currentUidProvider);
     final profile = ref.read(currentUserProfileProvider).asData?.value;
@@ -407,8 +478,10 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
           ? _preludeOtherController.text.trim()
           : '',
       prayerText: _prayerController.text.trim(),
+      welcomeNotes: _welcomeNotesController.text.trim(),
       bibleReadings: bibleReadings,
       praise1: _praise1Controller.text.trim(),
+      announcementsNotes: _announcementsNotesController.text.trim(),
       participation: _participationController.text.trim(),
       missionMoment: _missionMoment,
       missionTheme: _missionMoment == MissionMoment.naoHavera
@@ -469,15 +542,20 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _scrollController.dispose();
     _themeController.dispose();
     _preludeOtherController.dispose();
+    _preludeOtherFocusNode.dispose();
     _prayerController.dispose();
     for (final controller in _bibleReadingControllers) {
       controller.dispose();
     }
     _praise1Controller.dispose();
+    _welcomeNotesController.dispose();
+    _announcementsNotesController.dispose();
     _participationController.dispose();
     _participationFocusNode.dispose();
     _missionThemeController.dispose();
+    _missionThemeFocusNode.dispose();
     _missionMottoController.dispose();
+    _missionMottoFocusNode.dispose();
     _tithesBibleController.dispose();
     _congregationalHymnController.dispose();
     _congregationalHymnFocusNode.dispose();
@@ -487,6 +565,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _communionController.dispose();
     _praise3Controller.dispose();
     _postludeOtherController.dispose();
+    _postludeOtherFocusNode.dispose();
     super.dispose();
   }
 
@@ -532,295 +611,374 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _sectionLabel(context, 'Data e horário'),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: DateField(
-                                label: 'Data',
-                                value: _selectedDate,
-                                firstDate: DateTime(DateTime.now().year - 1),
-                                lastDate: DateTime(DateTime.now().year + 3),
-                                decoration: _fieldDecoration,
-                                onChanged: (date) => setState(() {
-                                  _selectedDate = date;
-                                  _dirty = true;
-                                }),
+                        _momentBox(context, [
+                          _sectionLabel(context, 'Data e horário'),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: DateField(
+                                  label: 'Data',
+                                  value: _selectedDate,
+                                  firstDate: DateTime(DateTime.now().year - 1),
+                                  lastDate: DateTime(DateTime.now().year + 3),
+                                  decoration: _fieldDecoration,
+                                  onChanged: (date) => setState(() {
+                                    _selectedDate = date;
+                                    _dirty = true;
+                                  }),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              flex: 2,
-                              child: _TimeField(
-                                value: _selectedTime,
-                                onChanged: (time) => setState(() {
-                                  _selectedTime = time;
-                                  _dirty = true;
-                                }),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                flex: 2,
+                                child: _TimeField(
+                                  value: _selectedTime,
+                                  onChanged: (time) => setState(() {
+                                    _selectedTime = time;
+                                    _dirty = true;
+                                  }),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-
-                        _sectionLabel(context, 'Tema'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _themeController,
-                          decoration: _fieldDecoration.copyWith(
-                            hintText:
-                                'Preencha apenas para cultos especiais',
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Prelúdio'),
-                        const SizedBox(height: 4),
-                        DropdownButtonFormField<PreludeStyle>(
-                          initialValue: _preludeStyle,
-                          decoration: _fieldDecoration,
-                          items: [
-                            for (final style in PreludeStyle.values)
-                              DropdownMenuItem(
-                                value: style,
-                                child: Text(style.label),
-                              ),
-                          ],
-                          onChanged: (style) => setState(() {
-                            _preludeStyle = style ?? PreludeStyle.naoHavera;
-                            _dirty = true;
-                          }),
-                        ),
-                        if (_preludeStyle == PreludeStyle.outro) ...[
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 10),
+                          _sectionLabel(context, 'Tema'),
+                          const SizedBox(height: 4),
                           TextField(
-                            controller: _preludeOtherController,
+                            controller: _themeController,
                             decoration: _fieldDecoration.copyWith(
-                              hintText: 'Responsável pelo prelúdio',
+                              hintText: 'Preencha com tema ou cultos especiais',
                             ),
                           ),
-                        ],
-                        const SizedBox(height: 10),
+                        ]),
 
-                        _momentLabel(context, 'Oração'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _prayerController,
-                          decoration: _fieldDecoration.copyWith(
-                            hintText: 'Quem ora',
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Leitura bíblica'),
-                        const SizedBox(height: 4),
-                        for (var i = 0; i < _bibleReadingControllers.length; i++)
-                          Padding(
-                            key: ValueKey(_bibleReadingControllers[i]),
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _BibleReferenceFields(
-                              controller: _bibleReadingControllers[i],
-                              onRemove: _bibleReadingControllers.length > 1
-                                  ? () => _removeBibleReading(i)
-                                  : null,
-                              onChanged: _markDirty,
-                            ),
-                          ),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: _addBibleReading,
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Adicionar leitura'),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Louvor'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _praise1Controller,
-                          decoration: _fieldDecoration,
-                        ),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Boas-vindas'),
-                        _momentLabel(context, 'Avisos/Comunicações'),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Participação Especial'),
-                        const SizedBox(height: 4),
-                        _ParticipationField(
-                          controller: _participationController,
-                          focusNode: _participationFocusNode,
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Momento Missionário'),
-                        const SizedBox(height: 4),
-                        DropdownButtonFormField<MissionMoment>(
-                          initialValue: _missionMoment,
-                          decoration: _fieldDecoration,
-                          items: [
-                            for (final moment in MissionMoment.values)
-                              DropdownMenuItem(
-                                value: moment,
-                                child: Text(moment.label),
-                              ),
-                          ],
-                          onChanged: (moment) => setState(() {
-                            _missionMoment = moment ?? MissionMoment.naoHavera;
-                            _dirty = true;
-                          }),
-                        ),
-                        if (_missionMoment != MissionMoment.naoHavera) ...[
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _missionThemeController,
-                            decoration: _fieldDecoration.copyWith(
-                              hintText: 'Tema',
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _missionMottoController,
-                            decoration: _fieldDecoration.copyWith(
-                              hintText: 'Divisa',
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Dedicação dos dízimos e ofertas'),
-                        const SizedBox(height: 6),
-                        _sectionLabel(context, 'Texto bíblico'),
-                        const SizedBox(height: 4),
-                        _BibleReferenceFields(
-                          controller: _tithesBibleController,
-                          onChanged: _markDirty,
-                        ),
-                        const SizedBox(height: 6),
-                        _sectionLabel(context, 'Hino Congregacional'),
-                        const SizedBox(height: 4),
-                        _HymnField(
-                          controller: _congregationalHymnController,
-                          focusNode: _congregationalHymnFocusNode,
-                        ),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Oração pelas crianças'),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Louvor'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _praise2Controller,
-                          decoration: _fieldDecoration,
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Momento de Intercessão'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _intercessionController,
-                          decoration: _fieldDecoration,
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Mensagem'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _messageController,
-                          decoration: _fieldDecoration,
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Ceia do Senhor'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _communionController,
-                          decoration: _fieldDecoration.copyWith(
-                            hintText: 'Responsável',
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        _momentLabel(context, 'Louvor'),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _praise3Controller,
-                          decoration: _fieldDecoration,
-                        ),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Benção Apostólica'),
-                        const SizedBox(height: 6),
-
-                        _momentLabel(context, 'Poslúdio'),
-                        const SizedBox(height: 4),
-                        DropdownButtonFormField<PreludeStyle>(
-                          initialValue: _postludeStyle,
-                          decoration: _fieldDecoration,
-                          items: [
-                            for (final style in PreludeStyle.values)
-                              if (style != PreludeStyle.naoHavera)
+                        _momentBox(context, [
+                          _momentLabel(context, 'Prelúdio'),
+                          const SizedBox(height: 4),
+                          DropdownButtonFormField<PreludeStyle>(
+                            initialValue: _preludeStyle,
+                            decoration: _fieldDecoration,
+                            items: [
+                              for (final style in PreludeStyle.values)
                                 DropdownMenuItem(
                                   value: style,
                                   child: Text(style.label),
                                 ),
+                            ],
+                            onChanged: (style) => setState(() {
+                              _preludeStyle = style ?? PreludeStyle.naoHavera;
+                              _dirty = true;
+                            }),
+                          ),
+                          if (_preludeStyle == PreludeStyle.outro) ...[
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _preludeOtherController,
+                              focusNode: _preludeOtherFocusNode,
+                              decoration: highlightIfEmpty(
+                                _fieldDecoration.copyWith(
+                                  hintText: 'Responsável pelo prelúdio',
+                                ),
+                                _preludeOtherController.text,
+                                isError: _fieldErrors.contains(_RequiredField.preludeOther),
+                              ),
+                            ),
                           ],
-                          onChanged: (style) => setState(() {
-                            _postludeStyle = style ?? PreludeStyle.instrumental;
-                            _dirty = true;
-                          }),
-                        ),
-                        if (_postludeStyle == PreludeStyle.outro) ...[
-                          const SizedBox(height: 6),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Oração'),
+                          const SizedBox(height: 4),
                           TextField(
-                            controller: _postludeOtherController,
-                            decoration: _fieldDecoration.copyWith(
-                              hintText: 'Descreva o poslúdio',
+                            controller: _prayerController,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration.copyWith(hintText: 'Quem ora'),
+                              _prayerController.text,
                             ),
                           ),
-                        ],
-                        const SizedBox(height: 10),
+                        ]),
 
-                        _momentLabel(context, 'Momentos Adicionais'),
-                        const SizedBox(height: 4),
-                        if (_extraMoments.isEmpty)
-                          Text(
-                            'Nenhum — toque em "Adicionar" pra incluir Batismo, '
-                            'Ceia do Senhor, mais um Louvor etc.',
-                            style: TextStyle(color: context.textSecondary, fontSize: 13),
-                          )
-                        else
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final item in _extraMoments)
-                                Chip(
-                                  label: Text(
-                                    _extraSummary(item) != null
-                                        ? '${item.label}: ${_extraSummary(item)}'
-                                        : item.label,
-                                  ),
-                                  onDeleted: () => _removeExtraMoment(item),
+                        _momentBox(context, [
+                          _momentLabel(context, 'Leitura bíblica'),
+                          const SizedBox(height: 4),
+                          for (var i = 0; i < _bibleReadingControllers.length; i++)
+                            Padding(
+                              key: ValueKey(_bibleReadingControllers[i]),
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _BibleReferenceFields(
+                                controller: _bibleReadingControllers[i],
+                                onRemove: _bibleReadingControllers.length > 1
+                                    ? () => _removeBibleReading(i)
+                                    : null,
+                                onChanged: _markDirty,
+                                // Só a 1ª linha (é pra onde o foco vai ao
+                                // falhar a validação) mostra vermelho — o
+                                // erro é "nenhuma leitura preenchida", não
+                                // "esta linha específica".
+                                isError: i == 0 &&
+                                    _fieldErrors.contains(_RequiredField.bibleReading),
+                              ),
+                            ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: _addBibleReading,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Adicionar leitura'),
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Louvor'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _praise1Controller,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration,
+                              _praise1Controller.text,
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Boas-vindas'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _welcomeNotesController,
+                            minLines: 1,
+                            maxLines: 3,
+                            decoration: _fieldDecoration.copyWith(
+                              hintText: 'Anotações (opcional)',
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Avisos/Comunicações'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _announcementsNotesController,
+                            minLines: 1,
+                            maxLines: 3,
+                            decoration: _fieldDecoration.copyWith(
+                              hintText: 'Anotações (opcional)',
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Participação Especial'),
+                          const SizedBox(height: 4),
+                          _ParticipationField(
+                            controller: _participationController,
+                            focusNode: _participationFocusNode,
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Momento Missionário'),
+                          const SizedBox(height: 4),
+                          DropdownButtonFormField<MissionMoment>(
+                            initialValue: _missionMoment,
+                            decoration: _fieldDecoration,
+                            items: [
+                              for (final moment in MissionMoment.values)
+                                DropdownMenuItem(
+                                  value: moment,
+                                  child: Text(moment.label),
                                 ),
                             ],
+                            onChanged: (moment) => setState(() {
+                              _missionMoment = moment ?? MissionMoment.naoHavera;
+                              _dirty = true;
+                            }),
                           ),
-                        const SizedBox(height: 6),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: _pickExtraMoments,
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Adicionar momento'),
+                          if (_missionMoment != MissionMoment.naoHavera) ...[
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _missionThemeController,
+                              focusNode: _missionThemeFocusNode,
+                              decoration: highlightIfEmpty(
+                                _fieldDecoration.copyWith(hintText: 'Tema'),
+                                _missionThemeController.text,
+                                isError: _fieldErrors.contains(_RequiredField.missionTheme),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _missionMottoController,
+                              focusNode: _missionMottoFocusNode,
+                              decoration: highlightIfEmpty(
+                                _fieldDecoration.copyWith(hintText: 'Divisa'),
+                                _missionMottoController.text,
+                                isError: _fieldErrors.contains(_RequiredField.missionMotto),
+                              ),
+                            ),
+                          ],
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Dedicação dos dízimos e ofertas'),
+                          const SizedBox(height: 6),
+                          _sectionLabel(context, 'Texto bíblico'),
+                          const SizedBox(height: 4),
+                          _BibleReferenceFields(
+                            controller: _tithesBibleController,
+                            onChanged: _markDirty,
+                            isError: _fieldErrors.contains(_RequiredField.tithesBible),
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 6),
+                          _sectionLabel(context, 'Hino Congregacional'),
+                          const SizedBox(height: 4),
+                          _HymnField(
+                            controller: _congregationalHymnController,
+                            focusNode: _congregationalHymnFocusNode,
+                            isError: _fieldErrors.contains(_RequiredField.congregationalHymn),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Oração pelas crianças'),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Louvor'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _praise2Controller,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration,
+                              _praise2Controller.text,
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Momento de Intercessão'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _intercessionController,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration,
+                              _intercessionController.text,
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Mensagem'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _messageController,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration,
+                              _messageController.text,
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Ceia do Senhor'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _communionController,
+                            decoration: _fieldDecoration.copyWith(
+                              hintText: 'Responsável',
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Louvor'),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _praise3Controller,
+                            decoration: highlightIfEmpty(
+                              _fieldDecoration,
+                              _praise3Controller.text,
+                            ),
+                          ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Benção Apostólica'),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Poslúdio'),
+                          const SizedBox(height: 4),
+                          DropdownButtonFormField<PreludeStyle>(
+                            initialValue: _postludeStyle,
+                            decoration: _fieldDecoration,
+                            items: [
+                              for (final style in PreludeStyle.values)
+                                if (style != PreludeStyle.naoHavera)
+                                  DropdownMenuItem(
+                                    value: style,
+                                    child: Text(style.label),
+                                  ),
+                            ],
+                            onChanged: (style) => setState(() {
+                              _postludeStyle = style ?? PreludeStyle.instrumental;
+                              _dirty = true;
+                            }),
+                          ),
+                          if (_postludeStyle == PreludeStyle.outro) ...[
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _postludeOtherController,
+                              focusNode: _postludeOtherFocusNode,
+                              decoration: highlightIfEmpty(
+                                _fieldDecoration.copyWith(
+                                  hintText: 'Descreva o poslúdio',
+                                ),
+                                _postludeOtherController.text,
+                                isError: _fieldErrors.contains(_RequiredField.postludeOther),
+                              ),
+                            ),
+                          ],
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Momentos Adicionais'),
+                          const SizedBox(height: 4),
+                          if (_extraMoments.isEmpty)
+                            Text(
+                              'Nenhum — toque em "Adicionar" pra incluir Batismo, '
+                              'Ceia do Senhor, mais um Louvor etc.',
+                              style: TextStyle(color: context.textSecondary, fontSize: 13),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final item in _extraMoments)
+                                  Chip(
+                                    label: Text(
+                                      _extraSummary(item) != null
+                                          ? '${item.label}: ${_extraSummary(item)}'
+                                          : item.label,
+                                    ),
+                                    onDeleted: () => _removeExtraMoment(item),
+                                  ),
+                              ],
+                            ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: _pickExtraMoments,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Adicionar momento'),
+                            ),
+                          ),
+                        ]),
+
+                        const SizedBox(height: 10),
 
                         Align(
                           alignment: Alignment.centerRight,
@@ -870,6 +1028,107 @@ DateTime _nextSunday(DateTime from) {
     d = d.add(const Duration(days: 1));
   }
   return DateTime(d.year, d.month, d.day, 19, 0);
+}
+
+/// Campos obrigatórios validados por `_continue()` (28/08/2026, pedido do
+/// usuário) — declarados na mesma ordem em que aparecem no formulário, pra
+/// `_RequiredField.values` já servir como ordem de prioridade na hora de
+/// decidir qual é "o primeiro campo que faltou preencher".
+enum _RequiredField {
+  preludeOther,
+  bibleReading,
+  missionTheme,
+  missionMotto,
+  tithesBible,
+  congregationalHymn,
+  postludeOther,
+}
+
+/// Realce sutil pra campo vazio (28/08/2026, pedido do usuário: "destaque os
+/// campos que estão sem preenchimento... que não fique muito gritante") —
+/// leve tingimento âmbar no fundo e na borda, deliberadamente discreto (evita
+/// parecer erro de validação). Aplicado só nos campos de texto livre cujo
+/// valor normal é ter algo digitado — **excluídos de propósito**: Tema (hint
+/// já diz "cultos especiais"), as duas Anotações (hint já diz "opcional") e
+/// Ceia do Senhor (nasce vazio de propósito, ver histórico da 13ª rodada —
+/// só é preenchido quando o culto realmente vai ter Ceia). Reaproveitado
+/// pelos `TextField`s soltos no formulário e por `_ParticipationField`/
+/// `_HymnField` (que já se reconstroem sozinhos a cada tecla, via o próprio
+/// listener do controller).
+///
+/// [isError] (28/08/2026, pedido do usuário: "marque os campos pendentes de
+/// vermelho") — quando `true` e o campo está vazio, sobrepõe o âmbar por uma
+/// borda/fundo vermelhos, mais fortes; usado só nos campos obrigatórios
+/// (`_RequiredField`) depois de uma tentativa de avançar sem preenchê-los.
+/// [highlightEmpty] = `false` desliga o âmbar (usado pelo campo "Livro" de
+/// `_BibleReferenceFields`/`_BookField` — não participa do realce âmbar
+/// geral, só do vermelho de erro, já que antes de 28/08/2026 ele nunca teve
+/// destaque nenhum de campo vazio).
+InputDecoration highlightIfEmpty(
+  InputDecoration base,
+  String text, {
+  bool isError = false,
+  bool highlightEmpty = true,
+}) {
+  if (text.trim().isNotEmpty) return base;
+  if (isError) {
+    const errorColor = Colors.red;
+    return base.copyWith(
+      filled: true,
+      fillColor: errorColor.withValues(alpha: 0.08),
+      border: OutlineInputBorder(
+        borderSide: BorderSide(color: errorColor.withValues(alpha: 0.7), width: 1.5),
+      ),
+    );
+  }
+  if (!highlightEmpty) return base;
+  const tint = Colors.amber;
+  return base.copyWith(
+    filled: true,
+    fillColor: tint.withValues(alpha: 0.08),
+    border: OutlineInputBorder(
+      borderSide: BorderSide(color: tint.withValues(alpha: 0.55)),
+    ),
+  );
+}
+
+/// Caixa que agrupa um "momento" da liturgia com seu(s) campo(s) —
+/// 28/08/2026, pedido do usuário: "colocar cada momento do formulário
+/// dentro de caixas, separando assim melhor cada um deles". Borda discreta
+/// (`outlineVariant`, mesmo tom neutro já usado em
+/// `weekly_repertoire_form_page.dart`/`_AssignmentRow`), sem preencher o
+/// fundo — só delimita visualmente onde um momento termina e o próximo
+/// começa.
+Widget _momentBox(BuildContext context, List<Widget> children) {
+  // Fundo levemente tingido (28/08/2026, pedido do usuário) — mais claro que
+  // o fundo da tela no tema escuro, mais escuro no tema claro. Blend por
+  // `alpha` baixo em cima do `scaffoldBackgroundColor` de verdade (em vez de
+  // uma cor fixa tipo `surfaceContainerHighest`) pra garantir que a diferença
+  // seja "um pouco", nunca um tom muito diferente do fundo.
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final tintedBackground = Color.alphaBlend(
+    (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.05 : 0.04),
+    Theme.of(context).scaffoldBackgroundColor,
+  );
+  return Container(
+    // Largura sempre igual à dos demais campos (28/08/2026, pedido do
+    // usuário) — sem isso, uma caixa cujo único filho é um `Text` (Oração
+    // pelas crianças/Benção Apostólica, sem campo) encolhia pra largura do
+    // texto, já que nada ali força a largura máxima como um `TextField` faz.
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: tintedBackground,
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    ),
+  );
 }
 
 /// Cabeçalho de sub-campo que não é um "momento" da liturgia em si (Data e
@@ -1465,11 +1724,16 @@ class _BibleReferenceFields extends ConsumerStatefulWidget {
     required this.controller,
     this.onRemove,
     this.onChanged,
+    this.isError = false,
   });
 
   final BibleReferenceController controller;
   final VoidCallback? onRemove;
   final VoidCallback? onChanged;
+
+  /// Borda vermelha no campo "Livro" quando ainda vazio (28/08/2026, pedido
+  /// do usuário) — ver `_RequiredField`/`ServiceOrderFormPage._continue()`.
+  final bool isError;
 
   @override
   ConsumerState<_BibleReferenceFields> createState() =>
@@ -1514,6 +1778,7 @@ class _BibleReferenceFieldsState extends ConsumerState<_BibleReferenceFields> {
                 focusNode: c.bookFocusNode,
                 onSelected: _onBookSelected,
                 onEdited: _onBookTextEdited,
+                isError: widget.isError,
               ),
             ),
             if (widget.onRemove != null)
@@ -1589,12 +1854,14 @@ class _BookField extends ConsumerStatefulWidget {
     required this.focusNode,
     required this.onSelected,
     required this.onEdited,
+    this.isError = false,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<BibleBook> onSelected;
   final VoidCallback onEdited;
+  final bool isError;
 
   @override
   ConsumerState<_BookField> createState() => _BookFieldState();
@@ -1706,14 +1973,22 @@ class _BookFieldState extends ConsumerState<_BookField> {
         TextField(
           controller: widget.controller,
           focusNode: widget.focusNode,
-          decoration: const InputDecoration(
-            labelText: 'Livro',
-            hintText: 'Toque para escolher ou digite para buscar',
-            border: OutlineInputBorder(),
-            suffixIcon: Icon(Icons.arrow_drop_down),
-            floatingLabelBehavior: FloatingLabelBehavior.always,
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: highlightIfEmpty(
+            const InputDecoration(
+              labelText: 'Livro',
+              hintText: 'Toque para escolher ou digite para buscar',
+              border: OutlineInputBorder(),
+              suffixIcon: Icon(Icons.arrow_drop_down),
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            widget.controller.text,
+            isError: widget.isError,
+            // Este campo nunca teve o realce âmbar geral (28/08/2026) —
+            // só passou a existir realce nele quando virou obrigatório, e aí
+            // só o vermelho de erro depois de uma tentativa de avançar.
+            highlightEmpty: false,
           ),
           onChanged: (_) {
             if (_suppressSuggestions) {
@@ -1927,11 +2202,14 @@ class _ParticipationFieldState extends ConsumerState<_ParticipationField> {
         TextField(
           controller: widget.controller,
           focusNode: widget.focusNode,
-          decoration: const InputDecoration(
-            hintText: 'Digite pra buscar entre os membros',
-            border: OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: highlightIfEmpty(
+            const InputDecoration(
+              hintText: 'Digite pra buscar entre os membros',
+              border: OutlineInputBorder(),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            widget.controller.text,
           ),
         ),
       ],
@@ -1943,10 +2221,15 @@ class _ParticipationFieldState extends ConsumerState<_ParticipationField> {
 /// e Cantor Cristão) — cada sugestão mostra o prefixo do hinário de origem
 /// (`Hymnal.titlePrefix`) pra desambiguar.
 class _HymnField extends ConsumerStatefulWidget {
-  const _HymnField({required this.controller, required this.focusNode});
+  const _HymnField({
+    required this.controller,
+    required this.focusNode,
+    this.isError = false,
+  });
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final bool isError;
 
   @override
   ConsumerState<_HymnField> createState() => _HymnFieldState();
@@ -2037,11 +2320,15 @@ class _HymnFieldState extends ConsumerState<_HymnField> {
         TextField(
           controller: widget.controller,
           focusNode: widget.focusNode,
-          decoration: const InputDecoration(
-            hintText: 'Digite pra buscar no HCC ou Cantor Cristão',
-            border: OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: highlightIfEmpty(
+            const InputDecoration(
+              hintText: 'Digite pra buscar no HCC ou Cantor Cristão',
+              border: OutlineInputBorder(),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            widget.controller.text,
+            isError: widget.isError,
           ),
         ),
       ],

@@ -42,6 +42,12 @@ class ServiceOrderPreviewPage extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final item = items[index];
                         final summary = item.summary(order);
+                        final momentNotes = switch (item.type) {
+                          ServiceOrderMomentType.welcome => order.welcomeNotes,
+                          ServiceOrderMomentType.announcements =>
+                            order.announcementsNotes,
+                          _ => '',
+                        };
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: Column(
@@ -61,6 +67,18 @@ class ServiceOrderPreviewPage extends StatelessWidget {
                                   padding: const EdgeInsets.only(left: 12, top: 2),
                                   child: Text(
                                     summary,
+                                    style: TextStyle(color: context.textSecondary, fontSize: 13),
+                                  ),
+                                ),
+                              // Anotação livre pro momento "Boas-vindas"/
+                              // "Avisos/Comunicações" (28/08/2026, pedido do
+                              // usuário) — ver doc comment de
+                              // `ServiceOrder.welcomeNotes`/`.announcementsNotes`.
+                              if (momentNotes.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 12, top: 2),
+                                  child: Text(
+                                    momentNotes,
                                     style: TextStyle(color: context.textSecondary, fontSize: 13),
                                   ),
                                 ),

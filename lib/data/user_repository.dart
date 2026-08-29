@@ -84,6 +84,14 @@ class CurrentUserProfile {
   // não tem getter aqui.
   bool get canViewPraiseOrder => isAdmin || roles.contains('louvor');
 
+  // NOVO (28/08/2026): Escala de Dirigentes — planejamento antecipado de
+  // quem vai dirigir cada culto + tema (menu ☰ dentro de "Ordem de Culto",
+  // ver lib/service_order/leader_schedule_*.dart), distinto da ServiceOrder
+  // em si. Pastor cadastra/edita/exclui; Dirigentes só visualiza.
+  bool get canManageLeaderSchedule => isAdmin || roles.contains('pastor');
+  bool get canViewLeaderSchedule =>
+      isAdmin || roles.contains('pastor') || roles.contains('dirigentes');
+
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {

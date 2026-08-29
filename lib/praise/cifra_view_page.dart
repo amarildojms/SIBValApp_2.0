@@ -82,9 +82,20 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
           for (final note in praiseToneNotes)
             SimpleDialogOption(
               onPressed: () => Navigator.of(dialogContext).pop(note),
-              child: Text(
-                isMinor ? '${note}m' : note,
-                style: const TextStyle(fontSize: 16),
+              // Tom original em destaque — quadrado dourado, cantos
+              // arredondados (28/08/2026, pedido do usuário).
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: note == rootNote
+                    ? BoxDecoration(
+                        border: Border.all(color: SibValColors.goldAccent, width: 1.5),
+                        borderRadius: BorderRadius.circular(8),
+                      )
+                    : null,
+                child: Text(
+                  isMinor ? '${note}m' : note,
+                  style: const TextStyle(fontSize: 16),
+                ),
               ),
             ),
         ],
@@ -101,6 +112,7 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
   Widget build(BuildContext context) {
     final cifraAsync = ref.watch(cifraForSongProvider(widget.songId));
     final baseTone = cifraAsync.asData?.value?.baseTone ?? '';
+    final artist = cifraAsync.asData?.value?.songArtist ?? '';
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -112,15 +124,38 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      widget.songName,
-                      style: const TextStyle(
-                        color: SibValColors.goldAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 19,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.songName,
+                          style: const TextStyle(
+                            color: SibValColors.goldAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 19,
+                          ),
+                        ),
+                        // Cantor/banda abaixo do título (28/08/2026, pedido
+                        // do usuário) — lido direto de `Cifra.songArtist`
+                        // (já buscado por `cifraForSongProvider`), sem
+                        // precisar passar mais um parâmetro pra esta tela.
+                        if (artist.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              artist,
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   IconButton(
@@ -162,10 +197,15 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              // "Tom" de volta na mesma linha dos botões +/-, mas agora tudo
+              // alinhado à direita (28/08/2026, pedido do usuário) — antes
+              // usava `Spacer()` pra separar o rótulo (esquerda) dos botões
+              // (direita); virou `MainAxisAlignment.end` no lugar.
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text('Tom', style: TextStyle(color: context.textSecondary)),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline),
                     onPressed: () => setState(() => _semitones--),
@@ -176,7 +216,13 @@ class _CifraViewPageState extends ConsumerState<CifraViewPage> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       child: Text(
-                        _semitones == 0 ? 'Original' : (_semitones > 0 ? '+$_semitones' : '$_semitones'),
+                        // No lugar de "Original", o tom de verdade da
+                        // música (28/08/2026, pedido do usuário) — só
+                        // quando não transposta; deslocada por +/-,
+                        // continua mostrando o delta.
+                        _semitones == 0
+                            ? (baseTone.isEmpty ? '—' : baseTone)
+                            : (_semitones > 0 ? '+$_semitones' : '$_semitones'),
                         style: TextStyle(
                           color: baseTone.isEmpty ? context.textPrimary : SibValColors.goldAccent,
                           fontSize: 16,
