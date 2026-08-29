@@ -35,18 +35,28 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
   Event? _event;
   bool _loading = true;
 
-  static final _dateTimeFormat = DateFormat("d 'de' MMMM 'de' yyyy 'às' HH:mm", 'pt_BR');
+  static final _dateTimeFormat = DateFormat(
+    "d 'de' MMMM 'de' yyyy 'às' HH:mm",
+    'pt_BR',
+  );
 
   @override
   void initState() {
     super.initState();
     _load();
-    syncNotificationsForScreen(ref, type: NotificationType.eventReminder, targetId: widget.eventId);
+    syncNotificationsForScreen(
+      ref,
+      type: NotificationType.eventReminder,
+      targetId: widget.eventId,
+    );
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final doc = await FirebaseFirestore.instance.collection('events').doc(widget.eventId).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('events')
+        .doc(widget.eventId)
+        .get();
     if (mounted) {
       setState(() {
         _event = doc.exists ? Event.fromFirestore(doc) : null;
@@ -66,14 +76,17 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
 
   void _share(Event event, DateTime localDate) {
     final dateLine = _dateTimeFormat.format(localDate);
-    final text = '${event.title}\n\n${event.description}\n\n'
+    final text =
+        '${event.title}\n\n${event.description}\n\n'
         '📍 ${event.location}\n🗓️ $dateLine\n\n'
         'Confira no app da SIB Val:\n$_appShareLink';
     SharePlus.instance.share(ShareParams(text: text));
   }
 
   Future<void> _edit(Event event) async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventFormPage(eventId: event.id)));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => EventFormPage(eventId: event.id)));
     await _load();
   }
 
@@ -82,7 +95,15 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
     final event = _event;
     final uid = ref.watch(currentUidProvider);
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final canManageEventos = profileAsync.asData?.value?.canManageEventos ?? false;
+    final canManageEventos =
+        profileAsync.asData?.value?.canManageEventos ?? false;
+    // Lista completa (pontual + recorrente), pra saber se há um próximo
+    // evento no mesmo dia — `eventStartedTagVisible` (29/08/2026, pedido do
+    // usuário). Enquanto ainda não carregou, cai pro comportamento sem
+    // vizinho conhecido (expira só à meia-noite) — recalcula sozinho assim
+    // que a lista chega.
+    final allEvents =
+        ref.watch(eventsProvider).asData?.value ?? const <Event>[];
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -90,15 +111,26 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
         bottom: true,
         top: false,
         child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : event == null
-              ? Center(child: Text('Evento não encontrado.', style: TextStyle(color: context.textSecondary)))
-              : _buildContent(context, event, uid, canManageEventos),
-        ),
+            ? const Center(child: CircularProgressIndicator())
+            : event == null
+            ? Center(
+                child: Text(
+                  'Evento não encontrado.',
+                  style: TextStyle(color: context.textSecondary),
+                ),
+              )
+            : _buildContent(context, event, uid, canManageEventos, allEvents),
+      ),
     );
   }
 
-  Widget _buildContent(BuildContext context, Event event, String? uid, bool canManageEventos) {
+  Widget _buildContent(
+    BuildContext context,
+    Event event,
+    String? uid,
+    bool canManageEventos,
+    List<Event> allEvents,
+  ) {
     final localDate = toSaoPauloTime(event.dateTimeUtc);
     final liked = uid != null && event.likedBy.contains(uid);
     final canEdit = canManageEventos && event.source != EventSource.recurring;
@@ -113,9 +145,13 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                 aspectRatio: 16 / 9,
                 child: event.flyerUrl.isNotEmpty
                     ? Image.network(event.flyerUrl, fit: BoxFit.cover)
-                    : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+                    : Container(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                      ),
               ),
-              if (event.hasStarted)
+              if (eventStartedTagVisible(event, allEvents))
                 Positioned(
                   left: 8,
                   top: 8,
@@ -134,32 +170,50 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                     Expanded(
                       child: Text(
                         event.title,
-                        style: TextStyle(color: context.textPrimary, fontSize: 19, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     if (canEdit)
                       IconButton(
                         onPressed: () => _edit(event),
-                        icon: Icon(Icons.edit_outlined, color: context.textSecondary),
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color: context.textSecondary,
+                        ),
                       ),
                     IconButton(
                       onPressed: () => _share(event, localDate),
-                      icon: Icon(Icons.share_outlined, color: context.textSecondary),
+                      icon: Icon(
+                        Icons.share_outlined,
+                        color: context.textSecondary,
+                      ),
                     ),
                     InkWell(
                       onTap: uid == null ? null : _toggleLike,
                       borderRadius: BorderRadius.circular(20),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 12,
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               liked ? Icons.favorite : Icons.favorite_border,
-                              color: liked ? Colors.redAccent : context.textSecondary,
+                              color: liked
+                                  ? Colors.redAccent
+                                  : context.textSecondary,
                             ),
                             const SizedBox(width: 4),
-                            Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary)),
+                            Text(
+                              '${event.likedBy.length}',
+                              style: TextStyle(color: context.textPrimary),
+                            ),
                           ],
                         ),
                       ),
@@ -168,21 +222,35 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage> {
                 ),
                 if (event.description.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text(event.description, style: TextStyle(color: context.textPrimary, fontSize: 16, height: 1.4)),
+                  Text(
+                    event.description,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 16,
+                      height: 1.4,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 16),
-                _LocationText(location: event.location, textColor: context.textSecondary),
+                _LocationText(
+                  location: event.location,
+                  textColor: context.textSecondary,
+                ),
                 const SizedBox(height: 4),
                 Text(
                   '${WeekdayFormat.full(localDate)}, ${_dateTimeFormat.format(localDate)}',
                   style: TextStyle(color: context.textSecondary, fontSize: 14),
                 ),
-                if (event.requiresRegistration && event.registrationLink.isNotEmpty) ...[
+                if (event.requiresRegistration &&
+                    event.registrationLink.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => launchUrl(Uri.parse(event.registrationLink), mode: LaunchMode.externalApplication),
+                      onPressed: () => launchUrl(
+                        Uri.parse(event.registrationLink),
+                        mode: LaunchMode.externalApplication,
+                      ),
                       child: const Text('Inscreva-se'),
                     ),
                   ),
@@ -208,9 +276,15 @@ class _LocationText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = Uri.tryParse(location);
-    final isLink = uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+    final isLink =
+        uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
     if (!isLink) {
-      return Text('Local: $location', style: TextStyle(color: textColor, fontSize: 14));
+      return Text(
+        'Local: $location',
+        style: TextStyle(color: textColor, fontSize: 14),
+      );
     }
     return RichText(
       text: TextSpan(
@@ -224,7 +298,8 @@ class _LocationText extends StatelessWidget {
               decoration: TextDecoration.underline,
             ),
             recognizer: TapGestureRecognizer()
-              ..onTap = () => launchUrl(uri, mode: LaunchMode.externalApplication),
+              ..onTap = () =>
+                  launchUrl(uri, mode: LaunchMode.externalApplication),
           ),
         ],
       ),

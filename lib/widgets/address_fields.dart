@@ -47,30 +47,57 @@ class AddressFields extends StatefulWidget {
 }
 
 class AddressFieldsState extends State<AddressFields> {
-  late final _cepController = TextEditingController(text: widget.initial.cep)..addListener(_notifyChange);
-  late final _streetController = TextEditingController(text: widget.initial.street)..addListener(_notifyChange);
-  late final _numberController = TextEditingController(text: widget.initial.number)..addListener(_notifyChange);
-  late final _complementController = TextEditingController(text: widget.initial.complement)
+  late final _cepController = TextEditingController(text: widget.initial.cep)
     ..addListener(_notifyChange);
-  late final _neighborhoodController = TextEditingController(text: widget.initial.neighborhood)
+  late final _streetController = TextEditingController(
+    text: widget.initial.street,
+  )..addListener(_notifyChange);
+  late final _numberController = TextEditingController(
+    text: widget.initial.number,
+  )..addListener(_notifyChange);
+  late final _complementController = TextEditingController(
+    text: widget.initial.complement,
+  )..addListener(_notifyChange);
+  late final _neighborhoodController = TextEditingController(
+    text: widget.initial.neighborhood,
+  )..addListener(_notifyChange);
+  late final _cityController = TextEditingController(text: widget.initial.city)
     ..addListener(_notifyChange);
-  late final _cityController = TextEditingController(text: widget.initial.city)..addListener(_notifyChange);
   late bool _noNumber = widget.initial.noNumber;
-  late String? _state = widget.initial.state.isNotEmpty ? widget.initial.state : null;
+  late String? _state = widget.initial.state.isNotEmpty
+      ? widget.initial.state
+      : null;
   bool _looking = false;
 
   void _notifyChange() => widget.onAnyChange?.call();
 
+  /// Se o CEP foi preenchido, rua/bairro/cidade/UF (e número, a menos que
+  /// "Sem número" esteja marcado) passam a ser obrigatórios (29/08/2026,
+  /// pedido do usuário) — quem usa este widget chama antes de salvar (ver
+  /// `edit_profile_page.dart`). `null` quando está tudo certo, ou quando o
+  /// CEP está vazio (endereço continua opcional como um todo).
+  String? validate() {
+    if (_cepController.text.trim().isEmpty) return null;
+    if (_streetController.text.trim().isEmpty) return 'Informe a rua/avenida.';
+    if (!_noNumber && _numberController.text.trim().isEmpty) {
+      return 'Informe o número, ou marque "Sem número".';
+    }
+    if (_neighborhoodController.text.trim().isEmpty) return 'Informe o bairro.';
+    if (_cityController.text.trim().isEmpty) return 'Informe a cidade.';
+    if (_state == null || _state!.trim().isEmpty) return 'Informe o UF.';
+    return null;
+  }
+
   Address get value => Address(
-        cep: _cepController.text.trim(),
-        street: _streetController.text.trim(),
-        number: _noNumber ? '' : _numberController.text.trim(),
-        noNumber: _noNumber,
-        complement: _complementController.text.trim(),
-        neighborhood: _neighborhoodController.text.trim(),
-        city: _cityController.text.trim(),
-        state: _state ?? '',
-      );
+    cep: _cepController.text.trim(),
+    street: _streetController.text.trim(),
+    number: _noNumber ? '' : _numberController.text.trim(),
+    noNumber: _noNumber,
+    complement: _complementController.text.trim(),
+    neighborhood: _neighborhoodController.text.trim(),
+    city: _cityController.text.trim(),
+    state: _state ?? '',
+  );
 
   @override
   void dispose() {
@@ -102,7 +129,8 @@ class AddressFieldsState extends State<AddressFields> {
   }
 
   InputDecoration _decoration(String label) =>
-      widget.decorationBuilder?.call(label) ?? InputDecoration(labelText: label);
+      widget.decorationBuilder?.call(label) ??
+      InputDecoration(labelText: label);
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +152,10 @@ class AddressFieldsState extends State<AddressFields> {
                     child: SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: widget.iconColor),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: widget.iconColor,
+                      ),
                     ),
                   )
                 : null,
@@ -163,10 +194,10 @@ class AddressFieldsState extends State<AddressFields> {
                 value: _noNumber,
                 onChanged: widget.enabled
                     ? (checked) => setState(() {
-                          _noNumber = checked ?? false;
-                          if (_noNumber) _numberController.clear();
-                          _notifyChange();
-                        })
+                        _noNumber = checked ?? false;
+                        if (_noNumber) _numberController.clear();
+                        _notifyChange();
+                      })
                     : null,
               ),
             ),
@@ -209,12 +240,15 @@ class AddressFieldsState extends State<AddressFields> {
                 decoration: _decoration('UF'),
                 style: style,
                 dropdownColor: widget.dropdownColor,
-                items: [for (final uf in brazilianStateAbbreviations) DropdownMenuItem(value: uf, child: Text(uf))],
+                items: [
+                  for (final uf in brazilianStateAbbreviations)
+                    DropdownMenuItem(value: uf, child: Text(uf)),
+                ],
                 onChanged: widget.enabled
                     ? (value) => setState(() {
-                          _state = value;
-                          _notifyChange();
-                        })
+                        _state = value;
+                        _notifyChange();
+                      })
                     : null,
               ),
             ),
@@ -226,7 +260,31 @@ class AddressFieldsState extends State<AddressFields> {
 }
 
 const brazilianStateAbbreviations = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
-  'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
-  'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+  'AC',
+  'AL',
+  'AP',
+  'AM',
+  'BA',
+  'CE',
+  'DF',
+  'ES',
+  'GO',
+  'MA',
+  'MT',
+  'MS',
+  'MG',
+  'PA',
+  'PB',
+  'PR',
+  'PE',
+  'PI',
+  'RJ',
+  'RN',
+  'RS',
+  'RO',
+  'RR',
+  'SC',
+  'SP',
+  'SE',
+  'TO',
 ];

@@ -54,12 +54,15 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     text: widget.existing?.content ?? '',
   );
   late final String _songId =
-      widget.song?.id ?? widget.existing?.songId ?? ref.read(cifraRepositoryProvider).newStandaloneId();
+      widget.song?.id ??
+      widget.existing?.songId ??
+      ref.read(cifraRepositoryProvider).newStandaloneId();
 
   String? _toneNote;
   bool _toneIsMinor = false;
   int _capo = 0;
   bool _saving = false;
+  bool _dirty = false;
 
   bool get _isStandalone => widget.song == null;
 
@@ -69,9 +72,18 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     final baseTone = widget.existing?.baseTone ?? '';
     if (baseTone.isNotEmpty) {
       _toneIsMinor = baseTone.endsWith('m');
-      _toneNote = _toneIsMinor ? baseTone.substring(0, baseTone.length - 1) : baseTone;
+      _toneNote = _toneIsMinor
+          ? baseTone.substring(0, baseTone.length - 1)
+          : baseTone;
     }
     _capo = widget.existing?.capo ?? 0;
+    // Listeners adicionados só depois de já preenchidos os valores iniciais
+    // acima, senão disparariam `_markDirty` no próprio `initState` (mesmo
+    // cuidado já documentado em `introduction_page.dart`/
+    // `service_order_form_page.dart`).
+    _nameController.addListener(_markDirty);
+    _artistController.addListener(_markDirty);
+    _contentController.addListener(_markDirty);
   }
 
   @override
@@ -80,6 +92,46 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     _artistController.dispose();
     _contentController.dispose();
     super.dispose();
+  }
+
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
+  /// Aviso "voltar sem salvar?" (29/08/2026, pedido do usuário) — mesmo
+  /// padrão de `service_order_form_page.dart`/`introduction_page.dart`, com
+  /// um botão a mais ("Salvar") que chama `_save()` direto — ela já faz o
+  /// `Navigator.pop()` sozinha quando o salvamento dá certo.
+  Future<void> _confirmDiscardAndPop() async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair sem salvar?'),
+        content: const Text(
+          'As alterações feitas nesta cifra ainda não foram salvas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('continue'),
+            child: const Text('Continuar editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('discard'),
+            child: const Text('Sair sem salvar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('save'),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'discard') {
+      Navigator.of(context).pop();
+    } else if (action == 'save') {
+      await _save();
+    }
   }
 
   /// Importa um .txt (colado/exportado de um site de cifra) e joga no campo
@@ -96,7 +148,9 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     );
     if (files.isEmpty) return;
     final bytes = await files.first.readAsBytes();
-    final cleaned = cleanCifraClubText(utf8.decode(bytes, allowMalformed: true));
+    final cleaned = cleanCifraClubText(
+      utf8.decode(bytes, allowMalformed: true),
+    );
 
     if (!mounted) return;
     if (_contentController.text.trim().isNotEmpty) {
@@ -128,15 +182,18 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Informe o nome da música.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe o nome da música.')),
+      );
       return;
     }
     final uid = ref.read(currentUidProvider);
     final profile = ref.read(currentUserProfileProvider).asData?.value;
     if (uid == null || profile == null) return;
     setState(() => _saving = true);
-    final tone = _toneNote == null ? '' : (_toneIsMinor ? '${_toneNote}m' : _toneNote!);
+    final tone = _toneNote == null
+        ? ''
+        : (_toneIsMinor ? '${_toneNote}m' : _toneNote!);
     final cifra = Cifra(
       id: _songId,
       songId: _songId,
@@ -163,170 +220,213 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.song?.name ?? (widget.existing != null ? widget.existing!.songName : 'Nova cifra');
-    return Scaffold(
-      appBar: const SibValAppBar(isHome: false),
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ScreenTitle('Cifra — $title'),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  16 + MediaQuery.of(context).viewInsets.bottom,
-                ),
-                children: [
-                  if (_isStandalone) ...[
-                    TextField(
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome da música',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+    final title =
+        widget.song?.name ??
+        (widget.existing != null ? widget.existing!.songName : 'Nova cifra');
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _confirmDiscardAndPop();
+      },
+      child: Scaffold(
+        appBar: const SibValAppBar(isHome: false),
+        body: SafeArea(
+          bottom: true,
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ScreenTitle('Cifra — $title'),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    16 + MediaQuery.of(context).viewInsets.bottom,
+                  ),
+                  children: [
+                    if (_isStandalone) ...[
+                      TextField(
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Nome da música',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _artistController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Cantor/Banda',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _artistController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Cantor/Banda',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _toneNote,
+                            isExpanded: true,
+                            dropdownColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            decoration: const InputDecoration(
+                              labelText: 'Tom original',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            // Mesmo mecanismo de `weekly_repertoire_form_page.dart`
+                            // (28/08/2026, pedido do usuário) — a lista aberta E
+                            // o botão fechado ganham o "m" quando "Menor" está
+                            // marcado (ex. "Em", "Dbm", "F#m"), não só o
+                            // fechado.
+                            items: [
+                              for (final note in praiseToneNotes)
+                                DropdownMenuItem(
+                                  value: note,
+                                  // Tom selecionado em destaque na lista
+                                  // aberta (28/08/2026, pedido do usuário).
+                                  child: Text(
+                                    _toneIsMinor ? '${note}m' : note,
+                                    style: note == _toneNote
+                                        ? const TextStyle(
+                                            color: SibValColors.goldAccent,
+                                            fontWeight: FontWeight.bold,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                            ],
+                            selectedItemBuilder: (context) => [
+                              for (final note in praiseToneNotes)
+                                Text(_toneIsMinor ? '${note}m' : note),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _toneNote = value;
+                              _dirty = true;
+                            }),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: _toneIsMinor,
+                              onChanged: _toneNote == null
+                                  ? null
+                                  : (value) => setState(() {
+                                      _toneIsMinor = value ?? false;
+                                      _dirty = true;
+                                    }),
+                            ),
+                            const Text('Menor', style: TextStyle(fontSize: 11)),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _toneNote,
-                          isExpanded: true,
-                          dropdownColor:
-                              Theme.of(context).colorScheme.surfaceContainerHighest,
-                          decoration: const InputDecoration(
-                            labelText: 'Tom original',
-                            border: OutlineInputBorder(),
-                            isDense: true,
+                    Row(
+                      children: [
+                        Text(
+                          'Capotraste',
+                          style: TextStyle(color: context.textPrimary),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: _capo > 0
+                              ? () => setState(() {
+                                  _capo--;
+                                  _dirty = true;
+                                })
+                              : null,
+                        ),
+                        Text(
+                          '$_capo',
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontSize: 16,
                           ),
-                          // Mesmo mecanismo de `weekly_repertoire_form_page.dart`
-                          // (28/08/2026, pedido do usuário) — a lista aberta E
-                          // o botão fechado ganham o "m" quando "Menor" está
-                          // marcado (ex. "Em", "Dbm", "F#m"), não só o
-                          // fechado.
-                          items: [
-                            for (final note in praiseToneNotes)
-                              DropdownMenuItem(
-                                value: note,
-                                // Tom selecionado em destaque na lista
-                                // aberta (28/08/2026, pedido do usuário).
-                                child: Text(
-                                  _toneIsMinor ? '${note}m' : note,
-                                  style: note == _toneNote
-                                      ? const TextStyle(
-                                          color: SibValColors.goldAccent,
-                                          fontWeight: FontWeight.bold,
-                                        )
-                                      : null,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: _capo < 11
+                              ? () => setState(() {
+                                  _capo++;
+                                  _dirty = true;
+                                })
+                              : null,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Letra e acordes — Formato: uma linha só com os '
+                            'acordes, e a linha de baixo com a letra '
+                            'correspondente.',
+                            style: TextStyle(
+                              color: context.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _importFile,
+                          icon: const Icon(Icons.upload_file, size: 18),
+                          label: const Text('Importar .txt'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _contentController,
+                      maxLines: 20,
+                      minLines: 10,
+                      style: const TextStyle(fontFamily: 'monospace'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 18,
+                          ),
+                        ),
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
-                              ),
-                          ],
-                          selectedItemBuilder: (context) => [
-                            for (final note in praiseToneNotes)
-                              Text(_toneIsMinor ? '${note}m' : note),
-                          ],
-                          onChanged: (value) => setState(() => _toneNote = value),
-                        ),
+                              )
+                            : const Text('Salvar'),
                       ),
-                      const SizedBox(width: 4),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Checkbox(
-                            value: _toneIsMinor,
-                            onChanged: _toneNote == null
-                                ? null
-                                : (value) => setState(() => _toneIsMinor = value ?? false),
-                          ),
-                          const Text('Menor', style: TextStyle(fontSize: 11)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text('Capotraste', style: TextStyle(color: context.textPrimary)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: _capo > 0 ? () => setState(() => _capo--) : null,
-                      ),
-                      Text('$_capo', style: TextStyle(color: context.textPrimary, fontSize: 16)),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        onPressed: _capo < 11 ? () => setState(() => _capo++) : null,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Letra e acordes — Formato: uma linha só com os '
-                          'acordes, e a linha de baixo com a letra '
-                          'correspondente.',
-                          style: TextStyle(color: context.textSecondary, fontSize: 12),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: _importFile,
-                        icon: const Icon(Icons.upload_file, size: 18),
-                        label: const Text('Importar .txt'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _contentController,
-                    maxLines: 20,
-                    minLines: 10,
-                    style: const TextStyle(fontFamily: 'monospace'),
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-                      ),
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Salvar'),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

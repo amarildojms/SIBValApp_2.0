@@ -8,17 +8,21 @@ import 'address.dart';
 /// correspondente (`ministry_repository.dart`) só pra exibição sem join;
 /// `ministryId` é o que importa pra filtrar/consultar.
 class MemberMinistry {
-  const MemberMinistry({required this.ministryId, required this.ministryName, required this.cargos});
+  const MemberMinistry({
+    required this.ministryId,
+    required this.ministryName,
+    required this.cargos,
+  });
 
   final String ministryId;
   final String ministryName;
   final List<String> cargos;
 
   Map<String, dynamic> toMap() => {
-        'ministryId': ministryId,
-        'ministryName': ministryName,
-        'cargos': cargos,
-      };
+    'ministryId': ministryId,
+    'ministryName': ministryName,
+    'cargos': cargos,
+  };
 
   factory MemberMinistry.fromMap(Map<String, dynamic> map) {
     return MemberMinistry(
@@ -47,7 +51,7 @@ class MemberMinistry {
 /// continuam aqui (ainda editados pela Secretaria pra membros sem conta),
 /// mas passaram a também ser editáveis pelo próprio usuário vinculado
 /// (`linkedUid`), mesmo padrão que `baptismDate` já tinha — ver
-/// `MemberRepository.updateEcclesiasticalDetails`/`updateBaptismDate` e
+/// `MemberRepository.updateSelfEditableDetails`/`updateBaptismDate` e
 /// `firestore.rules` (`members.update`, `affectedKeys().hasOnly([...])`).
 class Member {
   final String id;
@@ -111,14 +115,18 @@ class Member {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       phone: data['phone'] as String? ?? '',
       address: data['address'] as String? ?? '',
-      addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
+      addressDetails: Address.fromMap(
+        data['addressDetails'] as Map<String, dynamic>?,
+      ),
       membershipDate: (data['membershipDate'] as Timestamp?)?.toDate(),
       admissionForm: data['admissionForm'] as String? ?? '',
       originChurch: data['originChurch'] as String? ?? '',
       baptismDate: (data['baptismDate'] as Timestamp?)?.toDate(),
       ministryIds: List<String>.from(data['ministryIds'] as List? ?? const []),
       ministries: (data['ministries'] as List? ?? const [])
-          .map((m) => MemberMinistry.fromMap(Map<String, dynamic>.from(m as Map)))
+          .map(
+            (m) => MemberMinistry.fromMap(Map<String, dynamic>.from(m as Map)),
+          )
           .toList(),
       linkedUid: data['linkedUid'] as String? ?? '',
       photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),

@@ -14,6 +14,7 @@ class EventCard extends StatelessWidget {
     required this.liked,
     required this.onTap,
     required this.onLikeTap,
+    required this.showStartedTag,
   });
 
   final Event event;
@@ -21,12 +22,20 @@ class EventCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLikeTap;
 
+  /// Computado pelo chamador (`events_page.dart`, via
+  /// `eventStartedTagVisible`) — precisa da lista completa de eventos pra
+  /// saber se há um próximo evento no mesmo dia, algo que este widget
+  /// sozinho não tem (29/08/2026, pedido do usuário).
+  final bool showStartedTag;
+
   static final _dateFormat = DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR');
 
   @override
   Widget build(BuildContext context) {
     final localDate = toSaoPauloTime(event.dateTimeUtc);
-    final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
+    final placeholderColor = Theme.of(context)
+        .colorScheme
+        .surfaceContainerHighest;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -46,7 +55,8 @@ class EventCard extends StatelessWidget {
                       ? Image.network(
                           event.flyerUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) => Container(color: placeholderColor),
+                          errorBuilder: (context, error, stack) =>
+                              Container(color: placeholderColor),
                         )
                       : Container(color: placeholderColor),
                 ),
@@ -60,14 +70,21 @@ class EventCard extends StatelessWidget {
                       event.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _dateFormat.format(localDate),
-                      style: TextStyle(color: context.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: context.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
-                    if (event.hasStarted) ...[
+                    if (showStartedTag) ...[
                       const SizedBox(height: 4),
                       EventStartedTag(time: localDate),
                     ],
@@ -87,7 +104,10 @@ class EventCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Text('${event.likedBy.length}', style: TextStyle(color: context.textPrimary, fontSize: 12)),
+                  Text(
+                    '${event.likedBy.length}',
+                    style: TextStyle(color: context.textPrimary, fontSize: 12),
+                  ),
                 ],
               ),
             ],

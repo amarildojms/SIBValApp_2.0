@@ -50,7 +50,17 @@ class ServiceOrder {
 
   final MissionMoment missionMoment;
   final String missionTheme;
-  final String missionMotto;
+
+  /// "Divisa" do Momento Missionário — era texto livre, virou seleção de
+  /// texto(s) bíblico(s) (29/08/2026, pedido do usuário; pode ter mais de
+  /// um, mesmo mecanismo de `bibleReadings`/`extraBibleReferences`). Sem
+  /// backfill: ordens salvas antes desta mudança tinham `missionMotto`
+  /// (`String`, campo removido) — esse texto livre antigo não é convertido
+  /// automaticamente (não dá pra virar referência bíblica estruturada por
+  /// conta própria); o dirigente precisa reeditar a ordem e selecionar de
+  /// novo. Ver `ServiceOrderMissionMomentPage` (tela aberta ao tocar no
+  /// momento) e `ServiceOrderItem.summary`.
+  final List<BibleReference> missionMottoReferences;
 
   final BibleReference tithesBibleReading;
   final String congregationalHymn;
@@ -121,7 +131,7 @@ class ServiceOrder {
     this.participation = '',
     this.missionMoment = MissionMoment.naoHavera,
     this.missionTheme = '',
-    this.missionMotto = '',
+    this.missionMottoReferences = const [],
     this.tithesBibleReading = const BibleReference(),
     this.congregationalHymn = '',
     this.praise2 = 'Ministério Adorai',
@@ -162,7 +172,7 @@ class ServiceOrder {
       participation: participation,
       missionMoment: missionMoment,
       missionTheme: missionTheme,
-      missionMotto: missionMotto,
+      missionMottoReferences: missionMottoReferences,
       tithesBibleReading: tithesBibleReading,
       congregationalHymn: congregationalHymn,
       praise2: praise2,
@@ -202,7 +212,9 @@ class ServiceOrder {
       'participation': participation,
       'missionMoment': missionMoment.name,
       'missionTheme': missionTheme,
-      'missionMotto': missionMotto,
+      'missionMottoReferences': missionMottoReferences
+          .map((r) => r.toMap())
+          .toList(),
       'tithesBibleReading': tithesBibleReading.toMap(),
       'congregationalHymn': congregationalHymn,
       'praise2': praise2,
@@ -242,7 +254,11 @@ class ServiceOrder {
       participation: data['participation'] as String? ?? '',
       missionMoment: MissionMoment.fromName(data['missionMoment'] as String?),
       missionTheme: data['missionTheme'] as String? ?? '',
-      missionMotto: data['missionMotto'] as String? ?? '',
+      missionMottoReferences:
+          (data['missionMottoReferences'] as List<dynamic>?)
+              ?.map((e) => BibleReference.fromMap(e as Map<String, dynamic>?))
+              .toList() ??
+          const [],
       tithesBibleReading: BibleReference.fromMap(
         data['tithesBibleReading'] as Map<String, dynamic>?,
       ),
@@ -280,14 +296,15 @@ class ServiceOrder {
 /// usuário (mesma ordem de declaração do enum, reordenada em 28/08/2026 —
 /// ver `[[feedback_flutter_migration_style]]` na memória automática pra
 /// contexto de por que este arquivo documenta cada decisão de negócio).
-/// `gratitudePrayer` (Oração de gratidão) foi removido nesta reordenação —
-/// o usuário passou a pedir só um momento de oração relacionado nessa
-/// posição, e reaproveitou `childrenPrayer` movido pra lá em vez de manter
-/// os dois. Cada valor aponta pros mesmos dados coletados em `ServiceOrder`
-/// (ex.: `praise1`/`praise2`/`praise3` são três momentos "Louvor" distintos,
-/// reordenáveis independentemente) — os itens sem campo próprio
-/// (`welcome`/`announcements`/`childrenPrayer`/`apostolicBlessing`) só
-/// marcam a posição na sequência.
+/// `gratitudePrayer` (Oração de Gratidão) tinha sido removido naquela
+/// reordenação (o usuário só queria um momento de oração relacionado ali,
+/// reaproveitando `childrenPrayer`) — reintroduzido em 29/08/2026, a pedido
+/// do usuário, logo depois de `tithesOffering` ("Dedicação dos dízimos e
+/// ofertas"). Cada valor aponta pros mesmos dados coletados em
+/// `ServiceOrder` (ex.: `praise1`/`praise2`/`praise3` são três momentos
+/// "Louvor" distintos, reordenáveis independentemente) — os itens sem campo
+/// próprio (`welcome`/`announcements`/`gratitudePrayer`/`childrenPrayer`/
+/// `apostolicBlessing`) só marcam a posição na sequência.
 enum ServiceOrderMomentType {
   prelude,
   prayer,
@@ -298,6 +315,7 @@ enum ServiceOrderMomentType {
   participation,
   missionMoment,
   tithesOffering,
+  gratitudePrayer,
   childrenPrayer,
   praise2,
   intercession,
@@ -324,6 +342,7 @@ enum ServiceOrderMomentType {
     ServiceOrderMomentType.participation => 'Participação Especial',
     ServiceOrderMomentType.missionMoment => 'Momento Missionário',
     ServiceOrderMomentType.tithesOffering => 'Dedicação dos dízimos e ofertas',
+    ServiceOrderMomentType.gratitudePrayer => 'Oração de Gratidão',
     ServiceOrderMomentType.childrenPrayer => 'Oração pelas crianças',
     ServiceOrderMomentType.praise2 => 'Louvor',
     ServiceOrderMomentType.intercession => 'Momento de Intercessão',
@@ -433,6 +452,7 @@ class ServiceOrderItem {
         return order.praise1.isEmpty ? null : order.praise1;
       case ServiceOrderMomentType.welcome:
       case ServiceOrderMomentType.announcements:
+      case ServiceOrderMomentType.gratitudePrayer:
       case ServiceOrderMomentType.childrenPrayer:
       case ServiceOrderMomentType.apostolicBlessing:
         return null;
@@ -440,7 +460,15 @@ class ServiceOrderItem {
         return order.participation.isEmpty ? null : order.participation;
       case ServiceOrderMomentType.missionMoment:
         if (order.missionMoment == MissionMoment.naoHavera) return null;
-        return '${order.missionMoment.label} — ${order.missionTheme}';
+        final mottoRefs = order.missionMottoReferences
+            .map((r) => r.reference)
+            .whereType<String>()
+            .join('; ');
+        final parts = [
+          order.missionTheme,
+          if (mottoRefs.isNotEmpty) mottoRefs,
+        ].where((p) => p.isNotEmpty);
+        return '${order.missionMoment.label} — ${parts.join(' · ')}';
       case ServiceOrderMomentType.tithesOffering:
         final parts = [
           if (order.tithesBibleReading.reference != null)
@@ -477,7 +505,9 @@ class ServiceOrderItem {
       'name': extraMomentName,
       if (extraNames.isNotEmpty) 'extraNames': extraNames,
       if (extraBibleReferences.isNotEmpty)
-        'extraBibleReferences': extraBibleReferences.map((r) => r.toMap()).toList(),
+        'extraBibleReferences': extraBibleReferences
+            .map((r) => r.toMap())
+            .toList(),
     };
   }
 
@@ -505,7 +535,8 @@ class ServiceOrderItem {
               .map((e) => BibleReference.fromMap(e as Map<String, dynamic>?))
               .toList();
         } else {
-          final singleRefMap = map['extraBibleReference'] as Map<String, dynamic>?;
+          final singleRefMap =
+              map['extraBibleReference'] as Map<String, dynamic>?;
           bibleRefs = singleRefMap != null
               ? [BibleReference.fromMap(singleRefMap)]
               : const [];

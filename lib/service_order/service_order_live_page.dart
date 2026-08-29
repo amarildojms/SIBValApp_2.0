@@ -16,6 +16,7 @@ import '../models/visitor.dart';
 import '../notifications/notification_read_sync.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
+import 'service_order_mission_moment_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). "Modo apresentação": aberto ao tocar em "Iniciar Culto"/
@@ -56,11 +57,16 @@ class ServiceOrderLivePage extends ConsumerStatefulWidget {
   final ServiceOrder order;
 
   @override
-  ConsumerState<ServiceOrderLivePage> createState() => _ServiceOrderLivePageState();
+  ConsumerState<ServiceOrderLivePage> createState() =>
+      _ServiceOrderLivePageState();
 }
 
 class _SubAction {
-  const _SubAction({required this.key, required this.label, required this.open});
+  const _SubAction({
+    required this.key,
+    required this.label,
+    required this.open,
+  });
 
   final String key;
   final String label;
@@ -88,8 +94,16 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     // Chega aqui por outro caminho que não o toque na notificação também
     // marca como lida/cancela da barra (24/08/2026, mesmo padrão das demais
     // telas ligadas a um tipo de notificação).
-    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderReminder, targetId: widget.order.id);
-    syncNotificationsForScreen(ref, type: NotificationType.serviceOrderStarted, targetId: widget.order.id);
+    syncNotificationsForScreen(
+      ref,
+      type: NotificationType.serviceOrderReminder,
+      targetId: widget.order.id,
+    );
+    syncNotificationsForScreen(
+      ref,
+      type: NotificationType.serviceOrderStarted,
+      targetId: widget.order.id,
+    );
   }
 
   Future<void> _loadRepertoire() async {
@@ -116,7 +130,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     }
   }
 
-  String _baseKeyFor(int index, ServiceOrderItem item, List<ServiceOrderItem> items) {
+  String _baseKeyFor(
+    int index,
+    ServiceOrderItem item,
+    List<ServiceOrderItem> items,
+  ) {
     final raw = item.type?.name ?? 'extra:${item.extraMomentId}';
     final before = items
         .take(index)
@@ -186,14 +204,18 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
               if (!ctx.mounted) return;
               if (resolved == null) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Hino não encontrado no hinário.')),
+                  const SnackBar(
+                    content: Text('Hino não encontrado no hinário.'),
+                  ),
                 );
                 return;
               }
               await Navigator.of(ctx).push<void>(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      HymnDetailPage(hymnal: resolved.$1, songId: resolved.$2.id),
+                  builder: (_) => HymnDetailPage(
+                    hymnal: resolved.$1,
+                    songId: resolved.$2.id,
+                  ),
                 ),
               );
             },
@@ -201,6 +223,26 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
         );
       }
       return subs;
+    }
+    // "Divisa" do Momento Missionário (29/08/2026, pedido do usuário) — 1
+    // toque abre os textos selecionados (pode ter mais de um), com a divisa
+    // em destaque no topo — ver `ServiceOrderMissionMomentPage`.
+    if (item.type == ServiceOrderMomentType.missionMoment &&
+        order.missionMottoReferences.any((r) => r.isFilled)) {
+      return [
+        _SubAction(
+          key: '$baseKey:motto',
+          label: 'Divisa',
+          open: (ctx) => Navigator.of(ctx).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ServiceOrderMissionMomentPage(
+                theme: order.missionTheme,
+                references: order.missionMottoReferences,
+              ),
+            ),
+          ),
+        ),
+      ];
     }
     // Momento adicional com `ExtraMomentFieldKind.bibleReference` (ex.:
     // "Ceia do Senhor" — pedido do usuário: "parecido com os dízimos e
@@ -296,7 +338,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     for (final hymnal in Hymnal.values) {
       final prefix = '${hymnal.titlePrefix} ';
       if (!label.startsWith(prefix)) continue;
-      final numberPart = label.substring(prefix.length).split(' — ').first.trim();
+      final numberPart = label
+          .substring(prefix.length)
+          .split(' — ')
+          .first
+          .trim();
       try {
         final songs = await ref.read(hymnSongsProvider(hymnal).future);
         for (final song in songs) {
@@ -319,7 +365,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     final songs = repertoire.forSlot(slot);
     if (songs.isEmpty) return null;
     return songs
-        .map((a) => a.songArtist.isEmpty ? a.songName : '${a.songName} — ${a.songArtist}')
+        .map(
+          (a) => a.songArtist.isEmpty
+              ? a.songName
+              : '${a.songName} — ${a.songArtist}',
+        )
         .join('\n');
   }
 
@@ -332,7 +382,9 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     final visitors = _visitors;
     if (visitors == null) return null;
     if (visitors.isEmpty) return 'Não há visitantes.';
-    return visitors.length == 1 ? '1 visitante hoje.' : '${visitors.length} visitantes hoje.';
+    return visitors.length == 1
+        ? '1 visitante hoje.'
+        : '${visitors.length} visitantes hoje.';
   }
 
   void _setDone(String key, bool done) {
@@ -381,7 +433,9 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Sair do modo culto?'),
-        content: const Text('Seu progresso fica salvo — pode continuar de onde parou.'),
+        content: const Text(
+          'Seu progresso fica salvo — pode continuar de onde parou.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -492,8 +546,9 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                     final item = items[index];
                     final baseKey = _baseKeyFor(index, item, items);
                     final subs = _subActionsFor(baseKey, item);
-                    final leaves =
-                        subs.isEmpty ? [baseKey] : subs.map((s) => s.key).toList();
+                    final leaves = subs.isEmpty
+                        ? [baseKey]
+                        : subs.map((s) => s.key).toList();
                     final isItemDone =
                         leaves.isNotEmpty && leaves.every(_done.contains);
                     final currentIndex = _currentItemIndex(items);
@@ -514,9 +569,12 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
 
                     final singleAction = subs.isEmpty ? null : subs.single;
                     final key = singleAction?.key ?? baseKey;
-                    final extraSummary = item.type == ServiceOrderMomentType.welcome
+                    final extraSummary =
+                        item.type == ServiceOrderMomentType.welcome
                         ? _welcomeSummary()
-                        : (item.type != null ? _repertoireSummaryFor(item.type!) : null);
+                        : (item.type != null
+                              ? _repertoireSummaryFor(item.type!)
+                              : null);
                     final momentCard = _MomentCard(
                       index: index,
                       item: item,
@@ -537,13 +595,17 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                     // `.announcementsNotes`. Não é marcável, só texto.
                     final momentNotes = switch (item.type) {
                       ServiceOrderMomentType.welcome => order.welcomeNotes,
-                      ServiceOrderMomentType.announcements => order.announcementsNotes,
+                      ServiceOrderMomentType.announcements =>
+                        order.announcementsNotes,
                       _ => '',
                     };
                     if (momentNotes.isNotEmpty) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [momentCard, _MomentNotesCard(text: momentNotes)],
+                        children: [
+                          momentCard,
+                          _MomentNotesCard(text: momentNotes),
+                        ],
                       );
                     }
                     return momentCard;
@@ -633,6 +695,7 @@ IconData _iconFor(ServiceOrderMomentType? type) {
     ServiceOrderMomentType.participation => Icons.star,
     ServiceOrderMomentType.missionMoment => Icons.public,
     ServiceOrderMomentType.tithesOffering => Icons.volunteer_activism,
+    ServiceOrderMomentType.gratitudePrayer => Icons.favorite,
     ServiceOrderMomentType.childrenPrayer => Icons.child_care,
     ServiceOrderMomentType.intercession => Icons.groups,
     ServiceOrderMomentType.message => Icons.record_voice_over,
@@ -658,7 +721,11 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
 
 /// Ícone do momento — emoji (`_emojiFor`) quando existe, senão `Icon`
 /// (`_iconFor`) normal. Reaproveitado por `_MomentCard`/`_MomentGroupCard`.
-Widget _momentIcon(ServiceOrderMomentType? type, {required double size, required Color color}) {
+Widget _momentIcon(
+  ServiceOrderMomentType? type, {
+  required double size,
+  required Color color,
+}) {
   final emoji = _emojiFor(type);
   if (emoji != null) {
     return Text(emoji, style: TextStyle(fontSize: size));
@@ -702,7 +769,9 @@ class _MomentCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: isCurrent ? const Color(0xFF1E3A5F) : Colors.white.withValues(alpha: 0.04),
+        color: isCurrent
+            ? const Color(0xFF1E3A5F)
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -718,7 +787,11 @@ class _MomentCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatusBadge(index: index, isDone: isDone, isCurrent: isCurrent),
+                _StatusBadge(
+                  index: index,
+                  isDone: isDone,
+                  isCurrent: isCurrent,
+                ),
                 const SizedBox(width: 12),
                 _momentIcon(
                   item.type,
@@ -738,7 +811,9 @@ class _MomentCard extends StatelessWidget {
                           color: textColor,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          decoration: isDone ? TextDecoration.lineThrough : null,
+                          decoration: isDone
+                              ? TextDecoration.lineThrough
+                              : null,
                         ),
                       ),
                       if (summary.isNotEmpty)
@@ -786,7 +861,10 @@ class _MomentNotesCard extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.white70, fontSize: 14),
+      ),
     );
   }
 }
@@ -824,7 +902,9 @@ class _MomentGroupCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isCurrent ? const Color(0xFF1E3A5F) : Colors.white.withValues(alpha: 0.04),
+        color: isCurrent
+            ? const Color(0xFF1E3A5F)
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
         border: isCurrent
             ? Border.all(color: SibValColors.goldAccent, width: 1.5)
@@ -859,7 +939,10 @@ class _MomentGroupCard extends StatelessWidget {
           if (subs.isEmpty)
             const Padding(
               padding: EdgeInsets.only(left: 42, top: 4),
-              child: Text('Nada preenchido.', style: TextStyle(color: Colors.white38)),
+              child: Text(
+                'Nada preenchido.',
+                style: TextStyle(color: Colors.white38),
+              ),
             ),
           for (final sub in subs)
             Padding(
@@ -877,7 +960,11 @@ class _MomentGroupCard extends StatelessWidget {
 }
 
 class _SubActionRow extends StatelessWidget {
-  const _SubActionRow({required this.sub, required this.isDone, required this.onTap});
+  const _SubActionRow({
+    required this.sub,
+    required this.isDone,
+    required this.onTap,
+  });
 
   final _SubAction sub;
   final bool isDone;
@@ -913,7 +1000,11 @@ class _SubActionRow extends StatelessWidget {
                 ),
               ),
               if (!isDone)
-                const Icon(Icons.chevron_right, size: 18, color: Colors.white38),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: Colors.white38,
+                ),
             ],
           ),
         ),

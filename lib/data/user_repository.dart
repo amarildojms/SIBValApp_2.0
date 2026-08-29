@@ -103,59 +103,81 @@ class CurrentUserProfile {
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return email;
     if (parts.length == 1) return parts.first;
     return '${parts.first} ${parts.last}';
   }
 
-  /// % de cadastro preenchido: 4 campos sempre obrigatórios no registro
-  /// (nome, cpf, data de nascimento, e-mail) + phone/address/maritalStatus
-  /// aqui + os campos da seção "Dados eclesiásticos" (admissionForm,
-  /// originChurch, baptismDate, ao menos 1 ministério) e a data de
-  /// membresia, lidos do `Member` vinculado (ver `myMemberProvider`) — só a
-  /// Secretaria preenche `membershipDate`/ministérios; os demais já podem
-  /// vir do próprio usuário desde 29/08/2026 (ver `maritalStatus` acima e
-  /// `MemberRepository.updateEcclesiasticalDetails`/`updateBaptismDate`).
+  /// % de cadastro preenchido — lista revisada em 29/08/2026 (pedido do
+  /// usuário), 14 campos ao todo: nome, e-mail, telefone (`users/{uid}`);
+  /// CEP/rua/número/bairro/cidade/UF do endereço estruturado (número conta
+  /// como preenchido também quando "Sem número" está marcado); estado civil
+  /// (`users/{uid}.maritalStatus`); e, do `Member` vinculado (ver
+  /// `myMemberProvider`) — data de membresia (só a Secretaria preenche),
+  /// forma de adesão, igreja de origem e data de batismo (esses três já
+  /// podem vir do próprio usuário, `MemberRepository.updateSelfEditableDetails`/
+  /// `updateBaptismDate`). CPF e data de nascimento saíram da conta (eram
+  /// sempre obrigatórios no cadastro, então não agregavam informação sobre o
+  /// quanto falta preencher); ministérios/cargos também saíram — não estão
+  /// na lista pedida pelo usuário.
   int completionPercent({required Member? member}) {
-    final requiredFilled = [name, cpf, email].where((v) => v.trim().isNotEmpty).length + (hasBirthdate ? 1 : 0);
-    final optionalFilled = [phone, address, maritalStatus].where((v) => v.trim().isNotEmpty).length +
-        [member?.admissionForm ?? '', member?.originChurch ?? '']
-            .where((v) => v.trim().isNotEmpty)
-            .length +
-        (member?.baptismDate != null ? 1 : 0) +
-        (member != null && member.ministries.isNotEmpty ? 1 : 0) +
-        (member?.membershipDate != null ? 1 : 0);
-    const totalFields =
-        12; // 4 obrigatórios + phone/address/estado civil(3) + eclesiásticos(2) + baptismDate(1) + ministérios(1) + membershipDate(1)
-    return (((requiredFilled + optionalFilled) / totalFields) * 100).round();
+    final a = addressDetails;
+    final filled = <bool>[
+      name.trim().isNotEmpty,
+      email.trim().isNotEmpty,
+      phone.trim().isNotEmpty,
+      a.cep.trim().isNotEmpty,
+      a.street.trim().isNotEmpty,
+      a.noNumber || a.number.trim().isNotEmpty,
+      a.neighborhood.trim().isNotEmpty,
+      a.city.trim().isNotEmpty,
+      a.state.trim().isNotEmpty,
+      maritalStatus.trim().isNotEmpty,
+      member?.membershipDate != null,
+      (member?.admissionForm ?? '').trim().isNotEmpty,
+      (member?.originChurch ?? '').trim().isNotEmpty,
+      member?.baptismDate != null,
+    ];
+    final filledCount = filled.where((f) => f).length;
+    return ((filledCount / filled.length) * 100).round();
   }
 }
 
-final currentUserProfileProvider = FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {
-  final uid = ref.watch(currentUidProvider);
-  if (uid == null) return null;
-  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  final data = doc.data();
-  if (data == null) return null;
-  return CurrentUserProfile(
-    name: data['name'] as String? ?? '',
-    email: data['email'] as String? ?? '',
-    photoUrl: data['photoUrl'] as String? ?? '',
-    isAdmin: data['isAdmin'] as bool? ?? false,
-    roles: List<String>.from(data['roles'] as List? ?? const []),
-    cpf: data['cpf'] as String? ?? '',
-    hasBirthdate: data['birthdate'] != null,
-    phone: data['phone'] as String? ?? '',
-    address: data['address'] as String? ?? '',
-    addressDetails: Address.fromMap(data['addressDetails'] as Map<String, dynamic>?),
-    maritalStatus: data['maritalStatus'] as String? ?? '',
-    photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
-    communicationsConsent: data['communicationsConsent'] as bool? ?? false,
-    acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
-    acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
-  );
-});
+final currentUserProfileProvider =
+    FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {
+      final uid = ref.watch(currentUidProvider);
+      if (uid == null) return null;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = doc.data();
+      if (data == null) return null;
+      return CurrentUserProfile(
+        name: data['name'] as String? ?? '',
+        email: data['email'] as String? ?? '',
+        photoUrl: data['photoUrl'] as String? ?? '',
+        isAdmin: data['isAdmin'] as bool? ?? false,
+        roles: List<String>.from(data['roles'] as List? ?? const []),
+        cpf: data['cpf'] as String? ?? '',
+        hasBirthdate: data['birthdate'] != null,
+        phone: data['phone'] as String? ?? '',
+        address: data['address'] as String? ?? '',
+        addressDetails: Address.fromMap(
+          data['addressDetails'] as Map<String, dynamic>?,
+        ),
+        maritalStatus: data['maritalStatus'] as String? ?? '',
+        photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
+        communicationsConsent: data['communicationsConsent'] as bool? ?? false,
+        acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
+        acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
+      );
+    });
 
 /// Espelha os métodos de admin de UserRepository.kt — aprovar/rejeitar
 /// cadastro, bloquear, alterar cargos, excluir perfil. Só quem é isAdmin
@@ -167,7 +189,8 @@ class UserRepository {
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
 
-  CollectionReference<Map<String, dynamic>> get _users => _firestore.collection('users');
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _firestore.collection('users');
 
   /// Espelha RegisterViewModel.kt: cria o doc em `users/{uid}` com status
   /// pendente de aprovação — precisa de um admin em Gerenciar Usuários pra
@@ -205,10 +228,13 @@ class UserRepository {
       'address': addressDetails.formatted,
       'addressDetails': addressDetails.toMap(),
       if (baptismDate != null) 'baptismDate': Timestamp.fromDate(baptismDate),
-      if (privacyPolicyAccepted) 'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
-      if (termsOfUseAccepted) 'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
+      if (privacyPolicyAccepted)
+        'privacyPolicyAcceptedAt': FieldValue.serverTimestamp(),
+      if (termsOfUseAccepted)
+        'termsOfUseAcceptedAt': FieldValue.serverTimestamp(),
       'communicationsConsent': communicationsConsent,
-      if (communicationsConsent) 'communicationsConsentAt': FieldValue.serverTimestamp(),
+      if (communicationsConsent)
+        'communicationsConsentAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'status': UserStatus.pending,
       'isAdmin': false,
@@ -281,11 +307,16 @@ class UserRepository {
 
   /// Tempo real (21/08/2026) — ver `allUsersProvider`.
   Stream<List<AppUser>> watchAllUsers() {
-    return _users.orderBy('name').snapshots().map((s) => s.docs.map(AppUser.fromFirestore).toList());
+    return _users
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(AppUser.fromFirestore).toList());
   }
 
   Future<int> getPendingCount() async {
-    final snapshot = await _users.where('status', isEqualTo: UserStatus.pending).get();
+    final snapshot = await _users
+        .where('status', isEqualTo: UserStatus.pending)
+        .get();
     return snapshot.docs.length;
   }
 
@@ -324,7 +355,8 @@ final allUsersProvider = StreamProvider.autoDispose<List<AppUser>>((ref) {
   return ref.watch(userRepositoryProvider).watchAllUsers().map((users) {
     final sorted = [...users]
       ..sort((a, b) {
-        final pendingCompare = (a.status != UserStatus.pending ? 1 : 0).compareTo(b.status != UserStatus.pending ? 1 : 0);
+        final pendingCompare = (a.status != UserStatus.pending ? 1 : 0)
+            .compareTo(b.status != UserStatus.pending ? 1 : 0);
         if (pendingCompare != 0) return pendingCompare;
         return a.name.compareTo(b.name);
       });
@@ -334,5 +366,7 @@ final allUsersProvider = StreamProvider.autoDispose<List<AppUser>>((ref) {
 
 final pendingUserCountProvider = StreamProvider.autoDispose<int>((ref) {
   final users = ref.watch(allUsersProvider).asData?.value ?? const <AppUser>[];
-  return Stream.value(users.where((u) => u.status == UserStatus.pending).length);
+  return Stream.value(
+    users.where((u) => u.status == UserStatus.pending).length,
+  );
 });

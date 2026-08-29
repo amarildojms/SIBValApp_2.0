@@ -104,8 +104,12 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   MissionMoment _missionMoment = MissionMoment.naoHavera;
   final _missionThemeController = TextEditingController();
   final _missionThemeFocusNode = FocusNode();
-  final _missionMottoController = TextEditingController();
-  final _missionMottoFocusNode = FocusNode();
+
+  /// "Divisa" — texto(s) bíblico(s), não mais texto livre (29/08/2026,
+  /// pedido do usuário) — mesmo padrão de lista repetível de
+  /// `_bibleReadingControllers` (sempre com pelo menos 1 controller, mesmo
+  /// com a seção escondida enquanto `_missionMoment == naoHavera`).
+  final List<BibleReferenceController> _missionMottoControllers = [];
 
   final _tithesBibleController = BibleReferenceController();
   final _congregationalHymnController = TextEditingController();
@@ -136,7 +140,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   /// `ServiceOrderMomentType.values` (só os fixos, sem especiais) até a
   /// busca terminar ou se ela falhar.
   List<ServiceOrderItem> _defaultMomentOrder = [
-    for (final type in ServiceOrderMomentType.values) ServiceOrderItem.fixed(type),
+    for (final type in ServiceOrderMomentType.values)
+      ServiceOrderItem.fixed(type),
   ];
 
   /// `true` assim que o usuário interage com algum campo — ver doc comment
@@ -155,11 +160,15 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   /// `_continue()` pra levar o cursor até lá quando a validação falha.
   FocusNode? _focusNodeFor(_RequiredField field) => switch (field) {
     _RequiredField.preludeOther => _preludeOtherFocusNode,
-    _RequiredField.bibleReading => _bibleReadingControllers.isEmpty
-        ? null
-        : _bibleReadingControllers.first.bookFocusNode,
+    _RequiredField.bibleReading =>
+      _bibleReadingControllers.isEmpty
+          ? null
+          : _bibleReadingControllers.first.bookFocusNode,
     _RequiredField.missionTheme => _missionThemeFocusNode,
-    _RequiredField.missionMotto => _missionMottoFocusNode,
+    _RequiredField.missionMotto =>
+      _missionMottoControllers.isEmpty
+          ? null
+          : _missionMottoControllers.first.bookFocusNode,
     _RequiredField.tithesBible => _tithesBibleController.bookFocusNode,
     _RequiredField.congregationalHymn => _congregationalHymnFocusNode,
     _RequiredField.postludeOther => _postludeOtherFocusNode,
@@ -194,7 +203,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       _participationController.text = editing.participation;
       _missionMoment = editing.missionMoment;
       _missionThemeController.text = editing.missionTheme;
-      _missionMottoController.text = editing.missionMotto;
+      for (final motto in editing.missionMottoReferences) {
+        _missionMottoControllers.add(_controllerFor(motto));
+      }
       _tithesBibleController.applyReference(editing.tithesBibleReading);
       _congregationalHymnController.text = editing.congregationalHymn;
       _praise2Controller.text = editing.praise2;
@@ -220,6 +231,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     if (_bibleReadingControllers.isEmpty) {
       _bibleReadingControllers.add(BibleReferenceController());
     }
+    if (_missionMottoControllers.isEmpty) {
+      _missionMottoControllers.add(BibleReferenceController());
+    }
     // Listeners adicionados só depois dos valores padrão/edição acima, senão
     // disparariam `_markDirty` antes mesmo do usuário tocar em qualquer campo.
     for (final controller in _textControllersToTrack) {
@@ -232,10 +246,13 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   Future<void> _loadDefaultMomentOrder() async {
     List<ServiceOrderItem>? order;
     try {
-      final tokens =
-          await ref.read(serviceOrderMomentOrderRepositoryProvider).getTokens();
-      final extras =
-          await ref.read(serviceOrderExtraMomentRepositoryProvider).watchAll().first;
+      final tokens = await ref
+          .read(serviceOrderMomentOrderRepositoryProvider)
+          .getTokens();
+      final extras = await ref
+          .read(serviceOrderExtraMomentRepositoryProvider)
+          .watchAll()
+          .first;
       order = resolveServiceOrderMomentTemplate(tokens, extras);
     } catch (_) {
       order = null;
@@ -259,7 +276,6 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _announcementsNotesController,
     _participationController,
     _missionThemeController,
-    _missionMottoController,
     _congregationalHymnController,
     _praise2Controller,
     _intercessionController,
@@ -315,7 +331,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
   Future<void> _prefillDateTime() async {
     DateTime? latest;
     try {
-      latest = await ref.read(serviceOrderRepositoryProvider).getLatestDateTime();
+      latest = await ref
+          .read(serviceOrderRepositoryProvider)
+          .getLatestDateTime();
     } catch (_) {
       latest = null;
     }
@@ -340,6 +358,19 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     setState(() => _dirty = true);
   }
 
+  void _addMissionMotto() {
+    setState(() {
+      _missionMottoControllers.add(BibleReferenceController());
+      _dirty = true;
+    });
+  }
+
+  void _removeMissionMotto(int index) {
+    final controller = _missionMottoControllers.removeAt(index);
+    controller.dispose();
+    setState(() => _dirty = true);
+  }
+
   Future<void> _pickExtraMoments() async {
     // Duas tentativas anteriores (asData?.value, depois .future do
     // provider) não resolveram o bug relatado — momentos adicionais já
@@ -350,7 +381,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     // explicação.
     List<ServiceOrderExtraMomentOption> catalog;
     try {
-      catalog = await ref.read(serviceOrderExtraMomentRepositoryProvider).getAll();
+      catalog = await ref
+          .read(serviceOrderExtraMomentRepositoryProvider)
+          .getAll();
     } catch (e) {
       if (mounted) _showError('Falha ao carregar momentos adicionais: $e');
       return;
@@ -425,7 +458,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       if (_missionThemeController.text.trim().isEmpty) {
         errors.add(_RequiredField.missionTheme);
       }
-      if (_missionMottoController.text.trim().isEmpty) {
+      if (!_missionMottoControllers.any((c) => c.toReference().isFilled)) {
         errors.add(_RequiredField.missionMotto);
       }
     }
@@ -487,9 +520,12 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
       missionTheme: _missionMoment == MissionMoment.naoHavera
           ? ''
           : _missionThemeController.text.trim(),
-      missionMotto: _missionMoment == MissionMoment.naoHavera
-          ? ''
-          : _missionMottoController.text.trim(),
+      missionMottoReferences: _missionMoment == MissionMoment.naoHavera
+          ? const []
+          : _missionMottoControllers
+                .map((c) => c.toReference())
+                .where((r) => r.isFilled)
+                .toList(),
       tithesBibleReading: _tithesBibleController.toReference(),
       congregationalHymn: _congregationalHymnController.text.trim(),
       praise2: _praise2Controller.text.trim(),
@@ -554,8 +590,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
     _participationFocusNode.dispose();
     _missionThemeController.dispose();
     _missionThemeFocusNode.dispose();
-    _missionMottoController.dispose();
-    _missionMottoFocusNode.dispose();
+    for (final controller in _missionMottoControllers) {
+      controller.dispose();
+    }
     _tithesBibleController.dispose();
     _congregationalHymnController.dispose();
     _congregationalHymnFocusNode.dispose();
@@ -595,7 +632,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ScreenTitle(
-                _isEditing ? 'Editar Ordem de Culto' : 'Cadastro de Ordem de Culto',
+                _isEditing
+                    ? 'Editar Ordem de Culto'
+                    : 'Cadastro de Ordem de Culto',
               ),
               Expanded(
                 child: SingleChildScrollView(
@@ -682,7 +721,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                                   hintText: 'Responsável pelo prelúdio',
                                 ),
                                 _preludeOtherController.text,
-                                isError: _fieldErrors.contains(_RequiredField.preludeOther),
+                                isError: _fieldErrors.contains(
+                                  _RequiredField.preludeOther,
+                                ),
                               ),
                             ),
                           ],
@@ -703,7 +744,11 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                         _momentBox(context, [
                           _momentLabel(context, 'Leitura bíblica'),
                           const SizedBox(height: 4),
-                          for (var i = 0; i < _bibleReadingControllers.length; i++)
+                          for (
+                            var i = 0;
+                            i < _bibleReadingControllers.length;
+                            i++
+                          )
                             Padding(
                               key: ValueKey(_bibleReadingControllers[i]),
                               padding: const EdgeInsets.only(bottom: 8),
@@ -717,8 +762,11 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                                 // falhar a validação) mostra vermelho — o
                                 // erro é "nenhuma leitura preenchida", não
                                 // "esta linha específica".
-                                isError: i == 0 &&
-                                    _fieldErrors.contains(_RequiredField.bibleReading),
+                                isError:
+                                    i == 0 &&
+                                    _fieldErrors.contains(
+                                      _RequiredField.bibleReading,
+                                    ),
                               ),
                             ),
                           Align(
@@ -792,7 +840,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                                 ),
                             ],
                             onChanged: (moment) => setState(() {
-                              _missionMoment = moment ?? MissionMoment.naoHavera;
+                              _missionMoment =
+                                  moment ?? MissionMoment.naoHavera;
                               _dirty = true;
                             }),
                           ),
@@ -804,31 +853,64 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                               decoration: highlightIfEmpty(
                                 _fieldDecoration.copyWith(hintText: 'Tema'),
                                 _missionThemeController.text,
-                                isError: _fieldErrors.contains(_RequiredField.missionTheme),
+                                isError: _fieldErrors.contains(
+                                  _RequiredField.missionTheme,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 6),
-                            TextField(
-                              controller: _missionMottoController,
-                              focusNode: _missionMottoFocusNode,
-                              decoration: highlightIfEmpty(
-                                _fieldDecoration.copyWith(hintText: 'Divisa'),
-                                _missionMottoController.text,
-                                isError: _fieldErrors.contains(_RequiredField.missionMotto),
+                            _sectionLabel(context, 'Divisa'),
+                            const SizedBox(height: 4),
+                            for (
+                              var i = 0;
+                              i < _missionMottoControllers.length;
+                              i++
+                            )
+                              Padding(
+                                key: ValueKey(_missionMottoControllers[i]),
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _BibleReferenceFields(
+                                  controller: _missionMottoControllers[i],
+                                  onRemove: _missionMottoControllers.length > 1
+                                      ? () => _removeMissionMotto(i)
+                                      : null,
+                                  onChanged: _markDirty,
+                                  // Só a 1ª linha mostra vermelho — o erro é
+                                  // "nenhuma divisa preenchida", não "esta
+                                  // linha específica" (mesmo padrão de
+                                  // "Leitura bíblica").
+                                  isError:
+                                      i == 0 &&
+                                      _fieldErrors.contains(
+                                        _RequiredField.missionMotto,
+                                      ),
+                                ),
+                              ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _addMissionMotto,
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('Adicionar texto'),
                               ),
                             ),
                           ],
                         ]),
 
                         _momentBox(context, [
-                          _momentLabel(context, 'Dedicação dos dízimos e ofertas'),
+                          _momentLabel(
+                            context,
+                            'Dedicação dos dízimos e ofertas',
+                          ),
                           const SizedBox(height: 6),
                           _sectionLabel(context, 'Texto bíblico'),
                           const SizedBox(height: 4),
                           _BibleReferenceFields(
                             controller: _tithesBibleController,
                             onChanged: _markDirty,
-                            isError: _fieldErrors.contains(_RequiredField.tithesBible),
+                            isError: _fieldErrors.contains(
+                              _RequiredField.tithesBible,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           _sectionLabel(context, 'Hino Congregacional'),
@@ -836,8 +918,14 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                           _HymnField(
                             controller: _congregationalHymnController,
                             focusNode: _congregationalHymnFocusNode,
-                            isError: _fieldErrors.contains(_RequiredField.congregationalHymn),
+                            isError: _fieldErrors.contains(
+                              _RequiredField.congregationalHymn,
+                            ),
                           ),
+                        ]),
+
+                        _momentBox(context, [
+                          _momentLabel(context, 'Oração de Gratidão'),
                         ]),
 
                         _momentBox(context, [
@@ -922,7 +1010,8 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                                   ),
                             ],
                             onChanged: (style) => setState(() {
-                              _postludeStyle = style ?? PreludeStyle.instrumental;
+                              _postludeStyle =
+                                  style ?? PreludeStyle.instrumental;
                               _dirty = true;
                             }),
                           ),
@@ -936,7 +1025,9 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                                   hintText: 'Descreva o poslúdio',
                                 ),
                                 _postludeOtherController.text,
-                                isError: _fieldErrors.contains(_RequiredField.postludeOther),
+                                isError: _fieldErrors.contains(
+                                  _RequiredField.postludeOther,
+                                ),
                               ),
                             ),
                           ],
@@ -949,7 +1040,10 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                             Text(
                               'Nenhum — toque em "Adicionar" pra incluir Batismo, '
                               'Ceia do Senhor, mais um Louvor etc.',
-                              style: TextStyle(color: context.textSecondary, fontSize: 13),
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 13,
+                              ),
                             )
                           else
                             Wrap(
@@ -1077,7 +1171,10 @@ InputDecoration highlightIfEmpty(
       filled: true,
       fillColor: errorColor.withValues(alpha: 0.08),
       border: OutlineInputBorder(
-        borderSide: BorderSide(color: errorColor.withValues(alpha: 0.7), width: 1.5),
+        borderSide: BorderSide(
+          color: errorColor.withValues(alpha: 0.7),
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -1107,7 +1204,9 @@ Widget _momentBox(BuildContext context, List<Widget> children) {
   // seja "um pouco", nunca um tom muito diferente do fundo.
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final tintedBackground = Color.alphaBlend(
-    (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.05 : 0.04),
+    (isDark ? Colors.white : Colors.black).withValues(
+      alpha: isDark ? 0.05 : 0.04,
+    ),
     Theme.of(context).scaffoldBackgroundColor,
   );
   return Container(
@@ -1217,7 +1316,8 @@ class _ExtraMomentPickerSheet extends StatefulWidget {
   final List<ServiceOrderItem> initialItems;
 
   @override
-  State<_ExtraMomentPickerSheet> createState() => _ExtraMomentPickerSheetState();
+  State<_ExtraMomentPickerSheet> createState() =>
+      _ExtraMomentPickerSheetState();
 }
 
 class _ExtraMomentPickerSheetState extends State<_ExtraMomentPickerSheet> {
@@ -1311,7 +1411,11 @@ class _ExtraMomentPickerSheetState extends State<_ExtraMomentPickerSheet> {
       ),
     );
     if (result == null || result.trim().isEmpty) return null;
-    return ServiceOrderItem.extra(option.id, option.name, extraNames: [result.trim()]);
+    return ServiceOrderItem.extra(
+      option.id,
+      option.name,
+      extraNames: [result.trim()],
+    );
   }
 
   /// Lista dinâmica de nomes (28/08/2026, pedido do usuário — antes era um
@@ -1346,12 +1450,17 @@ class _ExtraMomentPickerSheetState extends State<_ExtraMomentPickerSheet> {
       ),
     );
     if (refs == null || refs.isEmpty) return null;
-    return ServiceOrderItem.extra(option.id, option.name, extraBibleReferences: refs);
+    return ServiceOrderItem.extra(
+      option.id,
+      option.name,
+      extraBibleReferences: refs,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...widget.catalog]..sort((a, b) => a.name.compareTo(b.name));
+    final sorted = [...widget.catalog]
+      ..sort((a, b) => a.name.compareTo(b.name));
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -1387,10 +1496,14 @@ class _ExtraMomentPickerSheetState extends State<_ExtraMomentPickerSheet> {
                         builder: (context) {
                           final item = _itemFor(option.id);
                           final selected = item != null;
-                          final summary = item != null ? _summaryFor(item) : null;
+                          final summary = item != null
+                              ? _summaryFor(item)
+                              : null;
                           return ListTile(
                             leading: Icon(
-                              selected ? Icons.check_circle : Icons.circle_outlined,
+                              selected
+                                  ? Icons.check_circle
+                                  : Icons.circle_outlined,
                               color: selected ? SibValColors.goldAccent : null,
                             ),
                             title: Text(
@@ -1398,7 +1511,12 @@ class _ExtraMomentPickerSheetState extends State<_ExtraMomentPickerSheet> {
                               style: TextStyle(color: context.textPrimary),
                             ),
                             subtitle: summary != null
-                                ? Text(summary, style: TextStyle(color: context.textSecondary))
+                                ? Text(
+                                    summary,
+                                    style: TextStyle(
+                                      color: context.textSecondary,
+                                    ),
+                                  )
                                 : (option.fieldKind != ExtraMomentFieldKind.none
                                       ? Text(
                                           'Toque para preencher',
@@ -1522,7 +1640,9 @@ class _MultiNameDialogState extends State<_MultiNameDialog> {
                           focusNode: _focusNodes[i],
                           autofocus: i == 0,
                           textCapitalization: TextCapitalization.words,
-                          decoration: InputDecoration(labelText: 'Nome ${i + 1}'),
+                          decoration: InputDecoration(
+                            labelText: 'Nome ${i + 1}',
+                          ),
                         ),
                       ),
                       if (_controllers.length > 1)
@@ -1571,7 +1691,10 @@ class _MultiNameDialogState extends State<_MultiNameDialog> {
 /// `ServiceOrderLivePage`) — mesmo botão "+ Adicionar leitura"/lista
 /// dinâmica já usado em "Leitura bíblica" no formulário principal.
 class _MultiBibleReferenceDialog extends StatefulWidget {
-  const _MultiBibleReferenceDialog({required this.title, required this.initial});
+  const _MultiBibleReferenceDialog({
+    required this.title,
+    required this.initial,
+  });
 
   final String title;
   final List<BibleReference> initial;
@@ -1581,7 +1704,8 @@ class _MultiBibleReferenceDialog extends StatefulWidget {
       _MultiBibleReferenceDialogState();
 }
 
-class _MultiBibleReferenceDialogState extends State<_MultiBibleReferenceDialog> {
+class _MultiBibleReferenceDialogState
+    extends State<_MultiBibleReferenceDialog> {
   final List<BibleReferenceController> _controllers = [];
 
   @override
@@ -1981,7 +2105,10 @@ class _BookFieldState extends ConsumerState<_BookField> {
               suffixIcon: Icon(Icons.arrow_drop_down),
               floatingLabelBehavior: FloatingLabelBehavior.always,
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             widget.controller.text,
             isError: widget.isError,
@@ -2207,7 +2334,10 @@ class _ParticipationFieldState extends ConsumerState<_ParticipationField> {
               hintText: 'Digite pra buscar entre os membros',
               border: OutlineInputBorder(),
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             widget.controller.text,
           ),
@@ -2325,7 +2455,10 @@ class _HymnFieldState extends ConsumerState<_HymnField> {
               hintText: 'Digite pra buscar no HCC ou Cantor Cristão',
               border: OutlineInputBorder(),
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             widget.controller.text,
             isError: widget.isError,

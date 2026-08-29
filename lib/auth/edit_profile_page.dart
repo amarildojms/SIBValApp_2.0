@@ -55,7 +55,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    for (final controller in [_nameController, _phoneController, _originChurchController]) {
+    for (final controller in [
+      _nameController,
+      _phoneController,
+      _originChurchController,
+    ]) {
       controller.addListener(_markDirty);
     }
   }
@@ -92,14 +96,18 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Alterações não salvas'),
-        content: const Text('Você fez alterações no seu perfil. Deseja salvar antes de sair?'),
+        content: const Text(
+          'Você fez alterações no seu perfil. Deseja salvar antes de sair?',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_UnsavedChangesAction.discard),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UnsavedChangesAction.discard),
             child: const Text('Descartar'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_UnsavedChangesAction.save),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UnsavedChangesAction.save),
             child: const Text('Salvar'),
           ),
         ],
@@ -119,7 +127,14 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   Future<void> _save(String uid) async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe seu nome.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Informe seu nome.')));
+      return;
+    }
+    final addressError = _addressKey.currentState!.validate();
+    if (addressError != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(addressError)));
       return;
     }
 
@@ -127,17 +142,26 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     _scrollController.scrollToSaveButton();
     try {
       final repository = ref.read(userRepositoryProvider);
+      final addressDetails = _addressKey.currentState!.value;
       await repository.updateName(uid, name);
       await repository.updateProfileDetails(
         uid: uid,
         phone: _phoneController.text.trim(),
-        addressDetails: _addressKey.currentState!.value,
+        addressDetails: addressDetails,
         maritalStatus: _maritalStatus ?? '',
       );
       final member = ref.read(myMemberProvider).asData?.value;
       if (member != null) {
-        await ref.read(memberRepositoryProvider).updateEcclesiasticalDetails(
+        // Mantém o Rol de Membros sincronizado com o que o próprio usuário
+        // edita aqui (29/08/2026, pedido do usuário) — antes só
+        // admissionForm/originChurch chegavam ao Member; telefone/endereço
+        // ficavam presos em `users/{uid}`.
+        await ref
+            .read(memberRepositoryProvider)
+            .updateSelfEditableDetails(
               member.id,
+              phone: _phoneController.text.trim(),
+              addressDetails: addressDetails,
               admissionForm: _admissionForm ?? '',
               originChurch: _originChurchController.text.trim(),
             );
@@ -166,12 +190,16 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     if (profile != null && !_initialized) {
       _nameController.text = profile.name;
       _phoneController.text = profile.phone;
-      _maritalStatus = profile.maritalStatus.isNotEmpty ? profile.maritalStatus : null;
+      _maritalStatus = profile.maritalStatus.isNotEmpty
+          ? profile.maritalStatus
+          : null;
       _initialized = true;
     }
     if (member != null && !_memberFieldsInitialized) {
       _originChurchController.text = member.originChurch;
-      _admissionForm = member.admissionForm.isNotEmpty ? member.admissionForm : null;
+      _admissionForm = member.admissionForm.isNotEmpty
+          ? member.admissionForm
+          : null;
       _memberFieldsInitialized = true;
     }
 
@@ -202,14 +230,28 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                             children: [
                               CircleAvatar(
                                 radius: 48,
-                                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
                                 backgroundImage: _pickedPhoto != null
                                     ? FileImage(_pickedPhoto!)
                                     : (profile.photoUrl.isNotEmpty
-                                        ? NetworkImage(cacheBustedPhotoUrl(profile.photoUrl, profile.photoUpdatedAt))
-                                        : null) as ImageProvider?,
-                                child: _pickedPhoto == null && profile.photoUrl.isEmpty
-                                    ? Icon(Icons.person, size: 48, color: context.textSecondary)
+                                              ? NetworkImage(
+                                                  cacheBustedPhotoUrl(
+                                                    profile.photoUrl,
+                                                    profile.photoUpdatedAt,
+                                                  ),
+                                                )
+                                              : null)
+                                          as ImageProvider?,
+                                child:
+                                    _pickedPhoto == null &&
+                                        profile.photoUrl.isEmpty
+                                    ? Icon(
+                                        Icons.person,
+                                        size: 48,
+                                        color: context.textSecondary,
+                                      )
                                     : null,
                               ),
                               Positioned(
@@ -218,7 +260,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                 child: CircleAvatar(
                                   radius: 16,
                                   backgroundColor: SibValColors.goldAccent,
-                                  child: const Icon(Icons.edit, size: 16, color: SibValColors.navyBlueDark),
+                                  child: const Icon(
+                                    Icons.edit,
+                                    size: 16,
+                                    color: SibValColors.navyBlueDark,
+                                  ),
                                 ),
                               ),
                             ],
@@ -241,12 +287,17 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       TextField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'Telefone (opcional)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Telefone (opcional)',
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Endereço (opcional)',
-                        style: TextStyle(color: context.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       AddressFields(
@@ -257,9 +308,15 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         initialValue: _maritalStatus,
-                        decoration: const InputDecoration(labelText: 'Estado civil (opcional)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Estado civil (opcional)',
+                        ),
                         items: [
-                          for (final option in maritalStatusOptions) DropdownMenuItem(value: option, child: Text(option)),
+                          for (final option in maritalStatusOptions)
+                            DropdownMenuItem(
+                              value: option,
+                              child: Text(option),
+                            ),
                         ],
                         onChanged: (value) => setState(() {
                           _maritalStatus = value;
@@ -269,48 +326,75 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       const SizedBox(height: 24),
                       Text(
                         'Dados eclesiásticos',
-                        style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Data de Membresia e Ministérios são preenchidos pela Secretaria em Rol de '
                         'Membros. Os demais campos abaixo você mesmo pode preencher.',
-                        style: TextStyle(color: context.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      _ReadOnlyField(label: 'Data de Membresia', value: _formatDate(member?.membershipDate)),
+                      _ReadOnlyField(
+                        label: 'Data de Membresia',
+                        value: _formatDate(member?.membershipDate),
+                      ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         initialValue: _admissionForm,
-                        decoration: const InputDecoration(labelText: 'Forma de Adesão'),
+                        decoration: const InputDecoration(
+                          labelText: 'Forma de Adesão',
+                        ),
                         items: [
-                          for (final option in admissionFormOptions) DropdownMenuItem(value: option, child: Text(option)),
+                          for (final option in admissionFormOptions)
+                            DropdownMenuItem(
+                              value: option,
+                              child: Text(option),
+                            ),
                         ],
                         onChanged: member == null
                             ? null
                             : (value) => setState(() {
-                                  _admissionForm = value;
-                                  if (value == 'Batismo') {
-                                    _originChurchController.text = 'Segunda Igreja Batista em Valparaíso';
-                                  }
-                                  _markDirty();
-                                }),
+                                _admissionForm = value;
+                                if (value == 'Batismo') {
+                                  _originChurchController.text =
+                                      'Segunda Igreja Batista em Valparaíso';
+                                }
+                                _markDirty();
+                              }),
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _originChurchController,
                         enabled: member != null && _admissionForm != 'Batismo',
-                        decoration: const InputDecoration(labelText: 'Igreja de origem'),
+                        decoration: const InputDecoration(
+                          labelText: 'Igreja de origem',
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _BaptismDateField(member: member),
                       const SizedBox(height: 16),
-                      _ReadOnlyField(label: 'Ministérios e Cargos', value: _ministriesLabel(member?.ministries)),
+                      _ReadOnlyField(
+                        label: 'Ministérios e Cargos',
+                        value: _ministriesLabel(member?.ministries),
+                      ),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _saving ? null : () => _save(uid),
                         child: _saving
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Text('Salvar'),
                       ),
                     ],
@@ -324,7 +408,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   static String _ministriesLabel(List<MemberMinistry>? ministries) {
     if (ministries == null || ministries.isEmpty) return '—';
     return ministries
-        .map((m) => m.cargos.isEmpty ? m.ministryName : '${m.ministryName} (${m.cargos.join(', ')})')
+        .map(
+          (m) => m.cargos.isEmpty
+              ? m.ministryName
+              : '${m.ministryName} (${m.cargos.join(', ')})',
+        )
         .join('\n');
   }
 }
@@ -352,7 +440,9 @@ class _BaptismDateFieldState extends ConsumerState<_BaptismDateField> {
     if (member == null || date == null) return;
     setState(() => _saving = true);
     try {
-      await ref.read(memberRepositoryProvider).updateBaptismDate(member.id, date);
+      await ref
+          .read(memberRepositoryProvider)
+          .updateBaptismDate(member.id, date);
       ref.invalidate(myMemberProvider);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -368,10 +458,18 @@ class _BaptismDateFieldState extends ConsumerState<_BaptismDateField> {
           labelText: 'Data de Batismo',
           suffixIcon: Padding(
             padding: EdgeInsets.all(12),
-            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
         ),
-        child: Text(member?.baptismDate != null ? _formatDate(member!.baptismDate) : 'Toque para informar'),
+        child: Text(
+          member?.baptismDate != null
+              ? _formatDate(member!.baptismDate)
+              : 'Toque para informar',
+        ),
       );
     }
     return DateField(
@@ -402,4 +500,5 @@ class _ReadOnlyField extends StatelessWidget {
 
 enum _UnsavedChangesAction { save, discard }
 
-String _formatDate(DateTime? date) => date != null ? DateFormat('dd/MM/yyyy').format(date) : '—';
+String _formatDate(DateTime? date) =>
+    date != null ? DateFormat('dd/MM/yyyy').format(date) : '—';

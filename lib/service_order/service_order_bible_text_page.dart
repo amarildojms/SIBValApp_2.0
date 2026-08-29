@@ -25,11 +25,11 @@ const _fontSizeStep = 2.0;
 /// disponível, offline).
 typedef _ResolvedVerses = ({List<BibleVerse> verses, bool fromBlivre});
 
-final _resolvedBibleVersesProvider =
-    FutureProvider.autoDispose.family<_ResolvedVerses, BibleReaderKey>((
-      ref,
-      key,
-    ) async {
+/// Público (29/08/2026) — reaproveitado por `ServiceOrderMissionMomentPage`
+/// (Divisa do Momento Missionário), que precisa da mesma resolução
+/// BLIVRE-com-fallback pra mais de uma referência de uma vez.
+final resolvedBibleVersesProvider = FutureProvider.autoDispose
+    .family<_ResolvedVerses, BibleReaderKey>((ref, key) async {
       try {
         final blivre = await ref
             .watch(blivreRepositoryProvider)
@@ -93,7 +93,9 @@ class _ServiceOrderBibleTextPageState
   Future<void> _loadFontSize() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
-      setState(() => _fontSize = prefs.getDouble(_fontSizeKey) ?? _defaultFontSize);
+      setState(
+        () => _fontSize = prefs.getDouble(_fontSizeKey) ?? _defaultFontSize,
+      );
     }
   }
 
@@ -108,7 +110,10 @@ class _ServiceOrderBibleTextPageState
   Widget build(BuildContext context) {
     final reference = widget.reference;
     final resolvedAsync = ref.watch(
-      _resolvedBibleVersesProvider((bookId: reference.bookId!, chapter: reference.chapter!)),
+      resolvedBibleVersesProvider((
+        bookId: reference.bookId!,
+        chapter: reference.chapter!,
+      )),
     );
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),

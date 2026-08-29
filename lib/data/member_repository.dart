@@ -28,7 +28,8 @@ class MemberRepository {
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
 
-  CollectionReference<Map<String, dynamic>> get _members => _firestore.collection('members');
+  CollectionReference<Map<String, dynamic>> get _members =>
+      _firestore.collection('members');
 
   Future<List<Member>> getAll() async {
     final snapshot = await _members.orderBy('name').get();
@@ -37,12 +38,18 @@ class MemberRepository {
 
   /// Tempo real (21/08/2026) — ver `membersProvider`.
   Stream<List<Member>> watchAll() {
-    return _members.orderBy('name').snapshots().map((s) => s.docs.map(Member.fromFirestore).toList());
+    return _members
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(Member.fromFirestore).toList());
   }
 
   Future<Member?> getByLinkedUid(String uid) async {
     if (uid.isEmpty) return null;
-    final snapshot = await _members.where('linkedUid', isEqualTo: uid).limit(1).get();
+    final snapshot = await _members
+        .where('linkedUid', isEqualTo: uid)
+        .limit(1)
+        .get();
     if (snapshot.docs.isEmpty) return null;
     return Member.fromFirestore(snapshot.docs.first);
   }
@@ -52,7 +59,11 @@ class MemberRepository {
   /// existir (19/08/2026) ainda não o têm, então cai pro CPF/e-mail — mesma
   /// busca de `upsertFromUser` — e faz o backfill de `linkedUid` no
   /// documento achado, pra próxima consulta já vir direto por `linkedUid`.
-  Future<String?> _findMemberDocId({required String uid, required String cpf, required String email}) async {
+  Future<String?> _findMemberDocId({
+    required String uid,
+    required String cpf,
+    required String email,
+  }) async {
     final byLinkedUid = await getByLinkedUid(uid);
     if (byLinkedUid != null) return byLinkedUid.id;
 
@@ -60,11 +71,17 @@ class MemberRepository {
     final normalizedEmail = email.trim().toLowerCase();
     QueryDocumentSnapshot<Map<String, dynamic>>? doc;
     if (normalizedCpf.isNotEmpty) {
-      final byCpf = await _members.where('cpf', isEqualTo: normalizedCpf).limit(1).get();
+      final byCpf = await _members
+          .where('cpf', isEqualTo: normalizedCpf)
+          .limit(1)
+          .get();
       if (byCpf.docs.isNotEmpty) doc = byCpf.docs.first;
     }
     if (doc == null && normalizedEmail.isNotEmpty) {
-      final byEmail = await _members.where('email', isEqualTo: normalizedEmail).limit(1).get();
+      final byEmail = await _members
+          .where('email', isEqualTo: normalizedEmail)
+          .limit(1)
+          .get();
       if (byEmail.docs.isNotEmpty) doc = byEmail.docs.first;
     }
     if (doc == null) return null;
@@ -72,7 +89,9 @@ class MemberRepository {
     // Backfill best-effort: só funciona se o usuário logado for Secretaria/
     // admin (regra de escrita de `members`); para os demais, o `catch` evita
     // que a leitura (permitida a todo autenticado) quebre por causa disso.
-    doc.reference.set({'linkedUid': uid}, SetOptions(merge: true)).catchError((_) {});
+    doc.reference
+        .set({'linkedUid': uid}, SetOptions(merge: true))
+        .catchError((_) {});
     return doc.id;
   }
 
@@ -81,13 +100,20 @@ class MemberRepository {
   /// ministérios/cargos) chega direto pra quem estiver com "Editar perfil"
   /// ou a tela Mais abertos, sem precisar reabrir a tela. Resolve o id do
   /// documento uma vez (`_findMemberDocId`) e depois segue por `snapshots()`.
-  Stream<Member?> watchForCurrentUser({required String uid, required String cpf, required String email}) async* {
+  Stream<Member?> watchForCurrentUser({
+    required String uid,
+    required String cpf,
+    required String email,
+  }) async* {
     final docId = await _findMemberDocId(uid: uid, cpf: cpf, email: email);
     if (docId == null) {
       yield null;
       return;
     }
-    yield* _members.doc(docId).snapshots().map((doc) => doc.exists ? Member.fromFirestore(doc) : null);
+    yield* _members
+        .doc(docId)
+        .snapshots()
+        .map((doc) => doc.exists ? Member.fromFirestore(doc) : null);
   }
 
   Future<Member> create({
@@ -108,7 +134,8 @@ class MemberRepository {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedCpf = cpf.replaceAll(RegExp(r'\D'), '');
-    final doc = _docFor(cpf: normalizedCpf, email: normalizedEmail) ?? _members.doc();
+    final doc =
+        _docFor(cpf: normalizedCpf, email: normalizedEmail) ?? _members.doc();
 
     var photoUrl = '';
     var storagePath = '';
@@ -134,10 +161,14 @@ class MemberRepository {
       'phone': phone,
       'address': addressDetails.formatted,
       'addressDetails': addressDetails.toMap(),
-      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
+      'membershipDate': membershipDate != null
+          ? Timestamp.fromDate(membershipDate)
+          : null,
       'admissionForm': admissionForm,
       'originChurch': originChurch,
-      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'baptismDate': baptismDate != null
+          ? Timestamp.fromDate(baptismDate)
+          : null,
       'ministryIds': ministryIds,
       'ministries': ministries.map((m) => m.toMap()).toList(),
     });
@@ -208,20 +239,27 @@ class MemberRepository {
       'storagePath': storagePath,
       if (photoFile != null) 'photoUpdatedAt': FieldValue.serverTimestamp(),
       'createdBy': member.createdBy,
-      'createdAt': member.createdAt != null ? Timestamp.fromDate(member.createdAt!) : FieldValue.serverTimestamp(),
+      'createdAt': member.createdAt != null
+          ? Timestamp.fromDate(member.createdAt!)
+          : FieldValue.serverTimestamp(),
       'phone': phone,
       'address': addressDetails.formatted,
       'addressDetails': addressDetails.toMap(),
-      'membershipDate': membershipDate != null ? Timestamp.fromDate(membershipDate) : null,
+      'membershipDate': membershipDate != null
+          ? Timestamp.fromDate(membershipDate)
+          : null,
       'admissionForm': admissionForm,
       'originChurch': originChurch,
-      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'baptismDate': baptismDate != null
+          ? Timestamp.fromDate(baptismDate)
+          : null,
       'ministryIds': ministries.map((m) => m.ministryId).toList(),
       'ministries': ministries.map((m) => m.toMap()).toList(),
       'linkedUid': member.linkedUid,
     };
 
-    final canonicalId = _canonicalId(cpf: normalizedCpf, email: normalizedEmail) ?? member.id;
+    final canonicalId =
+        _canonicalId(cpf: normalizedCpf, email: normalizedEmail) ?? member.id;
     if (canonicalId != member.id) {
       await _members.doc(canonicalId).set(data, SetOptions(merge: true));
       await _members.doc(member.id).delete();
@@ -256,15 +294,23 @@ class MemberRepository {
   /// editando diretamente o registro em Rol de Membros (20/08/2026), e o
   /// merge preserva o que já estiver lá.
   Future<void> upsertFromUser(AppUser user) async {
-    if (user.birthMonth < 1 || user.birthMonth > 12 || user.birthDay < 1 || user.birthDay > 31) {
+    if (user.birthMonth < 1 ||
+        user.birthMonth > 12 ||
+        user.birthDay < 1 ||
+        user.birthDay > 31) {
       return;
     }
     final normalizedEmail = user.email.trim().toLowerCase();
     final normalizedCpf = user.cpf.replaceAll(RegExp(r'\D'), '');
     if (normalizedCpf.isEmpty && normalizedEmail.isEmpty) return;
 
-    final canonicalId = normalizedCpf.isNotEmpty ? normalizedCpf : normalizedEmail;
-    final existingId = await _findExistingMemberId(cpf: normalizedCpf, email: normalizedEmail);
+    final canonicalId = normalizedCpf.isNotEmpty
+        ? normalizedCpf
+        : normalizedEmail;
+    final existingId = await _findExistingMemberId(
+      cpf: normalizedCpf,
+      email: normalizedEmail,
+    );
 
     final data = <String, dynamic>{
       'name': user.name,
@@ -279,8 +325,10 @@ class MemberRepository {
       'address': user.address,
       'addressDetails': user.addressDetails.toMap(),
       if (user.photoUrl.isNotEmpty) 'photoUrl': user.photoUrl,
-      if (user.photoUrl.isNotEmpty) 'photoUpdatedAt': FieldValue.serverTimestamp(),
-      if (user.baptismDate != null) 'baptismDate': Timestamp.fromDate(user.baptismDate!),
+      if (user.photoUrl.isNotEmpty)
+        'photoUpdatedAt': FieldValue.serverTimestamp(),
+      if (user.baptismDate != null)
+        'baptismDate': Timestamp.fromDate(user.baptismDate!),
     };
 
     await _members.doc(canonicalId).set(data, SetOptions(merge: true));
@@ -291,27 +339,40 @@ class MemberRepository {
 
   /// Campo de `members` que o próprio usuário (dono do registro via
   /// `linkedUid`) pode editar sem ser Secretaria — ver `firestore.rules`
-  /// nativo, `EditProfilePage`. `admissionForm`/`originChurch`
-  /// (`updateEcclesiasticalDetails`, abaixo) ganharam o mesmo privilégio em
+  /// nativo, `EditProfilePage`. Os demais campos self-editable
+  /// (`updateSelfEditableDetails`, abaixo) ganharam o mesmo privilégio em
   /// 29/08/2026. `membershipDate`/`ministries` continuam exclusividade da
   /// Secretaria em Rol de Membros.
   Future<void> updateBaptismDate(String memberId, DateTime? baptismDate) {
     return _members.doc(memberId).update({
-      'baptismDate': baptismDate != null ? Timestamp.fromDate(baptismDate) : null,
+      'baptismDate': baptismDate != null
+          ? Timestamp.fromDate(baptismDate)
+          : null,
     });
   }
 
-  /// Mesmo privilégio de `updateBaptismDate` (29/08/2026, pedido do usuário)
-  /// — o próprio dono do registro (`linkedUid`) pode preencher "Forma de
-  /// Adesão"/"Igreja de origem" em `EditProfilePage`, sem depender da
-  /// Secretaria. Ver `firestore.rules` (`members.update`,
-  /// `affectedKeys().hasOnly(['baptismDate', 'admissionForm', 'originChurch'])`).
-  Future<void> updateEcclesiasticalDetails(
+  /// Mesmo privilégio de `updateBaptismDate` — o próprio dono do registro
+  /// (`linkedUid`) pode editar telefone/endereço/forma de adesão/igreja de
+  /// origem em `EditProfilePage`, sem depender da Secretaria. Ver
+  /// `firestore.rules` (`members.update`, `affectedKeys().hasOnly([...])`).
+  ///
+  /// Renomeado de `updateEcclesiasticalDetails` (29/08/2026, pedido do
+  /// usuário) — ganhou `phone`/`addressDetails`, que antes só chegavam ao
+  /// `Member` na aprovação do cadastro (`upsertFromUser`) e nunca mais
+  /// depois disso: editar o endereço em "Editar perfil" atualizava só
+  /// `users/{uid}`, deixando o Rol de Membros desatualizado (reportado pelo
+  /// usuário com o exemplo do endereço).
+  Future<void> updateSelfEditableDetails(
     String memberId, {
+    required String phone,
+    required Address addressDetails,
     required String admissionForm,
     required String originChurch,
   }) {
     return _members.doc(memberId).update({
+      'phone': phone,
+      'address': addressDetails.formatted,
+      'addressDetails': addressDetails.toMap(),
       'admissionForm': admissionForm,
       'originChurch': originChurch,
     });
@@ -328,7 +389,10 @@ class MemberRepository {
 
   /// Doc ref pronto pra criar em cima (só quando cpf/email não vazios —
   /// `create()` cai pro id autogerado quando os dois faltam).
-  DocumentReference<Map<String, dynamic>>? _docFor({required String cpf, required String email}) {
+  DocumentReference<Map<String, dynamic>>? _docFor({
+    required String cpf,
+    required String email,
+  }) {
     final id = _canonicalId(cpf: cpf, email: email);
     return id == null ? null : _members.doc(id);
   }
@@ -343,7 +407,10 @@ class MemberRepository {
   /// doc não esteja (ainda) na chave canônica — ex.: membro cadastrado antes
   /// do CPF existir, indexado por e-mail, ou um `cpf` gravado como campo sem
   /// o doc ter sido migrado pra esse id.
-  Future<String?> _findExistingMemberId({required String cpf, required String email}) async {
+  Future<String?> _findExistingMemberId({
+    required String cpf,
+    required String email,
+  }) async {
     if (cpf.isNotEmpty) {
       if ((await _members.doc(cpf).get()).exists) return cpf;
       final byCpf = await _members.where('cpf', isEqualTo: cpf).limit(1).get();
@@ -351,7 +418,10 @@ class MemberRepository {
     }
     if (email.isNotEmpty) {
       if ((await _members.doc(email).get()).exists) return email;
-      final byEmail = await _members.where('email', isEqualTo: email).limit(1).get();
+      final byEmail = await _members
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
       if (byEmail.docs.isNotEmpty) return byEmail.docs.first.id;
     }
     return null;
@@ -391,5 +461,7 @@ final myMemberProvider = StreamProvider.autoDispose<Member?>((ref) async* {
     yield null;
     return;
   }
-  yield* ref.watch(memberRepositoryProvider).watchForCurrentUser(uid: uid, cpf: profile.cpf, email: profile.email);
+  yield* ref
+      .watch(memberRepositoryProvider)
+      .watchForCurrentUser(uid: uid, cpf: profile.cpf, email: profile.email);
 });
