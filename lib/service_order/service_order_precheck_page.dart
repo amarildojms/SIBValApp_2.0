@@ -34,7 +34,7 @@ import 'service_order_preview_page.dart';
 /// `serviceOrderStreamProvider` (era só o `order` estático recebido por
 /// parâmetro) pra refletir o progresso em tempo real assim que o culto é
 /// retomado ("Continuar Culto"); `widget.order` vira só o valor inicial
-/// (`orderAsync.valueOrNull ?? widget.order`), sem tela de carregamento —
+/// (`orderAsync.value ?? widget.order`), sem tela de carregamento —
 /// já se tem dado suficiente pra renderizar de imediato.
 class ServiceOrderPrecheckPage extends ConsumerStatefulWidget {
   const ServiceOrderPrecheckPage({super.key, required this.order});
@@ -101,7 +101,7 @@ class _ServiceOrderPrecheckPageState
   @override
   Widget build(BuildContext context) {
     final orderAsync = ref.watch(serviceOrderStreamProvider(widget.order.id));
-    final order = orderAsync.valueOrNull ?? widget.order;
+    final order = orderAsync.value ?? widget.order;
     final viewable = isServiceOrderViewableEarly(order.dateTime);
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
