@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -206,8 +207,35 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
       updatedByName: profile.shortName,
     );
     try {
-      await ref.read(cifraRepositoryProvider).save(cifra);
-      if (mounted) Navigator.of(context).pop();
+      // Timeout defensivo (29/08/2026, bug relatado pelo usuário — botão
+      // ficava processando pra sempre, sem mensagem de sucesso nem de erro):
+      // o `Future` de `.set()` do cloud_firestore só completa quando o
+      // servidor confirma a escrita — sem internet (ou com a escrita presa
+      // atrás de uma regra de segurança negada enquanto offline), ele nunca
+      // resolve nem rejeita sozinho, deixando o spinner girando
+      // indefinidamente. Com o timeout, o usuário ao menos recebe um erro
+      // acionável em vez de um botão travado sem explicação.
+      await ref
+          .read(cifraRepositoryProvider)
+          .save(cifra)
+          .timeout(const Duration(seconds: 15));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Cifra salva.')));
+        Navigator.of(context).pop();
+      }
+    } on TimeoutException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível confirmar o salvamento — verifique sua '
+              'conexão com a internet e tente novamente.',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

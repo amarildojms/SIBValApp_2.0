@@ -148,35 +148,51 @@ class CurrentUserProfile {
   }
 }
 
+/// `StreamProvider` (29/08/2026, era `FutureProvider` com `.get()`) — o
+/// usuário relatou demora pra carregar o próprio perfil/ícones de admin no
+/// menu Mais ao reabrir o app do zero. Causa: `.get()` prioriza o servidor
+/// por padrão (só cai pro cache se estiver offline), então todo cold start
+/// pagava o round-trip completo de rede (restaurar sessão do Firebase Auth +
+/// buscar o documento) antes de mostrar qualquer coisa. `.snapshots()` emite
+/// o valor em cache imediatamente (persistência do Firestore já guarda o
+/// último snapshot da sessão anterior em disco) e atualiza de novo assim que
+/// o servidor responde — mesmo padrão já usado por `allUsersProvider`/
+/// `unreadDevotionalsCountProvider`/etc. `ref.invalidate` continua
+/// funcionando igual (recria a stream, que já teria dado publish de novo com
+/// o cache local mesmo sem isso).
 final currentUserProfileProvider =
-    FutureProvider.autoDispose<CurrentUserProfile?>((ref) async {
+    StreamProvider.autoDispose<CurrentUserProfile?>((ref) {
       final uid = ref.watch(currentUidProvider);
-      if (uid == null) return null;
-      final doc = await FirebaseFirestore.instance
+      if (uid == null) return Stream.value(null);
+      return FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .get();
-      final data = doc.data();
-      if (data == null) return null;
-      return CurrentUserProfile(
-        name: data['name'] as String? ?? '',
-        email: data['email'] as String? ?? '',
-        photoUrl: data['photoUrl'] as String? ?? '',
-        isAdmin: data['isAdmin'] as bool? ?? false,
-        roles: List<String>.from(data['roles'] as List? ?? const []),
-        cpf: data['cpf'] as String? ?? '',
-        hasBirthdate: data['birthdate'] != null,
-        phone: data['phone'] as String? ?? '',
-        address: data['address'] as String? ?? '',
-        addressDetails: Address.fromMap(
-          data['addressDetails'] as Map<String, dynamic>?,
-        ),
-        maritalStatus: data['maritalStatus'] as String? ?? '',
-        photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)?.toDate(),
-        communicationsConsent: data['communicationsConsent'] as bool? ?? false,
-        acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
-        acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
-      );
+          .snapshots()
+          .map((doc) {
+            final data = doc.data();
+            if (data == null) return null;
+            return CurrentUserProfile(
+              name: data['name'] as String? ?? '',
+              email: data['email'] as String? ?? '',
+              photoUrl: data['photoUrl'] as String? ?? '',
+              isAdmin: data['isAdmin'] as bool? ?? false,
+              roles: List<String>.from(data['roles'] as List? ?? const []),
+              cpf: data['cpf'] as String? ?? '',
+              hasBirthdate: data['birthdate'] != null,
+              phone: data['phone'] as String? ?? '',
+              address: data['address'] as String? ?? '',
+              addressDetails: Address.fromMap(
+                data['addressDetails'] as Map<String, dynamic>?,
+              ),
+              maritalStatus: data['maritalStatus'] as String? ?? '',
+              photoUpdatedAt: (data['photoUpdatedAt'] as Timestamp?)
+                  ?.toDate(),
+              communicationsConsent:
+                  data['communicationsConsent'] as bool? ?? false,
+              acceptedPrivacyPolicy: data['privacyPolicyAcceptedAt'] != null,
+              acceptedTermsOfUse: data['termsOfUseAcceptedAt'] != null,
+            );
+          });
     });
 
 /// Espelha os métodos de admin de UserRepository.kt — aprovar/rejeitar
