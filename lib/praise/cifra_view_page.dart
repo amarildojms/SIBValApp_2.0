@@ -404,7 +404,10 @@ String _transposeToneLabel(String tone, int semitones) {
 /// caminho antigo (`_lineSpans`), sem migração. Conteúdo novo (colado ou
 /// importado de arquivo, já limpo por `cleanCifraClubText`) não tem
 /// colchete nenhum e cai no formato "Cifra Club" de duas linhas
-/// (`_lineSpansTwoLine`/`isChordLine`).
+/// (`_lineSpansTwoLine`/`isChordLine`) — rótulos de seção nesse formato usam
+/// chaves (`{Refrão}`, `sectionLabelPattern`/`isSectionLabelLine`), não
+/// colchete, então não disparam esta detecção nem são confundidos com acorde
+/// (29/08/2026, pedido do usuário).
 final RegExp _legacyBracketPattern = RegExp(r'\[[^\]\n]+\]');
 
 class _CifraContent extends StatelessWidget {
@@ -427,22 +430,42 @@ class _CifraContent extends StatelessWidget {
   final int displayCapo;
   final double fontSize;
 
+  /// Acordes entre colchetes (`chordBracketPattern`) e rótulos entre chaves
+  /// (`sectionLabelPattern`, ex. `"{Refrão}"`) no mesmo texto — só os
+  /// primeiros são transpostos; os segundos só ganham destaque visual
+  /// (29/08/2026, pedido do usuário).
+  static final RegExp _inlineTokenPattern = RegExp(r'\[([^\]]+)\]|\{([^}]+)\}');
+
   List<InlineSpan> _lineSpans(String line, BuildContext context) {
     final spans = <InlineSpan>[];
     var lastEnd = 0;
-    for (final match in chordBracketPattern.allMatches(line)) {
+    for (final match in _inlineTokenPattern.allMatches(line)) {
       if (match.start > lastEnd) {
         spans.add(TextSpan(text: line.substring(lastEnd, match.start)));
       }
-      spans.add(
-        TextSpan(
-          text: transposeChord(match.group(1)!, chordSemitones),
-          style: const TextStyle(
-            color: SibValColors.goldAccent,
-            fontWeight: FontWeight.bold,
+      final chord = match.group(1);
+      if (chord != null) {
+        spans.add(
+          TextSpan(
+            text: transposeChord(chord, chordSemitones),
+            style: const TextStyle(
+              color: SibValColors.goldAccent,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        spans.add(
+          TextSpan(
+            text: match.group(2)!,
+            style: TextStyle(
+              color: context.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        );
+      }
       lastEnd = match.end;
     }
     if (lastEnd < line.length) {
@@ -452,10 +475,25 @@ class _CifraContent extends StatelessWidget {
     return spans;
   }
 
-  /// Formato "Cifra Club": a linha inteira é acorde (`isChordLine`) — vira
+  /// Formato "Cifra Club": uma linha só entre chaves (`isSectionLabelLine`,
+  /// ex. `"{Refrão}"`) vira um rótulo destacado (29/08/2026, pedido do
+  /// usuário); a linha inteira é acorde (`isChordLine`) — vira
   /// negrito/dourado, transposta como uma unidade (`transposeChordLine`,
   /// preserva alinhamento); senão é letra normal.
-  List<InlineSpan> _lineSpansTwoLine(String line) {
+  List<InlineSpan> _lineSpansTwoLine(String line, BuildContext context) {
+    if (isSectionLabelLine(line)) {
+      final label = line.trim();
+      return [
+        TextSpan(
+          text: label.substring(1, label.length - 1),
+          style: TextStyle(
+            color: context.textSecondary,
+            fontWeight: FontWeight.bold,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ];
+    }
     if (isChordLine(line)) {
       final transposed = transposeChordLine(line, chordSemitones);
       return [
@@ -512,7 +550,9 @@ class _CifraContent extends StatelessWidget {
                   fontSize: fontSize,
                   height: 1.6,
                 ),
-                children: isLegacyFormat ? _lineSpans(line, context) : _lineSpansTwoLine(line),
+                children: isLegacyFormat
+                    ? _lineSpans(line, context)
+                    : _lineSpansTwoLine(line, context),
               ),
             ),
           ),

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../data/hymnal_repository.dart';
 import '../data/praise_repertoire_repository.dart';
 import '../data/service_order_repository.dart';
+import '../data/user_repository.dart';
 import '../data/visitor_repository.dart';
 import '../hymnal/hymn_detail_page.dart';
 import '../introduction/visitor_tiles.dart';
@@ -14,6 +15,7 @@ import '../models/praise_repertoire.dart';
 import '../models/service_order.dart';
 import '../models/visitor.dart';
 import '../notifications/notification_read_sync.dart';
+import '../praise/cifra_view_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
 import 'service_order_mission_moment_page.dart';
@@ -53,7 +55,15 @@ import 'service_order_mission_moment_page.dart';
 /// **Momentos "Louvor"** mostram as músicas escaladas no repertório semanal
 /// da semana do culto (`PraiseRepertoireRepository.getForDate`,
 /// `praiseSlotLabelFor`), se houver — Ministério de Louvor
-/// (`praise_repertoire.dart`).
+/// (`praise_repertoire.dart`). **29/08/2026, pedido do usuário**: quando o
+/// dono da ordem também tem o papel Louvor (`canViewPraiseOrder`), tocar no
+/// momento abre a cifra da música escalada (`CifraViewPage`), mesmo destino
+/// que `ServiceOrderPraiseViewPage` já dava a quem só tem o papel Louvor
+/// (sem ser dono) — reaproveita o mesmo mecanismo de sub-ação de
+/// "Leitura bíblica"/hino (abre de verdade, marca concluído só ao voltar);
+/// com mais de uma música escalada no mesmo momento, cada uma vira uma
+/// sub-ação própria. Sem esse papel, o momento continua só marcando
+/// concluído no toque, sem abrir nada.
 ///
 /// Ao concluir todos os momentos, aparece "Finalizar Culto" no rodapé —
 /// marca `ServiceOrder.isFinalized` e volta pra lista.
@@ -280,6 +290,38 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
           ),
         ),
       ];
+    }
+    // Momento "Louvor" com o dono também no papel Louvor (29/08/2026, pedido
+    // do usuário) — tocar abre a cifra da música escalada, em vez de só
+    // marcar concluído. Sem repertório/música escalada pro momento, ou sem o
+    // papel, cai no comportamento padrão (`const []`, abaixo).
+    if (item.type != null) {
+      final canViewPraise =
+          ref.read(currentUserProfileProvider).asData?.value?.canViewPraiseOrder ??
+          false;
+      final slot = canViewPraise ? praiseSlotLabelFor(item.type!) : null;
+      final songs = slot == null
+          ? const <PraiseAssignment>[]
+          : (_repertoire?.forSlot(slot) ?? const []);
+      if (songs.isNotEmpty) {
+        return [
+          for (var i = 0; i < songs.length; i++)
+            _SubAction(
+              key: '$baseKey:cifra$i',
+              label: songs[i].songArtist.isEmpty
+                  ? songs[i].songName
+                  : '${songs[i].songName} — ${songs[i].songArtist}',
+              open: (ctx) => Navigator.of(ctx).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => CifraViewPage(
+                    songId: songs[i].songId,
+                    songName: songs[i].songName,
+                  ),
+                ),
+              ),
+            ),
+        ];
+      }
     }
     return const [];
   }

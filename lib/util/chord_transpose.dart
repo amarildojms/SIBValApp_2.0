@@ -11,6 +11,24 @@ const _flatScale = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 
 /// `"[G]Digno é o [D]Senhor"`).
 final RegExp chordBracketPattern = RegExp(r'\[([^\]]+)\]');
 
+/// Rótulos que não são acorde (ex. "{Introdução}", "{Refrão}") — chaves em
+/// vez de colchetes de propósito (29/08/2026, pedido do usuário). Um rótulo
+/// como "Coro" começando com letra de nota (A-G) dentro de colchetes seria
+/// mal interpretado como acorde por `chordBracketPattern`/`isChordToken` e
+/// corrompido na transposição (ex. "[Coro]" virava "[C#oro]" ao subir 1
+/// semitom) — chaves nunca colidem com a sintaxe de acorde, então
+/// `CifraViewPage` só destaca visualmente o texto dentro, sem transpor nada.
+final RegExp sectionLabelPattern = RegExp(r'\{([^}]+)\}');
+
+/// `true` se [line] (depois de aparada) for inteiramente um rótulo entre
+/// chaves, ex. `"{Refrão}"` — usado por `CifraViewPage` no formato "Cifra
+/// Club" de duas linhas pra estilizar a linha inteira como destaque, em vez
+/// de tratá-la como letra normal.
+bool isSectionLabelLine(String line) {
+  final trimmed = line.trim();
+  return trimmed.length > 1 && trimmed.startsWith('{') && trimmed.endsWith('}');
+}
+
 /// Índice cromático (0-11) de [note] (ex. "F#", "Db") na escala — `null` se
 /// não reconhecida. Usado por `CifraViewPage` (28/08/2026, pedido do
 /// usuário: "implementar a possibilidade de selecionar o tom") pra calcular

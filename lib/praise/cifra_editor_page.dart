@@ -375,7 +375,9 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                           child: Text(
                             'Letra e acordes — Formato: uma linha só com os '
                             'acordes, e a linha de baixo com a letra '
-                            'correspondente.',
+                            'correspondente. Para marcar trechos que não são '
+                            'acorde (ex.: Introdução, Refrão), use chaves: '
+                            '{Refrão}.',
                             style: TextStyle(
                               color: context.textSecondary,
                               fontSize: 12,

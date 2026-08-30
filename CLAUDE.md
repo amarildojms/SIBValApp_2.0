@@ -2668,6 +2668,43 @@ botão "+ Texto bíblico" unificado em toda lista de texto bíblico
   desde o início). Só o texto do botão mudou — nenhuma mudança de
   comportamento nos outros três.
 
+**Ordem de Culto/Cifras — dono com papel Louvor abre a cifra no momento de
+Louvor; rótulos de seção na cifra usam chaves, não colchetes (29/08/2026,
+mesma sessão, pedidos do usuário):**
+
+- `ServiceOrderLivePage._subActionsFor` (`lib/service_order/service_order_live_page.dart`)
+  ganhou um caso novo pra qualquer momento com `item.type != null`: quando
+  quem está no modo apresentação (sempre o dono, por construção de
+  `openServiceOrder`) também tem `canViewPraiseOrder` (papel Louvor ou
+  admin) e há música(s) escalada(s) pro slot daquele momento
+  (`praiseSlotLabelFor`/`_repertoire`), o toque abre `CifraViewPage` em vez
+  de só marcar concluído — mesmo destino que `ServiceOrderPraiseViewPage`
+  já dava a quem só tem o papel Louvor sem ser dono. Com mais de uma música
+  no mesmo slot, cada uma vira uma sub-ação própria (mesmo mecanismo de
+  `_MomentGroupCard`/`_SubActionRow` já usado por "Dedicação dos dízimos e
+  ofertas"); sem repertório/música ou sem o papel, cai no comportamento de
+  sempre (só marca concluído).
+- **Bug real corrigido nas cifras**: rótulos de seção (ex. "[Intro]",
+  "[Refrão]") escritos entre colchetes tinham dois problemas — (1) no
+  formato antigo inline (`[Acorde]palavra`), `chordBracketPattern` tratava
+  QUALQUER conteúdo entre colchetes como acorde; um rótulo começando com
+  letra de nota (ex. "[Coro]") virava "[C#oro]" ao transpor 1 semitom; (2)
+  no formato novo "Cifra Club" de duas linhas, a mera presença de um
+  colchete em qualquer lugar do conteúdo (`_legacyBracketPattern.hasMatch`)
+  reclassificava a cifra INTEIRA como formato antigo, quebrando a
+  renderização de duas linhas pra música inteira. Resolvido mudando a
+  convenção: rótulos de seção agora usam **chaves**, não colchetes — `{Intro}`,
+  `{Refrão}` — que nunca colidem com a sintaxe de acorde nem dos dois
+  detectores de formato. Novo `sectionLabelPattern`/`isSectionLabelLine`
+  (`lib/util/chord_transpose.dart`); `CifraViewPage._lineSpans` (formato
+  antigo) passou a reconhecer colchete (transpõe, dourado) E chave (só
+  destaca, itálico/negrito em `context.textSecondary`, sem transpor) no
+  mesmo texto; `_lineSpansTwoLine` (formato novo) reconhece uma linha
+  inteira entre chaves como rótulo destacado, antes de checar se é linha de
+  acorde. Texto de ajuda do import em `cifra_editor_page.dart` atualizado
+  pra mencionar a convenção nova. Sem migração de cifras já salvas com
+  colchete — mesmo padrão de sempre.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
