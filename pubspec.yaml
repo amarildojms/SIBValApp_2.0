@@ -18,16 +18,14 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 40, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (29/08/2026): na Ordem de Culto, Louvor/
-# admin/dono passam a poder visualizar a ordem 2h antes do início (era 1h só
-# pra Louvor/admin); admin recuperou Editar/Excluir de qualquer ordem (mas
-# não pode mais iniciar/marcar momento/finalizar, exclusivo do dono); ao
-# tocar num momento com mais de um texto bíblico (Leitura bíblica, momento
-# adicional, e agora também Texto bíblico dos dízimos, que ganhou suporte a
-# múltiplos textos), todos abrem juntos de uma vez; botão de adicionar texto
-# bíblico unificado como "+ Texto bíblico" em todo o formulário.
-version: 1.7.2+41
+# Play Console antes de enviar; se for maior que 41, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (29/08/2026): corrige o botão de salvar
+# cifra que podia ficar processando pra sempre sem mensagem de sucesso/erro
+# (timeout de 15s + feedback explícito); corrige demora pra carregar o
+# perfil/ícones de admin no menu Mais logo após abrir o app do zero
+# (currentUserProfileProvider virou StreamProvider, mostra o cache local na
+# hora em vez de esperar o servidor).
+version: 1.7.2+42
 
 environment:
   sdk: ^3.13.0
