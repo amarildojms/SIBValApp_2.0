@@ -27,7 +27,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # adicional, e agora também Texto bíblico dos dízimos, que ganhou suporte a
 # múltiplos textos), todos abrem juntos de uma vez; botão de adicionar texto
 # bíblico unificado como "+ Texto bíblico" em todo o formulário.
-version: 1.7.2+40
+version: 1.7.2+41
 
 environment:
   sdk: ^3.13.0
