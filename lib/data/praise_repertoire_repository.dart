@@ -19,14 +19,19 @@ class PraiseRepertoireRepository {
   CollectionReference<Map<String, dynamic>> get _weeklyRepertoires =>
       _firestore.collection('weeklyRepertoires');
 
-  /// Domingo da semana que contém [date] — chave (`weeklyRepertoires/{id}`)
-  /// e ponto de partida do repertório semanal.
-  static DateTime sundayOf(DateTime date) {
-    final sunday = date.subtract(Duration(days: date.weekday % 7));
-    return DateTime(sunday.year, sunday.month, sunday.day);
-  }
-
-  static String weekKeyFor(DateTime date) => _weekKeyFormat.format(sundayOf(date));
+  /// Chave (`weeklyRepertoires/{id}`) do repertório de [date] — o dia
+  /// exato, sem "arredondar" pro domingo da semana. Antes (`sundayOf`,
+  /// removido em 03/09/2026) qualquer dia dentro da mesma semana caía no
+  /// repertório do domingo anterior — bug relatado pelo usuário: uma Ordem
+  /// de Culto cadastrada pra terça (01/09) buscava as músicas do repertório
+  /// de domingo (30/08), só porque as duas datas caem na "mesma semana".
+  /// Pedido explícito: música só é atribuída a um momento "Louvor" quando
+  /// existe repertório semanal com a **mesma data exata** da Ordem de
+  /// Culto — sem repertório pra aquele dia específico, os momentos "Louvor"
+  /// simplesmente ficam sem música (`ServiceOrderLivePage`/
+  /// `ServiceOrderPraiseViewPage` já tratam `WeeklyRepertoire? == null`).
+  static String weekKeyFor(DateTime date) =>
+      _weekKeyFormat.format(DateTime(date.year, date.month, date.day));
 
   // Repertório mensal (catálogo mestre de músicas).
   Stream<List<PraiseSong>> watchSongs() {
@@ -36,12 +41,12 @@ class PraiseRepertoireRepository {
         .map((s) => s.docs.map(PraiseSong.fromFirestore).toList());
   }
 
-  Future<void> createSong(String name, String artist) {
-    return _songs.add({'name': name, 'artist': artist});
+  Future<void> createSong(PraiseSong song) {
+    return _songs.add(song.toMap());
   }
 
-  Future<void> updateSong(String id, String name, String artist) {
-    return _songs.doc(id).update({'name': name, 'artist': artist});
+  Future<void> updateSong(String id, PraiseSong song) {
+    return _songs.doc(id).update(song.toMap());
   }
 
   Future<void> deleteSong(String id) => _songs.doc(id).delete();
@@ -98,3 +103,49 @@ final weeklyRepertoireForDateProvider =
     FutureProvider.autoDispose.family<WeeklyRepertoire?, DateTime>((ref, date) {
       return ref.watch(praiseRepertoireRepositoryProvider).getForDate(date);
     });
+
+/// Espelho dos nomes de quem tem o papel Louvor (02/09/2026, pedido do
+/// usuário: "em adicionar solista, deve buscar entre os membros que tem o
+/// papel Louvor") — `settings/louvorMembers.names`, mapa uid→nome. Não dá
+/// pra consultar `users` direto pra isso: `firestore.rules` só libera
+/// `list` nessa coleção pra admin, e quem cadastra uma música pode ser só
+/// Louvor (não-admin) — mesmo problema já documentado no CLAUDE.md pra
+/// "Convidado por" da Introdução, resolvido lá com `members`; aqui não dá
+/// pra usar `members` porque o papel Louvor não é um ministério
+/// sincronizado, é atribuído direto ao usuário. Mantido pelo próprio
+/// `manage_users_page.dart` (só admin, que já escreve em `settings/*`) toda
+/// vez que o chip "Louvor" é marcado/desmarcado — sem precisar de regra nova
+/// (`settings/{docId}` já libera leitura pra qualquer autenticado e escrita
+/// pra admin).
+class PraiseLouvorMembersRepository {
+  PraiseLouvorMembersRepository(this._firestore);
+
+  final FirebaseFirestore _firestore;
+
+  DocumentReference<Map<String, dynamic>> get _doc =>
+      _firestore.collection('settings').doc('louvorMembers');
+
+  Stream<List<String>> watchNames() {
+    return _doc.snapshots().map((doc) {
+      final names = doc.data()?['names'] as Map<String, dynamic>?;
+      if (names == null || names.isEmpty) return const <String>[];
+      return names.values.cast<String>().toList()..sort();
+    });
+  }
+
+  Future<void> setMember(String uid, String name, bool isMember) {
+    return _doc.set({
+      'names': {uid: isMember ? name : FieldValue.delete()},
+    }, SetOptions(merge: true));
+  }
+}
+
+final praiseLouvorMembersRepositoryProvider = Provider<PraiseLouvorMembersRepository>((
+  ref,
+) {
+  return PraiseLouvorMembersRepository(FirebaseFirestore.instance);
+});
+
+final louvorMemberNamesProvider = StreamProvider.autoDispose<List<String>>((ref) {
+  return ref.watch(praiseLouvorMembersRepositoryProvider).watchNames();
+});

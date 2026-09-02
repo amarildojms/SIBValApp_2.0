@@ -2,17 +2,93 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'service_order.dart';
 
+/// Classificação temática da música (02/09/2026, pedido do usuário) — usada
+/// tanto no cadastro quanto como um dos critérios de busca de
+/// `PraiseSuggestionsPage` (o "tema" digitado casa, entre outras coisas,
+/// contra o rótulo da classificação).
+enum PraiseSongClassification {
+  chamadaAdoracao,
+  celebracao,
+  adoracao,
+  avulso;
+
+  static PraiseSongClassification fromName(String? value) =>
+      PraiseSongClassification.values.firstWhere(
+        (e) => e.name == value,
+        orElse: () => PraiseSongClassification.avulso,
+      );
+
+  String get label => switch (this) {
+    PraiseSongClassification.chamadaAdoracao => 'Chamada a adoração',
+    PraiseSongClassification.celebracao => 'Celebração',
+    PraiseSongClassification.adoracao => 'Adoração',
+    PraiseSongClassification.avulso => 'Avulso',
+  };
+}
+
+/// Nomes dos meses em português, índice 0 = Janeiro — usado pelo seletor de
+/// "Mês referência" (`PraiseSong.referenceMonthKey`, formato `yyyy-MM`) e
+/// pra agrupar o repertório semanal em pastas por mês (02/09/2026, pedido do
+/// usuário).
+const praiseMonthNames = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+/// Formata uma chave `yyyy-MM` como "Setembro de 2026" — `null`/vazio vira
+/// "Sem mês definido" (usado como rótulo da pasta de "sobra" no agrupamento
+/// por mês).
+String praiseReferenceMonthLabel(String? key) {
+  if (key == null || key.isEmpty) return 'Sem mês definido';
+  final parts = key.split('-');
+  if (parts.length != 2) return 'Sem mês definido';
+  final year = parts[0];
+  final month = int.tryParse(parts[1]);
+  if (month == null || month < 1 || month > 12) return 'Sem mês definido';
+  return '${praiseMonthNames[month - 1]} de $year';
+}
+
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Uma música do repertório mensal (catálogo mestre do Ministério
 /// de Louvor, `praiseSongs`) — "mensal" é só o nome da aba
 /// (`PraiseMinistryPage`), não particiona por mês: é o catálogo de todas as
 /// músicas que o ministério já usa, de onde o repertório semanal escolhe.
+///
+/// 02/09/2026 (pedido do usuário): ganhou `classification`/`soloists`/
+/// `referenceMonthKey` — os dois primeiros sem equivalente nativo, feature
+/// nova; `referenceMonthKey` (formato `yyyy-MM`, `null` = sem mês definido)
+/// alimenta o agrupamento em pastas do repertório semanal
+/// (`praiseReferenceMonthLabel`) e aparece nas sugestões de música por tema.
 class PraiseSong {
   final String id;
   final String name;
   final String artist;
+  final PraiseSongClassification classification;
+  final List<String> soloists;
+  final String? referenceMonthKey;
+  final String lyrics;
 
-  const PraiseSong({required this.id, required this.name, this.artist = ''});
+  const PraiseSong({
+    required this.id,
+    required this.name,
+    this.artist = '',
+    this.classification = PraiseSongClassification.avulso,
+    this.soloists = const [],
+    this.referenceMonthKey,
+    this.lyrics = '',
+  });
+
+  String get referenceMonthLabel => praiseReferenceMonthLabel(referenceMonthKey);
 
   factory PraiseSong.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -20,10 +96,25 @@ class PraiseSong {
       id: doc.id,
       name: data['name'] as String? ?? '',
       artist: data['artist'] as String? ?? '',
+      classification: PraiseSongClassification.fromName(
+        data['classification'] as String?,
+      ),
+      soloists: (data['soloists'] as List<dynamic>?)?.cast<String>() ?? const [],
+      referenceMonthKey: data['referenceMonthKey'] as String?,
+      lyrics: data['lyrics'] as String? ?? '',
     );
   }
 
-  Map<String, dynamic> toMap() => {'name': name, 'artist': artist};
+  bool get hasLyrics => lyrics.trim().isNotEmpty;
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'artist': artist,
+    'classification': classification.name,
+    'soloists': soloists,
+    'referenceMonthKey': referenceMonthKey,
+    'lyrics': lyrics,
+  };
 }
 
 /// "Momento" de Louvor pro qual uma música do repertório semanal foi
@@ -117,11 +208,13 @@ class PraiseAssignment {
 }
 
 /// Repertório de uma semana específica (`weeklyRepertoires/{weekKey}`, doc id
-/// = `weekKeyFor(date)` — a data do domingo daquela semana, formato
-/// `yyyy-MM-dd`, ver `PraiseRepertoireRepository`) — as músicas escaladas
+/// = `weekKeyFor(date)` — a data exata de [weekDate], formato `yyyy-MM-dd`,
+/// ver `PraiseRepertoireRepository`) — as músicas escaladas
 /// (`assignments`) e os links de playlist (`links`, YouTube/Spotify/etc.,
 /// múltiplos). `ServiceOrderLivePage` busca por essa chave a partir de
-/// `ServiceOrder.dateTime` pra preencher os momentos "Louvor" automaticamente.
+/// `ServiceOrder.dateTime` pra preencher os momentos "Louvor" automaticamente
+/// — só encontra repertório quando a data bate exatamente (03/09/2026,
+/// corrigido um bug de "mesma semana" — ver `PraiseRepertoireRepository.weekKeyFor`).
 class WeeklyRepertoire {
   final String id;
   final DateTime weekDate;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/member_repository.dart';
+import '../data/praise_repertoire_repository.dart';
 import '../data/user_repository.dart';
 import '../models/app_user.dart';
 import '../models/notification.dart';
@@ -306,6 +307,14 @@ class _RoleChip extends ConsumerWidget {
       onSelected: (value) {
         final newRoles = value ? [...user.roles, role] : user.roles.where((r) => r != role).toList();
         ref.read(userRepositoryProvider).updateRoles(user.uid, newRoles).then((_) => ref.invalidate(allUsersProvider));
+        // Espelho pra sugestão de "Adicionar solista" no Ministério de
+        // Louvor (02/09/2026, pedido do usuário) — só quem não é admin
+        // consegue ler nomes de outros usuários por essa via, já que
+        // `users.list` é admin-only (ver doc comment de
+        // `PraiseLouvorMembersRepository`).
+        if (role == UserRole.louvor) {
+          ref.read(praiseLouvorMembersRepositoryProvider).setMember(user.uid, user.name, value);
+        }
       },
     );
   }

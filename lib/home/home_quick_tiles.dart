@@ -14,7 +14,7 @@ import '../hymnal/hymnals_page.dart';
 import '../introduction/introduction_page.dart';
 import '../messages/messages_page.dart';
 import '../partners/partners_page.dart';
-import '../praise/praise_ministry_page.dart';
+import '../praise/praise_commitment_page.dart';
 import '../prayer/prayer_page.dart';
 import '../service_order/service_order_list_page.dart';
 import '../settings/settings_management_page.dart';
@@ -234,9 +234,9 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
         id: 'praiseMinistry',
         label: 'Ministério de Louvor',
         icon: Icons.queue_music_outlined,
-        onTap: (ctx) => Navigator.of(ctx).push(
-          MaterialPageRoute(builder: (_) => const PraiseMinistryPage()),
-        ),
+        // Passa pelo Termo de Compromisso no 1º acesso (02/09/2026, pedido
+        // do usuário) — ver `openPraiseMinistry`.
+        onTap: (ctx) => openPraiseMinistry(ctx, ref),
       ),
   ];
 }

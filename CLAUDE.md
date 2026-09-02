@@ -2836,6 +2836,239 @@ específica. `ServiceOrderListPage` (`_LiveIndicator`, a versão anterior)
 voltou ao estado original, sem nenhum indicador — não varre mais a lista
 inteira procurando um culto ao vivo.
 
+**Ministério de Louvor — repertório com classificação/solistas/mês
+referência, filtro no repertório semanal, botão "Sugestões" por tema,
+repertório semanal em pastas por mês, e Termo de Compromisso com a Igreja
+no 1º acesso (02/09/2026, pedidos do usuário):**
+
+- **`PraiseSong` (repertório mensal) ganhou 3 campos novos**
+  (`lib/models/praise_repertoire.dart`): `classification`
+  (`PraiseSongClassification` — Chamada a adoração/Celebração/Adoração/
+  Avulso, mesmo padrão de enum-com-`label` de `PreludeStyle`/`MissionMoment`
+  em `service_order.dart`), `soloists` (`List<String>`, lista dinâmica no
+  cadastro, mesmo padrão de `_companionControllers` em
+  `introduction_page.dart`) e `referenceMonthKey` (`String?`, formato
+  `yyyy-MM`, dois dropdowns Mês/Ano no cadastro — sem seletor de dia, só
+  interessa o mês). `PraiseRepertoireRepository.createSong`/`updateSong`
+  passaram a receber o `PraiseSong` inteiro (`toMap()`) em vez de
+  `name`/`artist` soltos.
+- **Filtro no Repertório Semanal**: `_WeeklyRepertoireTab`
+  (`praise_ministry_page.dart`) virou `ConsumerStatefulWidget` — dropdowns
+  Mês/Ano ("Todos" por padrão) filtram em memória a lista de semanas já
+  cadastradas (`weeklyRepertoiresProvider`), pelo mês/ano do domingo de cada
+  uma.
+- **Botão "Sugestões"** (`WeeklyRepertoireFormPage`, ao lado de "Adicionar
+  música") abre `PraiseSuggestionsPage` (nova) — campo "Tema" + busca no
+  catálogo inteiro (`praiseSongsProvider`). **Decisão registrada aqui por
+  não ter sido especificada pelo pedido**: não existe (nem foi pedido) um
+  campo de tags/tema por música, então o casamento "tema → músicas" é uma
+  busca de texto (`_normalizeText`, acento/case-insensível) contra
+  nome+cantor/banda+rótulo da classificação — cobre bem o caso comum
+  (digitar "adoração" e achar as classificadas como tal), mas não é busca
+  semântica de verdade. Cada resultado mostra nome/cantor/classificação/
+  solistas/mês referência e um botão "+" que adiciona à semana sendo
+  montada sem fechar a tela (`onAdd` callback,
+  `WeeklyRepertoireFormPage._addAssignmentFromSong`) — permite adicionar
+  várias antes de voltar.
+- **Repertório semanal em pastas por mês referência**: o seletor de música
+  dentro de cada linha de `WeeklyRepertoireFormPage`
+  (`_AssignmentRow`) deixou de ser um dropdown plano — agora abre
+  `_SongFolderPickerSheet` (bottom sheet, `DraggableScrollableSheet`), com
+  uma `ExpansionTile` por mês referência (`praiseReferenceMonthLabel`, mais
+  recente primeiro; "Sem mês definido" sempre por último) e um campo de
+  busca no topo.
+- **Termo de Compromisso com a Igreja** (sem equivalente nativo — texto
+  fornecido pelo usuário em `C:\TEMP\COMPROMISSO COM A IGREJA.docx`,
+  transcrito na íntegra, 33 itens numerados em 8 seções, em
+  `lib/praise/praise_commitment_page.dart`). Todo integrante do Ministério
+  de Louvor (`canViewPraiseOrder`/`canEditCifrasProvider`, mesmo critério de
+  acesso ao ícone) precisa marcar os 33 checkboxes e tocar "Concordo e
+  Aceito" antes do primeiro acesso a `PraiseMinistryPage`. Aceite
+  persistido em `praiseCommitments/{uid}` (`PraiseCommitmentRepository`,
+  `lib/data/praise_commitment_repository.dart` — coleção própria, separada
+  de `users/{uid}`, existência do doc = já aceitou); próximos acessos pulam
+  direto pro Ministério. Ponto de entrada único
+  (`openPraiseMinistry`, `lib/praise/praise_commitment_page.dart`) substitui
+  o push direto a `PraiseMinistryPage` no tile "Ministério de Louvor"
+  (`lib/home/home_quick_tiles.dart`) — decide entre mostrar o termo ou ir
+  direto pro Ministério consultando o repositório antes de navegar.
+  `SIBValApp2/firestore.rules` ganhou `match /praiseCommitments/{uid}`
+  (leitura/escrita só do próprio uid) — **só editei o código-fonte da
+  regra, não fiz `firebase deploy`**, mesma cautela de sempre; até o
+  deploy, gravar o aceite em produção falha com permission-denied.
+
+**Ministério de Louvor — letra da música, sem busca automática (02/09/2026,
+pedido do usuário, revisado na mesma sessão):** pedido original foi buscar a
+letra na internet automaticamente ao cadastrar a música. Pesquisado antes de
+implementar: a API pública do Vagalume (única fonte gratuita de letra
+completa em português conhecida) está **descontinuada** — `api.vagalume.com.br`
+responde 503 em qualquer rota, e o site principal não tem mais link pra
+"Desenvolvedores"/API nenhum. Alternativas (Genius/Musixmatch) só liberam
+metadados ou um trecho da letra no plano gratuito — letra completa exige
+plano pago. Como raspar (scraping) sites de letra é violação de termos de
+uso na maioria dos casos e expõe a risco de infração de direito autoral
+(diferente do texto bíblico BLIVRE, que é CC — letra de música evangélica
+contemporânea normalmente não é), a busca automática de verdade foi
+descartada. Perguntado ao usuário (`AskUserQuestion`) entre três caminhos;
+escolhido: **botão que abre uma busca no navegador**, sem API nem scraping.
+
+- `PraiseSong` (`lib/models/praise_repertoire.dart`) ganhou `lyrics`
+  (`String`, vazio por padrão) + getter `hasLyrics`.
+  `PraiseRepertoireRepository.createSong`/`updateSong` já recebiam o
+  `PraiseSong` inteiro (rodada anterior), não precisou de mudança de
+  assinatura.
+- No cadastro/edição de música (`_showSongDialog`,
+  `praise_ministry_page.dart`): botão "Buscar letra" abre
+  `https://www.google.com/search?q=letra+{nome}+{cantor}` no navegador
+  externo (`url_launcher`, já dependência do projeto) — o usuário copia a
+  letra de onde encontrar e cola no campo multi-linha logo abaixo
+  (`lyricsController`), que salva em `PraiseSong.lyrics`.
+- Tocar numa música do Repertório Mensal (`_MonthlyRepertoireTab`) abre
+  `PraiseLyricsPage` (nova, `lib/praise/praise_lyrics_page.dart`) — tela
+  cheia com zoom de fonte (`praise_lyrics_font_size`, preferência própria,
+  mesmo padrão de `CifraViewPage`/`service_order_bible_text_page.dart`) —
+  só quando `song.hasLyrics`; sem letra salva, a linha não é tocável (título
+  fica branco/cor normal, mesmo padrão de "hasCifra" em
+  `EnsaioDetailPage._AssignmentTile` — título vira dourado só quando há algo
+  pra abrir).
+- **Escopo desta rodada, registrado por não ter sido pedido**: só o
+  Repertório Mensal (catálogo mestre) ganhou esse fluxo. Onde a música
+  aparece dentro de um repertório semanal/culto ao vivo (`EnsaioDetailPage`,
+  `ServiceOrderLivePage`) continua abrindo a **cifra** ao tocar (se houver),
+  não a letra — não foi pedido decidir prioridade entre as duas ali.
+
+**Ministério de Louvor — solista sugerido pelo papel Louvor, filtro
+corrigido pro Repertório Mensal, releitura do Termo, pastas também no
+Repertório Semanal (02/09/2026, mesma sessão, pedidos do usuário):**
+
+- **Correção de numeração do Termo de Compromisso** (bug relatado pelo
+  usuário: rolar até o fim e voltar fazia os números aumentarem) — causa
+  raiz era um `Builder` por item com um contador mutável (`var counter = 0`)
+  compartilhado entre os 33 closures; como `ListView(children: [...])`
+  descarta/recria os `Element`s dos itens fora do viewport durante o
+  scroll, cada `Builder` recriado incrementava o mesmo contador de novo.
+  Corrigido pré-computando `_commitmentRows` (lista com o índice 1-33 já
+  fixo como dado, calculada uma única vez) — sem `Builder`, sem contador
+  mutável (`praise_commitment_page.dart`).
+- **"Adicionar solista" busca entre quem tem o papel Louvor.** Não dá pra
+  consultar `users` direto pra isso — `firestore.rules` só libera `list`
+  admin-only, e quem cadastra música pode ser só Louvor (não-admin). Solução:
+  `settings/louvorMembers.names` (mapa uid→nome, `PraiseLouvorMembersRepository`,
+  `lib/data/praise_repertoire_repository.dart`) — espelho mantido por
+  `manage_users_page.dart` (`_RoleChip.onSelected`, só quando `role ==
+  UserRole.louvor`) toda vez que o chip é marcado/desmarcado; não precisou de
+  regra nova (`settings/{docId}` já libera leitura pra qualquer autenticado,
+  escrita só admin — e quem toggla o chip já é admin). Campo de solista virou
+  `_SoloistField` (novo, embutido-na-árvore, mesmo padrão de
+  `_ParticipationField`/`service_order_form_page.dart`, escolhido de
+  propósito no lugar de `Autocomplete`). **Sem backfill**: quem já tinha o
+  papel Louvor antes desta mudança só entra no espelho na próxima vez que o
+  chip for marcado/desmarcado de novo.
+- **Filtro corrigido de lugar** — a rodada anterior tinha posto errado no
+  Repertório Semanal; o usuário corrigiu: é no **Repertório Mensal**
+  (`_MonthlyRepertoireTab`, agora `ConsumerStatefulWidget`), com três
+  critérios (classificação, solista, texto livre que busca em nome **e**
+  letra da música — `_normalizePraiseText`, acento/case-insensível). Filtro
+  de mês/ano que eu tinha posto no Repertório Semanal foi revertido (`
+  _WeeklyRepertoireTab` voltou a `ConsumerWidget` simples).
+- **Termo de Compromisso relível depois do aceite** — `PraiseCommitmentTermPage`
+  ganhou `readOnly` (checkboxes sempre marcados/travados, sem botão
+  "Concordo e Aceito") — acessível via novo item "Termo de Compromisso" no
+  menu ☰ de `PraiseMinistryPage` (`_PraiseMenuButton`), ao lado de "Cifras".
+- **Repertório Semanal também em pastas por mês referência** —
+  `EnsaioDetailPage` (`ensaios_list_page.dart`, visão de uma semana
+  específica) agrupa as músicas escaladas em `ExpansionTile`s por mês
+  referência (mesmo critério/ordem do picker de `WeeklyRepertoireFormPage`),
+  casando `PraiseAssignment.songId` contra `praiseSongsProvider` pra achar o
+  mês (o assignment em si não denormaliza esse campo). Só uma pasta (ou
+  nenhum mês definido) cai de volta pra lista simples, sem
+  `ExpansionTile` supérfluo.
+
+**Erro "line 6281 pos 12" ao salvar música — causa raiz encontrada e
+corrigida (03/09/2026).** A investigação por revisão de código não achou
+nada; só foi possível achar a causa **dirigindo o celular do usuário direto
+por `adb` neste ambiente** (`adb shell input tap`/`input text` +
+`adb exec-out screencap`, sem precisar do usuário reproduzir manualmente) —
+reproduzi o fluxo "Adicionar música" → "Salvar" eu mesmo e capturei a tela
+vermelha de erro do Flutter na hora exata. Erro completo:
+`'package:flutter/src/widgets/framework.dart': Failed assertion: line 6281
+pos 12: '_dependents.isEmpty': is not true.` — uma asserção interna do
+framework (`InheritedElement.unmount()`), não um erro do Firestore como eu
+tinha suposto.
+
+**Causa raiz**: `_showSongDialog` (`praise_ministry_page.dart`) chamava
+`.dispose()` nos `soloistControllers`/`lyricsController` **antes** de
+`Navigator.of(dialogContext).pop()` terminar de remover o diálogo da árvore
+— `pop()` só inicia a animação de saída, o subtree continua montado durante
+a transição. Isso sempre foi um padrão arriscado nesta base (mesmo
+`nameController`/`artistController` nunca foram descartados, de propósito —
+convenção existente que eu quebrei ao adicionar os `.dispose()` novos na
+sessão anterior), mas só virou um crash de verdade porque o campo de
+solista virou `_SoloistField` (`ConsumerStatefulWidget` com `FocusNode`
+próprio + `ref.watch(louvorMemberNamesProvider)`, um provider
+`.autoDispose`) — a combinação de widget com estado próprio + dependência
+Riverpod + controller descartado enquanto ainda montado é o que dispara a
+asserção do Element tree.
+
+**Correção**: removidos os três pontos onde eu descartava esses
+controllers manualmente — botão "Cancelar", botão "Salvar", e o "X" de
+remover uma linha de solista (esse último tinha o mesmo problema: o
+`.dispose()` rodava dentro do próprio callback do `setState`, antes do
+Flutter desmontar o widget removido). Os controllers agora só saem de
+escopo e são coletados pelo GC, mesmo padrão já usado em
+`nameController`/`artistController` neste diálogo. Confirmado funcionando
+de ponta a ponta ao vivo no celular (reproduzi "Adicionar música" de novo
+depois da correção, sem crash, música salva de verdade — conferido pela
+busca; depois excluída, era só teste).
+
+**Nota de processo**: um `debugPrint` temporário foi adicionado ao
+`catch` do salvar pra tentar capturar o erro via `adb logcat`, mas nunca
+disparou — o app crasha com um `FlutterError` de asserção durante o
+`build`/dispose da árvore, que nunca chega a entrar no `try/catch` do
+Firestore. Removido depois de achar a causa real via screenshot.
+
+**Repertório semanal — bug real de "mesma semana" em vez de "mesma data"
+(03/09/2026, pedido do usuário):** relatado com um caso concreto — Ordem de
+Culto cadastrada pra terça 01/09 estava puxando as músicas do repertório de
+domingo 30/08. Causa raiz: `PraiseRepertoireRepository.weekKeyFor`
+(`sundayOf`, removido nesta correção) sempre "arredondava" qualquer data pro
+domingo da semana que a contém — então terça 01/09 e domingo 30/08 caíam na
+mesma chave (`weeklyRepertoires/2026-08-30`), mesmo sendo dias diferentes.
+Corrigido: `weekKeyFor` agora usa a data exata (`yyyy-MM-dd` do dia
+recebido), sem "arredondar" pra domingo — música só é atribuída a um
+momento "Louvor" quando existe repertório com a **mesma data exata** da
+Ordem de Culto; sem repertório pra aquele dia, os momentos "Louvor" ficam
+sem música (`ServiceOrderLivePage`/`ServiceOrderPraiseViewPage` já tratavam
+`WeeklyRepertoire? == null` antes desta mudança, nenhum ajuste extra
+necessário ali). **Sem impacto em repertórios já cadastrados** normalmente
+(sempre num domingo, via o padrão de `WeeklyRepertoireFormPage`): pra uma
+data que já é domingo, a chave antiga (`sundayOf(domingo) == domingo`) e a
+nova (a própria data) são idênticas — só muda o comportamento pra datas que
+não são domingo.
+
+**Repertório Mensal também organizado em pastas por mês referência
+(03/09/2026, pedido do usuário: "o repositório mensal continua sem
+organizar as músicas por mês").** A rodada anterior só tinha aplicado
+pastas ao picker de música dentro do cadastro de repertório semanal e à
+visão de uma semana específica (`EnsaioDetailPage`) — a própria aba
+"Repertório Mensal" (catálogo mestre, `_MonthlyRepertoireTab`) continuava
+com lista plana (só filtro). `_buildSongList` (novo método) agrupa as
+músicas já filtradas em `ExpansionTile`s por `referenceMonthKey` (mesmo
+critério/ordem — mais recente primeiro, "Sem mês definido" por último);
+linha de música virou `_SongTile` (extraída, reaproveitada dentro e fora
+das pastas). Confirmado funcionando ao vivo no celular do usuário (mesma
+técnica de dirigir o adb direto, ver `[[feedback_adb_ui_diagnosis]]`).
+
+**Pastas por mês referência começam fechadas (03/09/2026, pedido do
+usuário).** `initiallyExpanded: true` → `false` nas duas `ExpansionTile` de
+pasta que ficavam abertas por padrão — `_MonthlyRepertoireTab._buildSongList`
+(Repertório Mensal) e `EnsaioDetailPage` (Repertório Semanal, visão de uma
+semana). O picker de música dentro do cadastro de repertório semanal
+(`_SongFolderPickerSheet`, `weekly_repertoire_form_page.dart`) não foi
+tocado — lá a regra já era diferente (`initiallyExpanded: keys.length ==
+1`, só a pasta única abre sozinha), contexto de escolher uma música, não de
+navegar a lista.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

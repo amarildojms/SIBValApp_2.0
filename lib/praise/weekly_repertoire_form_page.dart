@@ -7,6 +7,7 @@ import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'praise_suggestions_page.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Editor do repertório de uma semana — data (chave do documento,
@@ -125,6 +126,18 @@ class _WeeklyRepertoireFormPageState
 
   void _addAssignment() => setState(() => _assignments.add(_AssignmentDraft()));
 
+  /// Chamado pelo botão "+" de `PraiseSuggestionsPage` — acrescenta a música
+  /// escolhida como uma nova linha, sem fechar a tela de sugestões
+  /// (02/09/2026, pedido do usuário: "uma opção de adicionar cada música ao
+  /// repertório semanal").
+  void _addAssignmentFromSong(PraiseSong song) {
+    setState(() {
+      _assignments.add(
+        _AssignmentDraft(songId: song.id, songName: song.name, songArtist: song.artist),
+      );
+    });
+  }
+
   void _removeAssignment(int index) {
     final draft = _assignments.removeAt(index);
     draft.dispose();
@@ -223,13 +236,26 @@ class _WeeklyRepertoireFormPageState
                             : null,
                       ),
                     ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: _addAssignment,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Adicionar música'),
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _addAssignment,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Adicionar música'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                PraiseSuggestionsPage(onAdd: _addAssignmentFromSong),
+                          ),
+                        ),
+                        icon: const Icon(Icons.lightbulb_outline, size: 18),
+                        label: const Text('Sugestões'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   _label(context, 'Links de playlist'),
@@ -333,35 +359,37 @@ class _AssignmentRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: draft.songId,
-                  isExpanded: true,
-                  dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  decoration: const InputDecoration(
-                    labelText: 'Música',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  ),
-                  items: [
-                    for (final song in songs)
-                      DropdownMenuItem(
-                        value: song.id,
-                        child: Text(
-                          song.artist.isEmpty ? song.name : '${song.name} — ${song.artist}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: (id) {
-                    final matches = songs.where((s) => s.id == id);
-                    final song = matches.isEmpty ? null : matches.first;
-                    draft.songId = id;
-                    draft.songName = song?.name ?? '';
-                    draft.songArtist = song?.artist ?? '';
-                    onChanged();
+                // Picker em pastas por mês referência (02/09/2026, pedido do
+                // usuário: "o repertório semanal organize as músicas em
+                // pastas relacionadas ao seu mês de referência") — no lugar
+                // do dropdown plano de antes, ver `_pickSongFromFolders`.
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await _pickSongFromFolders(context, songs);
+                    if (picked != null) {
+                      draft.songId = picked.id;
+                      draft.songName = picked.name;
+                      draft.songArtist = picked.artist;
+                      onChanged();
+                    }
                   },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Música',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    ),
+                    child: Text(
+                      draft.songId == null
+                          ? 'Selecione'
+                          : (draft.songArtist.isEmpty
+                                ? draft.songName
+                                : '${draft.songName} — ${draft.songArtist}'),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
               if (onRemove != null)
@@ -477,4 +505,115 @@ class _AssignmentRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Bottom sheet do picker de música em pastas por mês referência
+/// (`_AssignmentRow`, ver comentário acima) — uma `ExpansionTile` por mês
+/// (mais recente primeiro; "Sem mês definido" sempre por último), com busca
+/// por nome/cantor no topo pra catálogos maiores.
+Future<PraiseSong?> _pickSongFromFolders(
+  BuildContext context,
+  List<PraiseSong> songs,
+) {
+  return showModalBottomSheet<PraiseSong>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetContext) => _SongFolderPickerSheet(songs: songs),
+  );
+}
+
+class _SongFolderPickerSheet extends StatefulWidget {
+  const _SongFolderPickerSheet({required this.songs});
+
+  final List<PraiseSong> songs;
+
+  @override
+  State<_SongFolderPickerSheet> createState() => _SongFolderPickerSheetState();
+}
+
+class _SongFolderPickerSheetState extends State<_SongFolderPickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _normalizeSongQuery(_query);
+    final filtered = query.isEmpty
+        ? widget.songs
+        : widget.songs
+              .where((s) => _normalizeSongQuery('${s.name} ${s.artist}').contains(query))
+              .toList();
+
+    final groups = <String?, List<PraiseSong>>{};
+    for (final song in filtered) {
+      groups.putIfAbsent(song.referenceMonthKey, () => []).add(song);
+    }
+    final keys = groups.keys.toList()
+      ..sort((a, b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        return b.compareTo(a);
+      });
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) => SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                autofocus: false,
+                decoration: const InputDecoration(
+                  labelText: 'Buscar música',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? const Center(child: Text('Nenhuma música encontrada.'))
+                  : ListView(
+                      controller: scrollController,
+                      children: [
+                        for (final key in keys)
+                          ExpansionTile(
+                            leading: const Icon(Icons.folder_outlined),
+                            title: Text(praiseReferenceMonthLabel(key)),
+                            initiallyExpanded: keys.length == 1,
+                            children: [
+                              for (final song in groups[key]!)
+                                ListTile(
+                                  title: Text(song.name),
+                                  subtitle: song.artist.isEmpty ? null : Text(song.artist),
+                                  onTap: () => Navigator.of(context).pop(song),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+const _songQueryDiacritics = 'áàãâäéèêëíìîïóòõôöúùûüçñ';
+const _songQueryPlainLetters = 'aaaaaeeeeiiiiooooouuuucn';
+
+String _normalizeSongQuery(String value) {
+  var result = value.toLowerCase().trim();
+  for (var i = 0; i < _songQueryDiacritics.length; i++) {
+    result = result.replaceAll(_songQueryDiacritics[i], _songQueryPlainLetters[i]);
+  }
+  return result;
 }

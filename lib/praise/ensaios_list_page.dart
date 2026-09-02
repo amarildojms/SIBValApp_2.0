@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/cifra_repository.dart';
+import '../data/praise_repertoire_repository.dart';
 import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -14,6 +15,13 @@ import 'cifra_view_page.dart';
 /// numa música com cifra cadastrada abre `CifraViewPage`; sem cifra, a linha
 /// não é tocável (28/08/2026, pedido do usuário: "se houver cifra, ao tocar
 /// ele irá abrir a cifra").
+///
+/// As músicas aparecem em pastas por mês referência (02/09/2026, pedido do
+/// usuário — mesmo padrão já usado no picker de música de
+/// `WeeklyRepertoireFormPage`) — o mês vem do catálogo mestre
+/// (`praiseSongsProvider`, casado por `songId`), já que `PraiseAssignment`
+/// não denormaliza esse campo; música removida do catálogo depois de
+/// escalada cai na pasta "Sem mês definido".
 class EnsaioDetailPage extends ConsumerWidget {
   const EnsaioDetailPage({super.key, required this.repertoire});
 
@@ -31,6 +39,21 @@ class EnsaioDetailPage extends ConsumerWidget {
         .where((c) => c.content.trim().isNotEmpty)
         .map((c) => c.songId)
         .toSet();
+
+    final catalogSongs = ref.watch(praiseSongsProvider).asData?.value ?? const [];
+    final referenceMonthById = {for (final s in catalogSongs) s.id: s.referenceMonthKey};
+
+    final groups = <String?, List<PraiseAssignment>>{};
+    for (final assignment in repertoire.assignments) {
+      groups.putIfAbsent(referenceMonthById[assignment.songId], () => []).add(assignment);
+    }
+    final groupKeys = groups.keys.toList()
+      ..sort((a, b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        return b.compareTo(a);
+      });
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -50,11 +73,32 @@ class EnsaioDetailPage extends ConsumerWidget {
                       'Nenhuma música escalada.',
                       style: TextStyle(color: context.textSecondary),
                     )
-                  else
+                  else if (groupKeys.length <= 1)
+                    // Só uma pasta (ou nenhuma música com mês definido) —
+                    // mostra a lista direto, sem `ExpansionTile` supérfluo.
                     for (final assignment in repertoire.assignments)
                       _AssignmentTile(
                         assignment: assignment,
                         hasCifra: songIdsWithCifra.contains(assignment.songId),
+                      )
+                  else
+                    for (final key in groupKeys)
+                      ExpansionTile(
+                        leading: const Icon(Icons.folder_outlined),
+                        title: Text(praiseReferenceMonthLabel(key)),
+                        // Fechadas por padrão (03/09/2026, pedido do
+                        // usuário — mesmo ajuste aplicado ao Repertório
+                        // Mensal).
+                        initiallyExpanded: false,
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(left: 8),
+                        children: [
+                          for (final assignment in groups[key]!)
+                            _AssignmentTile(
+                              assignment: assignment,
+                              hasCifra: songIdsWithCifra.contains(assignment.songId),
+                            ),
+                        ],
                       ),
                   if (repertoire.links.isNotEmpty) ...[
                     const SizedBox(height: 16),
