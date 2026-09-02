@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/contribution_repository.dart';
@@ -127,6 +128,19 @@ class _VerseCard extends StatelessWidget {
   }
 }
 
+/// Copia o CNPJ como chave Pix — só os dígitos, sem pontos/barra/traço
+/// (01/09/2026, pedido do usuário: "ao tocar o cnpj deve ser copiado como
+/// chave pix"). Muitas chaves Pix do tipo CNPJ são cadastradas nos bancos só
+/// com os números, então essa é a forma mais provável de colar direto num
+/// campo "chave Pix" sem precisar editar.
+void _copyCnpjAsPixKey(BuildContext context, String cnpj) {
+  final digitsOnly = cnpj.replaceAll(RegExp(r'\D'), '');
+  Clipboard.setData(ClipboardData(text: digitsOnly));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Chave Pix (CNPJ) copiada.')),
+  );
+}
+
 class _ContributionContent extends StatelessWidget {
   const _ContributionContent({required this.info, required this.isAdmin});
 
@@ -159,7 +173,21 @@ class _ContributionContent extends StatelessWidget {
           ),
         if (info.cnpj.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('CNPJ: ${info.cnpj}', style: TextStyle(color: context.textSecondary, fontSize: 13)),
+          InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => _copyCnpjAsPixKey(context, info.cnpj),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('CNPJ: ${info.cnpj}', style: TextStyle(color: context.textSecondary, fontSize: 13)),
+                  const SizedBox(width: 6),
+                  Icon(Icons.copy_outlined, size: 15, color: context.textSecondary),
+                ],
+              ),
+            ),
+          ),
         ],
         for (final pix in info.pixEntries)
           if (pix.key.isNotEmpty && pix.displayTitle.isNotEmpty) ...[

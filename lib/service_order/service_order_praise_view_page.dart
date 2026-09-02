@@ -48,6 +48,17 @@ import 'service_order_preview_page.dart';
 /// cifras") — `showPraiseDetails: false` esconde o tom e desliga o toque nos
 /// momentos "Louvor" (só nome/cantor, sem link pra `CifraViewPage`); as
 /// demais navegações (bíblia/hino) continuam iguais nos dois casos.
+///
+/// **Mesmo visual de status do modo apresentação do dirigente** (02/09/2026,
+/// pedido do usuário: "todo o visual que fizemos na ordem de culto na visão
+/// do dirigente deve ser replicado para os modos de visualização também") —
+/// `_PraiseMomentCard` ganhou o mesmo esquema de 3 cores (`ServiceOrderLivePage`/
+/// `_MomentCard`: pendente neutro, atual dourado piscando com borda,
+/// concluído verde) e o mesmo selo "ao vivo" (`ServiceOrderLiveBadge`) do
+/// lado esquerdo do card do momento atual — widgets duplicados aqui
+/// (`_PulseValue`, `_doneGreen`) por serem privados ao arquivo de origem,
+/// mesmo padrão de duplicação já usado por `_momentIcon`/`_emojiFor` neste
+/// mesmo arquivo.
 class ServiceOrderPraiseViewPage extends ConsumerStatefulWidget {
   const ServiceOrderPraiseViewPage({super.key, required this.orderId});
 
@@ -115,8 +126,9 @@ class _ServiceOrderPraiseViewPageState
               );
             }
             final available = isServiceOrderViewableEarly(order.dateTime);
-            if (!available)
+            if (!available) {
               return _NotYetAvailable(order: order, dateFormat: _dateFormat);
+            }
             return _buildOrder(order);
           },
         ),
@@ -281,6 +293,24 @@ class _ServiceOrderReadOnlyBodyState
     }
     if (leaves.isEmpty) return true;
     return leaves.every(completed.contains);
+  }
+
+  /// Índice do momento "atual" (primeiro ainda não concluído) — mesma regra
+  /// de `ServiceOrderLivePage._currentItemIndex`, reaproveitada aqui pra
+  /// dar o mesmo destaque dourado piscando + selo "ao vivo" nesta visão
+  /// somente-leitura (02/09/2026, pedido do usuário).
+  int _currentIndex(
+    List<ServiceOrderItem> items,
+    ServiceOrder order,
+    Set<String> completed,
+  ) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      final baseKey = _baseKeyFor(i, item, items);
+      final leaves = _leafKeysFor(baseKey, item, order);
+      if (!_isDone(completed, baseKey, leaves, item)) return i;
+    }
+    return items.length;
   }
 
   Future<(Hymnal, Hymn)?> _resolveHymn(String label) async {
@@ -450,6 +480,7 @@ class _ServiceOrderReadOnlyBodyState
     final repertoire = repertoireAsync.asData?.value;
     final completed = order.completedMomentKeys.toSet();
     final items = order.momentOrder;
+    final currentIndex = _currentIndex(items, order, completed);
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -459,12 +490,15 @@ class _ServiceOrderReadOnlyBodyState
         final baseKey = _baseKeyFor(index, item, items);
         final leaves = _leafKeysFor(baseKey, item, order);
         final isDone = _isDone(completed, baseKey, leaves, item);
+        final isCurrent =
+            !isDone && index == currentIndex && !order.isFinalized;
         final rows = _detailRowsFor(item, order, repertoire);
         final momentCard = _PraiseMomentCard(
           index: index,
           item: item,
           order: order,
           isDone: isDone,
+          isCurrent: isCurrent,
           rows: rows,
         );
         // Anotação livre logo abaixo de "Boas-vindas"/"Avisos/Comunicações"
@@ -721,12 +755,76 @@ class _MomentNotesCard extends StatelessWidget {
   }
 }
 
+/// Verde de "momento concluído" — mesmo valor/motivo de `_doneGreen` em
+/// `service_order_live_page.dart`, duplicado aqui por ser privado ao arquivo
+/// de origem (02/09/2026).
+const _doneGreen = Color(0xFF43A047);
+
+/// Pulsa um valor 0..1 continuamente enquanto `enabled` — mesmo widget de
+/// `service_order_live_page.dart` (`_PulseValue`), duplicado aqui por ser
+/// privado ao arquivo de origem.
+class _PulseValue extends StatefulWidget {
+  const _PulseValue({required this.enabled, required this.builder});
+
+  final bool enabled;
+  final ValueWidgetBuilder<double> builder;
+
+  @override
+  State<_PulseValue> createState() => _PulseValueState();
+}
+
+class _PulseValueState extends State<_PulseValue>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  late final Animation<double> _animation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOut,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PulseValue oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !oldWidget.enabled) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.enabled && oldWidget.enabled) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.builder(context, 1, null);
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) =>
+          widget.builder(context, _animation.value, child),
+    );
+  }
+}
+
 class _PraiseMomentCard extends StatelessWidget {
   const _PraiseMomentCard({
     required this.index,
     required this.item,
     required this.order,
     required this.isDone,
+    required this.isCurrent,
     required this.rows,
   });
 
@@ -734,114 +832,158 @@ class _PraiseMomentCard extends StatelessWidget {
   final ServiceOrderItem item;
   final ServiceOrder order;
   final bool isDone;
+
+  /// Momento "atual" (primeiro ainda não concluído) — mesmo destaque dourado
+  /// piscando + selo "ao vivo" do modo apresentação do dirigente (02/09/2026,
+  /// pedido do usuário).
+  final bool isCurrent;
   final List<_DetailRow> rows;
 
   @override
   Widget build(BuildContext context) {
     final summary = item.summary(order);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: isDone
-                    ? SibValColors.goldAccent
-                    : Colors.white12,
-                child: isDone
-                    ? const Icon(
-                        Icons.check,
-                        size: 16,
-                        color: SibValColors.navyBlue,
-                      )
-                    : Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 12),
-              _momentIcon(item.type, size: 20, color: Colors.white70),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: isDone ? Colors.white38 : Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    decoration: isDone ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (rows.isEmpty && summary != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 42, top: 4),
-              child: Text(
-                summary,
-                style: const TextStyle(color: Colors.white60, fontSize: 13),
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _PulseValue(
+        enabled: isCurrent,
+        builder: (context, t, _) {
+          final goldPulse = SibValColors.goldAccent.withValues(
+            alpha: 0.5 + 0.5 * t,
+          );
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isCurrent
+                  ? const Color(0xFF1E3A5F)
+                  : (isDone
+                        ? _doneGreen.withValues(alpha: 0.12)
+                        : Colors.white.withValues(alpha: 0.04)),
+              borderRadius: BorderRadius.circular(14),
+              border: isCurrent
+                  ? Border.all(color: goldPulse, width: 1.5)
+                  : (isDone
+                        ? Border.all(color: _doneGreen.withValues(alpha: 0.4))
+                        : null),
             ),
-          for (final row in rows)
-            Padding(
-              padding: const EdgeInsets.only(left: 32, top: 6),
-              child: row.onTap != null
-                  ? Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: row.onTap,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.chevron_right,
-                                size: 18,
-                                color: Colors.white38,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (isCurrent) ...[
+                      const ServiceOrderLiveBadge(size: 16),
+                      const SizedBox(width: 8),
+                    ],
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: isDone
+                          ? _doneGreen
+                          : (isCurrent ? goldPulse : Colors.white12),
+                      child: isDone
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
+                          : Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: isCurrent
+                                    ? SibValColors.navyBlue
+                                    : Colors.white70,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
                               ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                // Toda linha tocável aqui navega (bíblia/hino/cifra)
-                                // — dourado padrão de "clicável" (28/08, pedido do
-                                // usuário).
-                                child: Text(
-                                  row.label,
-                                  style: const TextStyle(
-                                    color: SibValColors.goldAccent,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    _momentIcon(
+                      item.type,
+                      size: 20,
+                      color: isDone
+                          ? _doneGreen
+                          : (isCurrent ? goldPulse : Colors.white70),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Text(
-                        row.label,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 14,
+                        item.label,
+                        style: TextStyle(
+                          color: isDone ? _doneGreen : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          decoration: isDone
+                              ? TextDecoration.lineThrough
+                              : null,
                         ),
                       ),
                     ),
+                  ],
+                ),
+                if (rows.isEmpty && summary != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 42, top: 4),
+                    child: Text(
+                      summary,
+                      style: TextStyle(
+                        color: isDone ? Colors.white24 : Colors.white60,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                for (final row in rows)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 6),
+                    child: row.onTap != null
+                        ? Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: row.onTap,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      size: 18,
+                                      color: Colors.white38,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      // Toda linha tocável aqui navega (bíblia/hino/cifra)
+                                      // — dourado padrão de "clicável" (28/08, pedido do
+                                      // usuário).
+                                      child: Text(
+                                        row.label,
+                                        style: const TextStyle(
+                                          color: SibValColors.goldAccent,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Text(
+                              row.label,
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                  ),
+              ],
             ),
-        ],
+          );
+        },
       ),
     );
   }

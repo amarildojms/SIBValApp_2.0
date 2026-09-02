@@ -76,6 +76,14 @@ const _doneGreen = Color(0xFF43A047);
 ///
 /// Ao concluir todos os momentos, aparece "Finalizar Culto" no rodapé —
 /// marca `ServiceOrder.isFinalized` e volta pra lista.
+///
+/// **Selo "ao vivo" dinâmico** (02/09/2026, pedido do usuário) — antes só
+/// fixo no cabeçalho da tela; agora também aparece do lado esquerdo do card
+/// do momento atual (`isCurrent`), junto com o dourado piscando — muda de
+/// posição sozinho conforme o culto avança, sem nenhum estado extra (só
+/// reaproveita `isCurrent`, já calculado por `_currentItemIndex`). Mesmo
+/// tratamento replicado nas visões somente-leitura (Louvor/membro/dono antes
+/// de iniciar), ver `_PraiseMomentCard` em `service_order_praise_view_page.dart`.
 class ServiceOrderLivePage extends ConsumerStatefulWidget {
   const ServiceOrderLivePage({super.key, required this.order});
 
@@ -971,6 +979,14 @@ class _MomentCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Selo "ao vivo" dinâmico (02/09/2026, pedido do usuário)
+                    // — antes fixo só no cabeçalho da tela, agora acompanha o
+                    // momento que está acontecendo, aparecendo do lado
+                    // esquerdo do card atual, além do dourado piscando.
+                    if (isCurrent) ...[
+                      const ServiceOrderLiveBadge(size: 16),
+                      const SizedBox(width: 8),
+                    ],
                     _StatusBadgeTapTarget(
                       onTap: onToggleDone,
                       child: _StatusBadge(
@@ -1133,6 +1149,10 @@ class _MomentGroupCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    if (isCurrent) ...[
+                      const ServiceOrderLiveBadge(size: 16),
+                      const SizedBox(width: 8),
+                    ],
                     _StatusBadgeTapTarget(
                       onTap: onToggleAllDone,
                       child: _StatusBadge(

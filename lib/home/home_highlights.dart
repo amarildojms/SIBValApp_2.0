@@ -2,25 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../bible/bible_book_list_page.dart';
 import '../data/devotional_repository.dart';
 import '../data/event_repository.dart';
-import '../data/message_repository.dart';
+import '../data/home_quick_tiles_repository.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../main_shell.dart' show mainShellTabIndexProvider, MaisPage;
-import '../messages/messages_page.dart';
 import '../models/devotional.dart';
 import '../models/event.dart';
 import '../models/post.dart';
-import '../data/prayer_repository.dart' show pendingPrayerCountProvider;
-import '../prayer/prayer_page.dart';
-import '../service_order/service_order_list_page.dart';
+import '../service_order/service_order_countdown.dart';
 import '../theme/app_theme.dart';
 import '../util/verse_of_day.dart';
-import '../widgets/coming_soon_page.dart';
+import 'home_quick_tiles.dart';
 import 'mural_page.dart';
 
 /// Índice da aba Eventos na barra inferior (`MainShell._pages`) — Início(0),
@@ -50,7 +46,7 @@ class HomeHighlights extends StatelessWidget {
         _TodayDevotionalSection(),
         _MyClassSection(),
         _WeekAndNoticesRow(),
-        SizedBox(height: 4),
+        SizedBox(height: 8),
       ],
     );
   }
@@ -75,7 +71,10 @@ class _GreetingAndVerse extends ConsumerWidget {
     final verse = verseOfTheDay();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      // Compactado (02/09/2026, pedido do usuário: "veja se é possível
+      // compactar... para que caiba tudo na tela sem necessidade de rolar")
+      // — topo 16→10, fontes e paddings internos reduzidos em toda a seção.
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: Row(
         // Centralizada na vertical (pedido do usuário) — a coluna da
         // saudação é mais baixa que o card do versículo, então `.center`
@@ -95,13 +94,13 @@ class _GreetingAndVerse extends ConsumerWidget {
                   style: TextStyle(
                     color: context.textPrimary,
                     fontWeight: FontWeight.bold,
-                    fontSize: 23,
+                    fontSize: 21,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   'Que bom ter você por aqui!',
-                  style: TextStyle(color: context.textSecondary, fontSize: 13),
+                  style: TextStyle(color: context.textSecondary, fontSize: 12.5),
                 ),
               ],
             ),
@@ -117,25 +116,25 @@ class _GreetingAndVerse extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
                     Icons.format_quote,
                     color: SibValColors.goldAccent,
-                    size: 18,
+                    size: 16,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '"${verse.text}"',
-                    maxLines: 4,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: context.textPrimary,
                       fontStyle: FontStyle.italic,
-                      fontSize: 12,
-                      height: 1.25,
+                      fontSize: 11.5,
+                      height: 1.2,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -227,12 +226,12 @@ class _HighlightCard extends StatelessWidget {
           color: Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HomeSectionHeader(title: title, onSeeAll: onSeeAll),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           child,
         ],
       ),
@@ -242,140 +241,479 @@ class _HighlightCard extends StatelessWidget {
 
 /// Grade de acesso rápido (02/09/2026, revisão pedida pelo usuário) —
 /// quadrada, e nenhum ícone repete o que já está na barra inferior (Início/
-/// Devocionais/Eventos/Contribua). Lista definida pelo usuário: Bíblia,
-/// Ordem de Culto, Oração, EBD, Mensagens, Agenda, PGMs, Mais. EBD/Agenda/
-/// PGMs ainda não têm tela própria — abrem `ComingSoonPage`. "Agenda" aqui é
-/// uma função futura distinta da aba Eventos (não redireciona pra lá,
-/// diferente da 1ª versão desta grade).
-class _QuickAccessGrid extends ConsumerWidget {
+/// Devocionais/Eventos/Contribua).
+///
+/// **Configurável** (02/09/2026, pedido do usuário: "ao tocar e segurar, deve
+/// ser possível mudar as posições dos 7 ícones, e também deve exibir... os
+/// outros itens que ficam dentro de Mais, assim o usuário pode arrastar
+/// qualquer um para ficar entre os 7 principais") — toque e segure em
+/// qualquer um dos 7 entra em "modo de edição": os outros ícones elegíveis
+/// (hoje só dentro de "Mais") aparecem numa lista arrastável abaixo da
+/// grade; arrastar um ícone sobre outro troca os dois de posição (dentro dos
+/// 7, do "pool" pro meio dos 7, ou vice-versa). Ordem persistida por
+/// aparelho em `homeQuickTilesOrderProvider`. "Mais" (8º item, sempre em
+/// destaque) não participa da reordenação — é sempre o último ícone da
+/// grade, fixo.
+///
+/// **Modo de edição em destaque** (02/09/2026, pedido do usuário: "deixe
+/// apenas a área que mostra os ícones em destaque, deixando todo o resto da
+/// tela sombreado") — em vez de só inserir a área arrastável no fluxo normal
+/// da página, o conteúdo de edição é espelhado num `OverlayEntry` inserido no
+/// `Overlay` raiz (acima de toda a tela, inclusive app bar/barra inferior),
+/// com um véu escuro atrás — a cópia "no lugar" (`_placeholderKey`) fica
+/// invisível mas mantém o espaço reservado (`Visibility.maintainSize`), pra
+/// não afetar o scroll da página por trás. Os ícones também ganham uma
+/// animação de balanço contínuo (`_WiggleTile`) enquanto editando, mesmo
+/// efeito de "modo de reorganizar" de launchers Android/iOS.
+class _QuickAccessGrid extends ConsumerStatefulWidget {
   const _QuickAccessGrid();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final uid = ref.watch(currentUidProvider);
-    final pendingMessagesAsync = uid != null
-        ? ref.watch(pendingMessagesCountProvider)
-        : const AsyncValue.data(0);
-    final pendingMessages = pendingMessagesAsync.asData?.value ?? 0;
-    // Badge de pedidos de oração pendentes (02/09/2026) — morava no tile
-    // "Pedido de Oração" de `MaisPage`, removido de lá por duplicar este
-    // ícone; migrado pra cá pra não perder o aviso.
-    final canViewPrayerRequests =
-        ref.watch(currentUserProfileProvider).asData?.value?.canViewPrayerRequests ??
-        false;
-    final pendingPrayerAsync = canViewPrayerRequests
-        ? ref.watch(pendingPrayerCountProvider)
-        : const AsyncValue.data(0);
-    final pendingPrayer = pendingPrayerAsync.asData?.value ?? 0;
+  ConsumerState<_QuickAccessGrid> createState() => _QuickAccessGridState();
+}
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-      child: GridView.count(
-        crossAxisCount: 4,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1,
-        children: [
-          _QuickAccessTile(
-            icon: Icons.menu_book,
-            label: 'Bíblia',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const BibleBookListPage()),
+class _QuickAccessGridState extends ConsumerState<_QuickAccessGrid> {
+  bool _editing = false;
+  final GlobalKey _placeholderKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+  Widget _editableContent = const SizedBox.shrink();
+
+  /// Troca as posições de [a] e [b] dentro da lista completa persistida —
+  /// opera só na sub-lista dos ids elegíveis pro usuário atual (`eligible`),
+  /// preservando a posição de ids inelegíveis (ex.: um papel que o usuário
+  /// não tem mais) intocada, e devolve tudo pra
+  /// `homeQuickTilesOrderProvider`. Cobre os três casos de arrastar (dentro
+  /// dos 7, dentro do "pool", ou entre os dois) com a mesma operação: um
+  /// swap simples de valores.
+  void _swap(List<String> fullOrder, bool Function(String) eligible, String a, String b) {
+    if (a == b) return;
+    final eligibleOrder = fullOrder.where(eligible).toList();
+    final ia = eligibleOrder.indexOf(a);
+    final ib = eligibleOrder.indexOf(b);
+    if (ia == -1 || ib == -1) return;
+    final tmp = eligibleOrder[ia];
+    eligibleOrder[ia] = eligibleOrder[ib];
+    eligibleOrder[ib] = tmp;
+    final newFullOrder = <String>[];
+    var ei = 0;
+    for (final id in fullOrder) {
+      if (eligible(id)) {
+        newFullOrder.add(eligibleOrder[ei]);
+        ei++;
+      } else {
+        newFullOrder.add(id);
+      }
+    }
+    ref.read(homeQuickTilesOrderProvider.notifier).setOrder(newFullOrder);
+  }
+
+  void _startEditing() => setState(() => _editing = true);
+
+  /// Sai do modo de edição — reaproveitado pelo botão "Concluído" e pelo
+  /// botão de voltar (02/09/2026, pedido do usuário: "caso toque em voltar,
+  /// deve... ter o mesmo comportamento que clicar em concluído"), ver
+  /// `PopScope` no `build()`.
+  void _stopEditing() {
+    _removeOverlay();
+    if (_editing) setState(() => _editing = false);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  /// Insere (ou atualiza) o véu + cópia em destaque depois do frame atual —
+  /// só então a posição/tamanho reservados por `_placeholderKey` já refletem
+  /// o layout do modo de edição.
+  void _syncOverlay() {
+    if (!mounted) return;
+    if (!_editing) {
+      _removeOverlay();
+      return;
+    }
+    if (_overlayEntry == null) {
+      _overlayEntry = OverlayEntry(builder: (_) => _buildSpotlight());
+      Overlay.of(context).insert(_overlayEntry!);
+    } else {
+      _overlayEntry!.markNeedsBuild();
+    }
+  }
+
+  Widget _buildSpotlight() {
+    final box = _placeholderKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return const SizedBox.shrink();
+    final size = box.size;
+    final offset = box.localToGlobal(Offset.zero);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {},
+            child: Container(color: Colors.black.withValues(alpha: 0.68)),
+          ),
+        ),
+        Positioned(
+          left: offset.dx,
+          top: offset.dy,
+          width: size.width,
+          child: Material(color: Colors.transparent, child: _editableContent),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final defs = buildHomeQuickTileDefs(ref);
+    final byId = {for (final d in defs) d.id: d};
+    final savedOrder = ref.watch(homeQuickTilesOrderProvider);
+    // `splitHomeQuickTiles` é compartilhado com `MaisPage` (`main_shell.dart`)
+    // — mesma fonte de verdade garante que trocar um ícone aqui move o outro
+    // pro menu Mais automaticamente (03/09/2026, pedido do usuário).
+    final split = splitHomeQuickTiles(savedOrder, defs);
+    final fullOrder = split.fullOrder;
+    final shown = split.shown;
+    final pool = split.pool;
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_editing)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Arraste um ícone sobre outro para reorganizar',
+                    // Cor fixa (não `context.textSecondary`) — este texto só
+                    // aparece dentro do véu escuro do modo de edição
+                    // (`_buildSpotlight`), nunca sobre o fundo normal do tema.
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _stopEditing,
+                  style: TextButton.styleFrom(
+                    foregroundColor: SibValColors.goldAccent,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Concluído'),
+                ),
+              ],
             ),
           ),
-          _QuickAccessTile(
-            icon: Icons.church,
-            label: 'Ordem de Culto',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ServiceOrderListPage()),
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          // Quadrados um pouco mais baixos (02/09/2026, pedido do usuário:
+          // "diminua um pouco mais os quadrados... mas mantenha o tamanho dos
+          // ícones e os nomes deles") — só a caixa encolhe (padding vertical
+          // do tile também reduzido, ver `_QuickAccessTile`); ícone (26) e
+          // fonte do rótulo (11.5) ficam do mesmo tamanho.
+          childAspectRatio: 1.1,
+          children: [
+            for (final id in shown)
+              _editing
+                  ? _WiggleTile(
+                      key: ValueKey(id),
+                      seed: id.hashCode,
+                      child: _DraggableTile(
+                        id: id,
+                        def: byId[id]!,
+                        onSwap: (other) =>
+                            _swap(fullOrder, byId.containsKey, id, other),
+                      ),
+                    )
+                  : _QuickAccessTile(
+                      key: ValueKey(id),
+                      icon: byId[id]!.icon,
+                      imageAsset: byId[id]!.imageAsset,
+                      customIcon: byId[id]!.customIcon,
+                      label: byId[id]!.label,
+                      badgeCount: byId[id]!.badgeCount,
+                      live: byId[id]!.live,
+                      onTap: () => byId[id]!.onTap(context),
+                      onLongPress: _startEditing,
+                    ),
+            _QuickAccessTile(
+              icon: Icons.more_horiz,
+              label: 'Mais',
+              // Destaque (02/09/2026, pedido do usuário) — preenchido em
+              // dourado sólido com ícone/texto navy, em vez do card neutro +
+              // ícone dourado dos outros sete. Mesma dupla de cores já usada
+              // pro botão primário do app (`ElevatedButtonTheme` em
+              // `app_theme.dart`: fundo `goldAccent`, texto `navyBlueDark`) —
+              // reaproveitada aqui em vez de inventar uma combinação nova, pra
+              // "Mais" ler como o item de destaque/chamada da grade. Fixo —
+              // não participa da reordenação nem balança (02/09/2026).
+              highlighted: true,
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const MaisPage())),
+            ),
+          ],
+        ),
+        if (_editing) ...[
+          const SizedBox(height: 14),
+          const Text(
+            'ARRASTE PARA ADICIONAR',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+              letterSpacing: 0.5,
             ),
           ),
-          _QuickAccessTile(
-            imageAsset: 'assets/icons/ic_prayer.png',
-            label: 'Oração',
-            badgeCount: pendingPrayer,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PrayerPage()),
-            ),
-          ),
-          _QuickAccessTile(
-            icon: Icons.school_outlined,
-            label: 'EBD',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ComingSoonPage(title: 'EBD'),
-              ),
-            ),
-          ),
-          _QuickAccessTile(
-            icon: Icons.mail_outline,
-            label: 'Mensagens',
-            badgeCount: pendingMessages,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MessagesPage()),
-            ),
-          ),
-          _QuickAccessTile(
-            icon: Icons.calendar_month_outlined,
-            label: 'Agenda',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ComingSoonPage(title: 'Agenda'),
-              ),
-            ),
-          ),
-          _QuickAccessTile(
-            icon: Icons.groups_outlined,
-            label: 'PGMs',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ComingSoonPage(title: 'PGMs'),
-              ),
-            ),
-          ),
-          _QuickAccessTile(
-            icon: Icons.more_horiz,
-            label: 'Mais',
-            // Destaque (02/09/2026, pedido do usuário) — preenchido em
-            // dourado sólido com ícone/texto navy, em vez do card neutro +
-            // ícone dourado dos outros sete. Mesma dupla de cores já usada
-            // pro botão primário do app (`ElevatedButtonTheme` em
-            // `app_theme.dart`: fundo `goldAccent`, texto `navyBlueDark`) —
-            // reaproveitada aqui em vez de inventar uma combinação nova, pra
-            // "Mais" ler como o item de destaque/chamada da grade.
-            highlighted: true,
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const MaisPage())),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final id in pool)
+                _WiggleTile(
+                  key: ValueKey(id),
+                  seed: id.hashCode,
+                  child: _DraggableTile(
+                    id: id,
+                    def: byId[id]!,
+                    small: true,
+                    onSwap: (other) =>
+                        _swap(fullOrder, byId.containsKey, id, other),
+                  ),
+                ),
+            ],
           ),
         ],
+      ],
+    );
+
+    // Guarda a versão mais recente do conteúdo editável pro `OverlayEntry`
+    // reaproveitar, e (re)sincroniza o véu depois deste frame — cobre tanto
+    // a entrada/saída do modo de edição quanto qualquer troca de ícone
+    // (o `Positioned` do overlay precisa de posição/tamanho atualizados).
+    _editableContent = content;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverlay());
+
+    return PopScope(
+      // Voltar durante a edição só sai do modo de edição, sem navegar pra
+      // lugar nenhum (02/09/2026, pedido do usuário) — mesmo efeito do botão
+      // "Concluído".
+      canPop: !_editing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _stopEditing();
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: KeyedSubtree(
+          key: _placeholderKey,
+          // Enquanto editando, o conteúdo "no lugar" fica invisível — a
+          // cópia de verdade, interativa, vive no `OverlayEntry`
+          // (`_buildSpotlight`), acima de toda a tela. `maintainSize` reserva
+          // o mesmo espaço, então o resto da página não pula quando o modo
+          // de edição liga/desliga.
+          child: _editing
+              ? Visibility(
+                  visible: false,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: content,
+                )
+              : content,
+        ),
       ),
+    );
+  }
+}
+
+/// Balanço contínuo (rotação pequena, ida e volta) enquanto `enabled` —
+/// mesmo efeito de "modo de reorganizar" de launchers Android/iOS
+/// (02/09/2026, pedido do usuário: "faça uma animação nos ícones... deixando
+/// eles em movimento enquanto estamos editando"). Fase/duração variam por
+/// [seed] (o `hashCode` do id do ícone) pra os ícones não balançarem todos
+/// em sincronia, como aconteceria com um único `AnimationController`
+/// compartilhado.
+class _WiggleTile extends StatefulWidget {
+  const _WiggleTile({super.key, required this.seed, required this.child});
+
+  final int seed;
+  final Widget child;
+
+  @override
+  State<_WiggleTile> createState() => _WiggleTileState();
+}
+
+class _WiggleTileState extends State<_WiggleTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _rotation;
+
+  @override
+  void initState() {
+    super.initState();
+    final seed = widget.seed.abs();
+    final durationMs = 120 + (seed % 5) * 8;
+    final clockwiseFirst = seed.isEven;
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: durationMs),
+    );
+    _rotation = Tween<double>(
+      begin: clockwiseFirst ? -0.045 : 0.045,
+      end: clockwiseFirst ? 0.045 : -0.045,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    // Bug corrigido (03/09/2026, relatado pelo usuário: "os ícones apenas
+    // ficaram tortos"): a versão anterior chamava `repeat()` e, em seguida,
+    // atribuía `.value` pra dar uma fase inicial diferente por ícone —
+    // `AnimationController.value=` chama `stop()` internamente, então isso
+    // CANCELAVA a repetição recém-iniciada, deixando o ícone parado num
+    // ângulo fixo (torto) em vez de balançando. Corrigido com um atraso
+    // inicial diferente por ícone (0-300ms) antes de chamar `repeat()`, sem
+    // nunca tocar em `.value` diretamente.
+    Future.delayed(Duration(milliseconds: seed % 300), () {
+      if (mounted) _controller.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _rotation,
+      builder: (context, child) =>
+          Transform.rotate(angle: _rotation.value, child: child),
+      child: widget.child,
+    );
+  }
+}
+
+/// Tamanho fixo dos ícones "de adicionar" (pool, fora da grade de 7) e do
+/// retrato mostrado durante o arraste (`feedback`) — grande o bastante pro
+/// rótulo de duas linhas mais longo ("Configurações e Gerenciamento",
+/// "Vínculos Institucionais"...) nunca estourar a caixa (02/09/2026, corrige
+/// "BOTTOM OVERFLOWED BY 4.0 PIXELS" relatado pelo usuário — a caixa de 76
+/// era pequena demais pro texto de duas linhas + ícone + preenchimento).
+const _kDragTileSize = 90.0;
+
+/// Ícone arrastável durante o modo de edição — ao mesmo tempo fonte
+/// (`LongPressDraggable`, pra poder ser puxado pra outra posição) e alvo
+/// (`DragTarget`, pra aceitar outro ícone arrastado sobre ele) — cobre os
+/// três casos de troca com a mesma operação (`onSwap`, ver `_QuickAccessGridState._swap`).
+class _DraggableTile extends StatelessWidget {
+  const _DraggableTile({
+    required this.id,
+    required this.def,
+    required this.onSwap,
+    this.small = false,
+  });
+
+  final String id;
+  final HomeQuickTileDef def;
+  final ValueChanged<String> onSwap;
+
+  /// `true` pros ícones do "pool" (fora dos 7) — tamanho fixo menor, já que
+  /// vivem numa `Wrap` e não numa célula de grade.
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = _QuickAccessTile(
+      icon: def.icon,
+      imageAsset: def.imageAsset,
+      customIcon: def.customIcon,
+      label: def.label,
+      onTap: () {},
+    );
+    final sized = small
+        ? SizedBox(width: _kDragTileSize, height: _kDragTileSize, child: content)
+        : content;
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != id,
+      onAcceptWithDetails: (details) => onSwap(details.data),
+      builder: (context, candidateData, rejectedData) {
+        final highlighting = candidateData.isNotEmpty;
+        return LongPressDraggable<String>(
+          data: id,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: _kDragTileSize,
+              height: _kDragTileSize,
+              child: content,
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: sized),
+          child: AnimatedScale(
+            scale: highlighting ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: sized,
+          ),
+        );
+      },
     );
   }
 }
 
 class _QuickAccessTile extends StatelessWidget {
   const _QuickAccessTile({
+    super.key,
     this.icon,
     this.imageAsset,
+    this.customIcon,
     required this.label,
     required this.onTap,
+    this.onLongPress,
     this.badgeCount = 0,
     this.highlighted = false,
-  }) : assert(icon != null || imageAsset != null);
+    this.live = false,
+  }) : assert(icon != null || imageAsset != null || customIcon != null);
 
   final IconData? icon;
   final String? imageAsset;
+
+  /// Substitui `icon`/`imageAsset` quando o ícone precisa de composição (ex.:
+  /// mesa + boneco de "Introdução") — ver `_IntroductionTileIcon`.
+  final Widget Function(Color color)? customIcon;
   final String label;
   final VoidCallback onTap;
+
+  /// Toque e segure entra no modo de edição da grade (02/09/2026, pedido do
+  /// usuário) — `null` pros ícones que não participam da reordenação
+  /// ("Mais", e os próprios ícones já em modo de edição/arrastáveis).
+  final VoidCallback? onLongPress;
   final int badgeCount;
 
   /// Verdadeiro só pro tile "Mais" (02/09/2026, pedido do usuário) — troca o
   /// card neutro + ícone dourado pelo par fundo dourado/ícone-texto navy,
   /// mesma combinação do botão primário do app (`ElevatedButtonTheme`).
   final bool highlighted;
+
+  /// Selo "ao vivo" piscando no canto do ícone (02/09/2026, pedido do
+  /// usuário) — hoje só usado por "Ordem de Culto", quando há uma ordem
+  /// iniciada e ainda não finalizada, ver `ServiceOrderLiveBadge`. Aumentado
+  /// (02/09/2026, pedido do usuário: "deixe um pouco maior") de 16 pra 22.
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -386,8 +724,21 @@ class _QuickAccessTile extends StatelessWidget {
         ? SibValColors.navyBlueDark
         : context.textPrimary;
 
+    final iconWidget = customIcon != null
+        ? customIcon!(iconColor)
+        : (imageAsset != null
+              ? Image.asset(
+                  imageAsset!,
+                  width: 26,
+                  height: 26,
+                  color: iconColor,
+                  colorBlendMode: BlendMode.srcIn,
+                )
+              : Icon(icon, color: iconColor, size: 26));
+
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
@@ -401,25 +752,33 @@ class _QuickAccessTile extends StatelessWidget {
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        // Preenchimento vertical reduzido (02/09/2026, pedido do usuário:
+        // "diminua um pouco mais os quadrados... mas mantenha o tamanho dos
+        // ícones e os nomes deles") — 10→6, e o espaço entre ícone e rótulo
+        // logo abaixo (6→4); ícone (26) e fonte do rótulo (11.5) inalterados.
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Badge(
-              label: Text('$badgeCount'),
-              isLabelVisible: badgeCount > 0,
-              child: imageAsset != null
-                  ? Image.asset(
-                      imageAsset!,
-                      width: 26,
-                      height: 26,
-                      color: iconColor,
-                      colorBlendMode: BlendMode.srcIn,
-                    )
-                  : Icon(icon, color: iconColor, size: 26),
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Badge(
+                  label: Text('$badgeCount'),
+                  isLabelVisible: badgeCount > 0,
+                  child: iconWidget,
+                ),
+                if (live)
+                  const Positioned(
+                    top: -9,
+                    right: -12,
+                    child: ServiceOrderLiveBadge(size: 22),
+                  ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               label,
               textAlign: TextAlign.center,
@@ -427,7 +786,7 @@ class _QuickAccessTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: labelColor,
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 height: 1.1,
               ),
@@ -454,7 +813,7 @@ class _UpcomingEventsSection extends ConsumerWidget {
     final upcoming = events.take(2).toList();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: _HighlightCard(
         title: 'Próximo na Igreja',
         onSeeAll: () =>
@@ -618,7 +977,7 @@ class _TodayDevotionalSection extends ConsumerWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: _HighlightCard(
         title: 'Devocional de Hoje',
         child: InkWell(
@@ -662,6 +1021,25 @@ class _TodayDevotionalSection extends ConsumerWidget {
                         fontSize: 14,
                       ),
                     ),
+                    // Resumo do conteúdo (02/09/2026, pedido do usuário: "é
+                    // possível ter um pequeno resumo da devocional do dia do
+                    // que se trata?") — as duas primeiras linhas do texto
+                    // corrido, sem nenhum resumo/IA à parte: a devocional
+                    // não tem um campo de resumo próprio no model, então
+                    // isto é só uma prévia do texto completo.
+                    if (devotional.text.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        devotional.text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 11.5,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
                     if (devotional.author.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -719,7 +1097,7 @@ class _MyClassSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: _HighlightCard(
         title: 'Minha EBD',
         child: Row(
@@ -757,7 +1135,7 @@ class _WeekAndNoticesRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

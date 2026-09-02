@@ -7,9 +7,8 @@ import 'auth/communications_consent_banner.dart';
 import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
 import 'auth/required_consent_gate_page.dart';
-import 'birthdays/birthdays_page.dart';
 import 'contribute/contribute_page.dart';
-import 'data/cifra_repository.dart';
+import 'data/home_quick_tiles_repository.dart';
 import 'data/member_repository.dart';
 import 'data/post_repository.dart' show currentUidProvider;
 import 'data/settings_repository.dart';
@@ -17,17 +16,11 @@ import 'data/user_repository.dart';
 import 'data/devotional_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
-import 'gallery/album_list_page.dart';
 import 'home/home_page.dart';
-import 'home/mural_page.dart';
-import 'hymnal/hymnals_page.dart';
-import 'introduction/introduction_page.dart';
+import 'home/home_quick_tiles.dart';
 import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
-import 'partners/partners_page.dart';
-import 'praise/praise_ministry_page.dart';
 import 'settings/about_page.dart';
-import 'settings/settings_management_page.dart';
 import 'theme/app_theme.dart';
 import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
@@ -253,49 +246,24 @@ class SettingsMailIcon extends StatelessWidget {
   }
 }
 
-/// Mesa de recepção (ícone `desk_outlined`, que já traz um monitor
-/// embutido no desenho) com um boneco (pessoa) no canto — mesma composição
-/// de `SettingsMailIcon` acima, só trocando os dois ícones combinados.
-/// Nome da classe mantido (ícone continua sendo a "mesa"), só o papel/rótulo
-/// visível virou "Introdução".
-class _IntroductionIcon extends StatelessWidget {
-  const _IntroductionIcon({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 24,
-      height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.desk_outlined, color: color, size: 24),
-          Positioned(
-            top: -3,
-            right: -4,
-            child: Container(
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.person, color: color, size: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Pública (02/09/2026, era `_MaisPage`) — deixou de ser uma aba do
 /// `IndexedStack` e virou uma tela pushada normalmente
 /// (`Navigator.push(MaterialPageRoute(builder: (_) => const MaisPage()))`),
 /// alcançada pelo ícone "Mais" da grade de Início (`HomeHighlights`). Por
 /// isso precisou sair do escopo privado do arquivo — mesmo motivo que já
 /// tornou `MoreTile`/`SettingsMailIcon` públicos antes.
+///
+/// **Tiles dinâmicos** (03/09/2026, pedido do usuário: "se eu substituir um
+/// dos 7 ícones [da Início] por algum que está dentro do menu Mais, ... o
+/// ícone que saiu da tela inicial deve estar lá [no Mais] no lugar do que foi
+/// para a tela inicial") — antes esta tela tinha sua própria lista fixa de
+/// `MoreTile`s (Mural/Galeria/Hinários/Vínculos/Configurações/Aniversariantes/
+/// Introdução/Ministério de Louvor), sem nenhuma relação com a ordem
+/// configurável da grade de Início; uma troca lá nunca aparecia aqui. Agora
+/// os dois usam a MESMA fonte de verdade (`buildHomeQuickTileDefs`/
+/// `splitHomeQuickTiles`, `home/home_quick_tiles.dart`) — "Mais" mostra
+/// exatamente o "pool" (todo ícone elegível que não está entre os 7 da
+/// grade), na ordem persistida em `homeQuickTilesOrderProvider`.
 class MaisPage extends ConsumerWidget {
   const MaisPage({super.key});
 
@@ -304,116 +272,21 @@ class MaisPage extends ConsumerWidget {
     final uid = ref.watch(currentUidProvider);
     final profileAsync = ref.watch(currentUserProfileProvider);
     final profile = profileAsync.asData?.value;
-    final isAdmin = profile?.isAdmin ?? false;
-    // NOVO (24/08/2026, unificado numa só tela em 25/08/2026, papel
-    // renomeado de "Recepção" pra "Introdução" depois): área Introdução — o
-    // que cada um vê dentro dela depende do papel, ver introduction_page.dart.
-    // Um tile só, visível pra quem tem qualquer um dos três papéis (ou admin).
-    final canAccessIntroduction =
-        (profile?.canRegisterVisitors ?? false) ||
-        (profile?.canViewVisitorSummaries ?? false) ||
-        (profile?.canViewVisitorDetails ?? false);
-    final pendingCountAsync = isAdmin
-        ? ref.watch(pendingUserCountProvider)
-        : const AsyncValue.data(0);
-    final pendingCount = pendingCountAsync.asData?.value ?? 0;
+
+    final defs = buildHomeQuickTileDefs(ref);
+    final byId = {for (final d in defs) d.id: d};
+    final savedOrder = ref.watch(homeQuickTilesOrderProvider);
+    final pool = splitHomeQuickTiles(savedOrder, defs).pool;
 
     final tiles = [
-      // Tier 1 — disponível para todos, sem login.
-      // Bíblia, Oração e Mensagens saíram desta lista em 02/09/2026 (pedido
-      // do usuário: "os ícones que estão na tela inicial não devem repetir
-      // no menu Mais") — os três já vivem na grade de Início
-      // (`HomeHighlights`); Ordem de Culto, mais abaixo, pelo mesmo motivo.
-      //
-      // Mural (02/09/2026, pedido do usuário) — saiu da barra inferior e
-      // do grid de Início; alcançado só por aqui agora, junto com o resto
-      // do conteúdo de navegação livre. Curtir/comentar dentro dele
-      // continua exigindo login (gate na própria `MuralPage`).
-      MoreTile(
-        icon: Icons.dynamic_feed_outlined,
-        label: 'Mural',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const MuralPage())),
-      ),
-      MoreTile(
-        icon: Icons.photo_camera_outlined,
-        label: 'Galeria',
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const AlbumListPage())),
-      ),
-      // Hinários (28/08/2026, pedido do usuário) — antes eram dois tiles
-      // separados (Cantor Cristão / HCC), agora um só que abre a escolha.
-      MoreTile(
-        icon: Icons.library_music_outlined,
-        label: 'Hinários',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const HymnalsPage())),
-      ),
-      MoreTile(
-        icon: Icons.handshake_outlined,
-        label: 'Vínculos Institucionais',
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const PartnersPage())),
-      ),
-      // "Configurações e Gerenciamento" (28/08/2026, pedido do usuário) —
-      // agrupa Tema/Rol de Membros/Ministérios e Cargos/Gerenciar Usuários/
-      // Repositório de Flyers/E-mails de eventos, que antes eram 6 tiles
-      // separados aqui — cada um continua com seu próprio gate de permissão
-      // dentro de `SettingsManagementPage`, então quem não tem acesso a
-      // nenhum deles ainda vê pelo menos o Tema (sem gate). O selo de
-      // pendentes de Gerenciar Usuários borbulha pro tile de fora, pra um
-      // admin não precisar entrar só pra notar.
-      MoreTile(
-        icon: Icons.settings_outlined,
-        label: 'Configurações e Gerenciamento',
-        badgeCount: isAdmin ? pendingCount : 0,
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SettingsManagementPage()),
-        ),
-      ),
-      // Tier 2 — só pra quem está autenticado.
-      if (uid != null)
+      for (final id in pool)
         MoreTile(
-          icon: Icons.cake_outlined,
-          label: 'Aniversariantes',
-          onTap: () => Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
-        ),
-      // Tier 3 — admin / secretaria / eventos / dirigentes / introdução.
-      // Introdução e Ordem de Culto sobem pro topo deste tier (28/08/2026,
-      // pedido do usuário) — antes ficavam no fim da lista inteira.
-      // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
-      if (canAccessIntroduction)
-        MoreTile(
-          customIcon: _IntroductionIcon(color: context.textPrimary),
-          label: 'Introdução',
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const IntroductionPage())),
-        ),
-      // Ordem de Culto saiu daqui em 02/09/2026 (pedido do usuário: "os
-      // ícones que estão na tela inicial não devem repetir no menu Mais") —
-      // vive só como ícone da grade de Início agora (`HomeHighlights`).
-      // NOVO (28/08/2026): Ministério de Louvor — repertório mensal/semanal
-      // + menu ☰ com "Cifras". Gate é só Louvor/admin
-      // (`canViewPraiseOrder`) + quem o admin selecionou individualmente
-      // como editor de cifra (`canEditCifrasProvider` — não é um papel, ver
-      // `lib/data/cifra_repository.dart`) — **Dirigentes NÃO entra mais**
-      // aqui (pedido explícito do usuário: "Dirigente não deve ter acesso a
-      // nada em Ministério de Louvor"; antes `canManageServiceOrders`
-      // também dava acesso). A Ordem de Culto em si continua toda de
-      // Dirigentes — isso é só o Ministério de Louvor.
-      if ((profile?.canViewPraiseOrder ?? false) || ref.watch(canEditCifrasProvider))
-        MoreTile(
-          icon: Icons.queue_music_outlined,
-          label: 'Ministério de Louvor',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PraiseMinistryPage()),
-          ),
+          icon: byId[id]!.icon,
+          imageAsset: byId[id]!.imageAsset,
+          customIcon: byId[id]!.customIcon?.call(context.textPrimary),
+          label: byId[id]!.label,
+          badgeCount: byId[id]!.badgeCount,
+          onTap: () => byId[id]!.onTap(context),
         ),
     ];
 
