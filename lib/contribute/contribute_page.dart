@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/contribution_repository.dart';
@@ -8,14 +7,23 @@ import '../models/contribution_info.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'contribute_settings_page.dart';
+import 'pix_offer_page.dart';
 
 /// Aba "Contribua" (21/08/2026, sem equivalente no nativo): versículo fixo,
-/// nome da igreja + CNPJ, uma ou mais chaves PIX (com QR Code) e uma ou mais
-/// contas bancárias, todos cadastrados pelo admin em `ContributeSettingsPage`
-/// (engrenagem na barra). Visível pra visitante sem login também, a pedido
-/// do usuário — exceção de leitura pública só pra este documento
-/// (`settings/contribution`), ver `firestore.rules`/`storage.rules` do repo
-/// nativo.
+/// nome da igreja + CNPJ, um card "gerar oferta" por chave PIX cadastrada e
+/// uma ou mais contas bancárias, todos configurados pelo admin em
+/// `ContributeSettingsPage` (engrenagem na barra). Visível pra visitante sem
+/// login também, a pedido do usuário — exceção de leitura pública só pra este
+/// documento (`settings/contribution`), ver `firestore.rules`/`storage.rules`
+/// do repo nativo.
+///
+/// **Reforma de 01/09/2026** (pedido do usuário): a página deixou de exibir
+/// a chave PIX crua (texto + QR Code fixo) — cada [PixEntry] agora vira um
+/// card ([_PixOfferCard]) que abre [PixOfferPage], onde o usuário informa um
+/// valor e o app gera um código Pix (BR Code) com esse valor e a mensagem de
+/// [PixEntry.description]. Deixa de existir um único caso especial pra
+/// "Missões": qualquer chave com [PixEntry.displayTitle] preenchido vira um
+/// card configurável (ex.: "Oferta para Missões", "Dízimo", "Obras").
 class ContributePage extends ConsumerWidget {
   const ContributePage({super.key});
 
@@ -153,10 +161,11 @@ class _ContributionContent extends StatelessWidget {
           const SizedBox(height: 4),
           Text('CNPJ: ${info.cnpj}', style: TextStyle(color: context.textSecondary, fontSize: 13)),
         ],
-        for (final pix in info.pixEntries) ...[
-          const SizedBox(height: 16),
-          _PixCard(pix: pix),
-        ],
+        for (final pix in info.pixEntries)
+          if (pix.key.isNotEmpty && pix.displayTitle.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _PixOfferCard(info: info, pix: pix),
+          ],
         for (final bank in info.bankAccounts) ...[
           const SizedBox(height: 12),
           _BankCard(bank: bank),
@@ -166,56 +175,56 @@ class _ContributionContent extends StatelessWidget {
   }
 }
 
-class _PixCard extends StatelessWidget {
-  const _PixCard({required this.pix});
+/// Card de "gerar oferta" a partir de uma [PixEntry] (01/09/2026) — cada
+/// chave PIX cadastrada com [PixEntry.displayTitle] preenchido vira um destes,
+/// abrindo [PixOfferPage] pra informar o valor e gerar o código Pix.
+class _PixOfferCard extends StatelessWidget {
+  const _PixOfferCard({required this.info, required this.pix});
 
+  final ContributionInfo info;
   final PixEntry pix;
 
   @override
   Widget build(BuildContext context) {
-    return _SectionCard(
-      title: pix.label.isNotEmpty ? 'PIX — ${pix.label}' : 'PIX',
-      icon: Icons.qr_code_2_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (pix.key.isNotEmpty)
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => _copyToClipboard(context, pix.key, 'Chave PIX copiada.'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
+    return Card(
+      color: SibValColors.navyBlueLight,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PixOfferPage(
+              description: pix.displayTitle,
+              churchName: info.churchName,
+              city: info.city,
+              pixKey: pix.key,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.volunteer_activism_outlined, color: SibValColors.goldAccent, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Chave', style: TextStyle(color: context.textSecondary, fontSize: 12)),
-                          Text(pix.key, style: TextStyle(color: context.textPrimary, fontSize: 15)),
-                        ],
-                      ),
+                    Text(
+                      pix.displayTitle,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                    Icon(Icons.copy_outlined, size: 18, color: context.textSecondary),
+                    const SizedBox(height: 2),
+                    const Text('Informe o valor e gere o Pix na hora', style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ],
                 ),
               ),
-            ),
-          if (pix.qrCodeUrl.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(pix.qrCodeUrl, fit: BoxFit.contain),
-            ),
-          ],
-        ],
+              const Icon(Icons.chevron_right, color: Colors.white70),
+            ],
+          ),
+        ),
       ),
     );
-  }
-
-  void _copyToClipboard(BuildContext context, String text, String message) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -262,7 +271,12 @@ class _SectionCard extends StatelessWidget {
                 Icon(icon, color: context.textPrimary, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(title, style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 ),
               ],
             ),

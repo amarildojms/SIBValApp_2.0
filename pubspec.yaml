@@ -76,7 +76,9 @@ dependencies:
   # Importar arquivo .txt de cifra (28/08/2026, pedido do usuário) — ver
   # cifra_editor_page.dart.
   file_picker: ^12.1.2
-
+  brcode: ^0.0.4
+  qr_flutter: ^4.1.0
+  diacritic: ^0.1.6
 dev_dependencies:
   flutter_test:
     sdk: flutter

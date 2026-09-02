@@ -1,34 +1,42 @@
 /// Uma chave PIX cadastrada na Contribua — [label] é livre (ex.: "Dízimos",
-/// "Missões") pra distinguir quando há mais de uma. QR Code fica em Storage
-/// (`contribution/`), como as fotos/flyers do resto do app.
+/// "Missões") pra o admin distinguir as chaves entre si na tela de
+/// configuração; não aparece pro usuário final (ver [description]).
+///
+/// **Reforma de 01/09/2026** (pedido do usuário): a Contribua deixou de
+/// mostrar a chave PIX crua — cada [PixEntry] agora vira um card de "gerar
+/// oferta" (`_PixOfferCard`/`PixOfferPage` em `contribute_page.dart`/
+/// `pix_offer_page.dart`), onde o usuário informa um valor e o app monta um
+/// código Pix (BR Code) com esse valor e a mensagem de [description]. Card só
+/// aparece se [key] e [description] (ou, na falta desta, [label]) não
+/// estiverem vazios. O upload de QR Code estático (imagem) existiu entre
+/// 22/08/2026 e esta reforma — removido junto porque a página deixou de
+/// exibir qualquer QR fixo (o `qr_flutter` gera um na hora, com o valor já
+/// embutido).
 class PixEntry {
-  const PixEntry({
-    this.label = '',
-    this.key = '',
-    this.qrCodeUrl = '',
-    this.qrCodeStoragePath = '',
-  });
+  const PixEntry({this.label = '', this.key = '', this.description = ''});
 
   final String label;
   final String key;
-  final String qrCodeUrl;
-  final String qrCodeStoragePath;
+
+  /// Texto exibido no card gerado a partir desta chave (ex.: "Oferta para
+  /// Missões", "Dízimo") — também vira a mensagem de referência gravada no
+  /// código Pix gerado. Cai pra [label] se vazio (compatibilidade com chaves
+  /// cadastradas antes desta reforma).
+  final String description;
+
+  /// Texto de fato mostrado no card — [description], com fallback pra
+  /// [label] quando a descrição ainda não foi preenchida.
+  String get displayTitle => description.isNotEmpty ? description : label;
 
   factory PixEntry.fromMap(Map<String, dynamic> map) {
     return PixEntry(
       label: map['label'] as String? ?? '',
       key: map['key'] as String? ?? '',
-      qrCodeUrl: map['qrCodeUrl'] as String? ?? '',
-      qrCodeStoragePath: map['qrCodeStoragePath'] as String? ?? '',
+      description: map['description'] as String? ?? '',
     );
   }
 
-  Map<String, dynamic> toMap() => {
-        'label': label,
-        'key': key,
-        'qrCodeUrl': qrCodeUrl,
-        'qrCodeStoragePath': qrCodeStoragePath,
-      };
+  Map<String, dynamic> toMap() => {'label': label, 'key': key, 'description': description};
 }
 
 /// Uma conta bancária cadastrada na Contribua — mesmo motivo do [label] em
@@ -80,6 +88,7 @@ class ContributionInfo {
   const ContributionInfo({
     this.churchName = '',
     this.cnpj = '',
+    this.city = '',
     this.pixEntries = const [],
     this.bankAccounts = const [],
   });
@@ -91,6 +100,11 @@ class ContributionInfo {
   /// a pedido do usuário). Continua editável depois da busca.
   final String churchName;
   final String cnpj;
+
+  /// Cidade do recebedor (01/09/2026) — exigida pelo padrão BR Code do Pix
+  /// (campo "Merchant City") pra gerar os códigos com valor de qualquer
+  /// [PixEntry] (`PixOfferPage`); não tem uso fora disso.
+  final String city;
   final List<PixEntry> pixEntries;
   final List<BankAccountEntry> bankAccounts;
 
@@ -101,6 +115,7 @@ class ContributionInfo {
     return ContributionInfo(
       churchName: map['churchName'] as String? ?? '',
       cnpj: map['cnpj'] as String? ?? '',
+      city: map['city'] as String? ?? '',
       pixEntries: (map['pixEntries'] as List? ?? const [])
           .map((e) => PixEntry.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList(),
@@ -113,6 +128,7 @@ class ContributionInfo {
   Map<String, dynamic> toMap() => {
         'churchName': churchName,
         'cnpj': cnpj,
+        'city': city,
         'pixEntries': pixEntries.map((e) => e.toMap()).toList(),
         'bankAccounts': bankAccounts.map((e) => e.toMap()).toList(),
       };

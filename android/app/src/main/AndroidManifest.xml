@@ -93,5 +93,22 @@
             <category android:name="android.intent.category.BROWSABLE"/>
             <data android:scheme="http"/>
         </intent>
+        <!-- Apps de banco/pagamento que a aba Contribua consegue detectar e
+             abrir ao copiar uma chave PIX (01/09/2026) — ver lib/util/bank_apps.dart.
+             Sem esta declaração, canResolveActivity()/launch() por nome de
+             pacote falha silenciosamente no Android 11+ (regra de
+             visibilidade de pacotes), mesmo com o app instalado. -->
+        <package android:name="com.nu.production"/>
+        <package android:name="com.itau"/>
+        <package android:name="com.bradesco"/>
+        <package android:name="br.com.bb.android"/>
+        <package android:name="br.com.gabba.Caixa"/>
+        <package android:name="com.santander.app"/>
+        <package android:name="br.com.intermedium"/>
+        <package android:name="com.c6bank.app"/>
+        <package android:name="com.picpay"/>
+        <package android:name="com.mercadopago.wallet"/>
+        <package android:name="br.com.sicoobnet"/>
+        <package android:name="br.com.sicredi.app"/>
     </queries>
 </manifest>
