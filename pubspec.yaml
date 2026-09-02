@@ -18,14 +18,16 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 41, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (29/08/2026): corrige o botão de salvar
-# cifra que podia ficar processando pra sempre sem mensagem de sucesso/erro
-# (timeout de 15s + feedback explícito); corrige demora pra carregar o
-# perfil/ícones de admin no menu Mais logo após abrir o app do zero
-# (currentUserProfileProvider virou StreamProvider, mostra o cache local na
-# hora em vez de esperar o servidor).
-version: 1.7.2+42
+# Play Console antes de enviar; se for maior que 42, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (02/09/2026): reforma do Início —
+# virou um painel-resumo (saudação + versículo do dia, grade de acesso
+# rápido quadrada com Bíblia/Ordem de Culto/Oração/Mensagens + EBD/Agenda/
+# PGMs "Em breve", cards "Próximo na Igreja"/"Devocional de Hoje" com a
+# imagem padrão de Devocionais/"Minha EBD"/"Esta Semana"+"Avisos" lado a
+# lado); o feed de publicações (Mural) saiu do Início e virou uma tela
+# própria dentro de Mais; barra inferior reduzida pra Início/Devocionais/
+# Eventos/Contribua (Mural e Mais saíram dela).
+version: 1.7.2+43
 
 environment:
   sdk: ^3.13.0

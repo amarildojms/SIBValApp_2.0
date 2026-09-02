@@ -33,7 +33,7 @@ import '../models/post.dart';
 /// Post manual (`PostType.manual`) publicado no próprio dia (`isFromToday`)
 /// é tratado como urgente (27/08/2026, pedido do usuário) — ganha a faixa
 /// "ATENÇÃO" no topo do card; a posição no feed (topo do dia, 5º lugar
-/// depois) é decidida em `home_feed_page.dart`, não aqui.
+/// depois) é decidida em `mural_page.dart`, não aqui.
 ///
 /// [onEditTap]/[onDeleteTap] só vêm preenchidos pra post manual do próprio
 /// autor (ou admin) — mostram um menu (⋮) no cabeçalho.

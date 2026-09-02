@@ -19,6 +19,13 @@ import 'post_form_page.dart';
 /// nativo) fica atrás do FAB, restrita a quem tem `canManagePublications`
 /// (papel Publicações ou admin).
 ///
+/// **Extraído de `HomeFeedPage` em 02/09/2026** (pedido do usuário, inspirado
+/// num modelo de referência trazido por ele: `NOVO_LAYOUT.jpeg`) — o Mural
+/// virou uma aba própria da barra inferior (`muralTabIndex`), separada do
+/// painel de Início (`HomePage`/`HomeHighlights`, que ficou só com a grade de
+/// acesso rápido + os cards "Próximo na Igreja"/"Devocional de Hoje"). Toda a
+/// lógica de ranking/banner abaixo é a mesma de antes, só mudou de arquivo.
+///
 /// `postsProvider` é um `StreamProvider` (`.snapshots()`) — o feed atualiza
 /// sozinho quando qualquer post muda (novo evento vigente, devocional do
 /// dia, aniversariante, reposte, curtida...), sem pull-to-refresh.
@@ -31,22 +38,24 @@ import 'post_form_page.dart';
 /// comentar). A Cloud Function continua criando o documento em `posts`
 /// (`postType: membership_anniversary`, `targetId` = uid do aniversariante)
 /// só como fonte de dado em tempo real pro banner — ele nunca chega a
-/// aparecer na lista.
-class HomeFeedPage extends ConsumerStatefulWidget {
-  const HomeFeedPage({super.key});
+/// aparecer na lista. Como o banner mora aqui agora (não mais em `HomePage`),
+/// `notification_navigation.dart` leva pra `muralTabIndex`, não mais pro
+/// `homeTabIndex`, quando o tipo é `membershipAnniversary`.
+class MuralPage extends ConsumerStatefulWidget {
+  const MuralPage({super.key});
 
   @override
-  ConsumerState<HomeFeedPage> createState() => _HomeFeedPageState();
+  ConsumerState<MuralPage> createState() => _MuralPageState();
 }
 
-class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
+class _MuralPageState extends ConsumerState<MuralPage> {
   Timer? _reorderTicker;
 
   @override
   void initState() {
     super.initState();
     // Sem targetId (igual ao tipo `birthday`): a notificação de aniversário
-    // de MEMBRESIA agora leva direto pro Início (ver
+    // de MEMBRESIA agora leva direto pro Mural (ver
     // `notification_navigation.dart`), então simplesmente chegar aqui já
     // marca como lida e cancela da barra do celular.
     syncNotificationsForScreen(
@@ -80,120 +89,136 @@ class _HomeFeedPageState extends ConsumerState<HomeFeedPage> {
     final isAdmin = profile?.isAdmin ?? false;
 
     return Scaffold(
-      appBar: const SibValAppBar(isHome: true),
+      appBar: const SibValAppBar(isHome: false),
       floatingActionButton: canManagePublications
           ? FloatingActionButton(
-              heroTag: 'home_feed_fab',
+              heroTag: 'mural_fab',
               onPressed: () => Navigator.of(
                 context,
               ).push(MaterialPageRoute(builder: (_) => const PostFormPage())),
               child: const Icon(Icons.add),
             )
           : null,
-      body: postsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => ListView(
-          children: [
-            const SizedBox(height: 80),
-            Center(
-              child: Text(
-                'Falha ao carregar: $error',
-                style: TextStyle(color: context.textPrimary),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ScreenTitle('Mural'),
+          Expanded(
+            child: postsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => ListView(
+                children: [
+                  const SizedBox(height: 80),
+                  Center(
+                    child: Text(
+                      'Falha ao carregar: $error',
+                      style: TextStyle(color: context.textPrimary),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        data: (posts) {
-          // Post de aniversário de MEMBRESIA só vira o banner fixo pra quem
-          // tem targetId == uid logado, e só no próprio dia do aniversário
-          // (isFromToday) — todo mundo mais nem sabe que ele existe, mesmo a
-          // coleção `posts` sendo de leitura pública (o filtro é só aqui, no
-          // cliente; ver PostType.membershipAnniversary). Nunca entra na
-          // lista comum, curtível/comentável.
-          Post? membershipAnniversaryPost;
-          final feedPosts = <Post>[];
-          for (final post in posts) {
-            if (post.postType == PostType.membershipAnniversary) {
-              if (uid != null && post.targetId == uid && post.isFromToday) {
-                membershipAnniversaryPost = post;
-              }
-              continue;
-            }
-            feedPosts.add(post);
-          }
-          feedPosts.sort(_compareFeedPosts);
+              data: (posts) {
+                // Post de aniversário de MEMBRESIA só vira o banner fixo pra
+                // quem tem targetId == uid logado, e só no próprio dia do
+                // aniversário (isFromToday) — todo mundo mais nem sabe que
+                // ele existe, mesmo a coleção `posts` sendo de leitura
+                // pública (o filtro é só aqui, no cliente; ver
+                // PostType.membershipAnniversary). Nunca entra na lista
+                // comum, curtível/comentável.
+                Post? membershipAnniversaryPost;
+                final feedPosts = <Post>[];
+                for (final post in posts) {
+                  if (post.postType == PostType.membershipAnniversary) {
+                    if (uid != null &&
+                        post.targetId == uid &&
+                        post.isFromToday) {
+                      membershipAnniversaryPost = post;
+                    }
+                    continue;
+                  }
+                  feedPosts.add(post);
+                }
+                feedPosts.sort(_compareFeedPosts);
 
-          return Column(
-            children: [
-              if (membershipAnniversaryPost != null)
-                _MembershipAnniversaryBanner(
-                  text: membershipAnniversaryPost.text,
-                ),
-              Expanded(
-                child: feedPosts.isEmpty
-                    ? ListView(
-                        children: [
-                          const SizedBox(height: 80),
-                          Center(
-                            child: Text(
-                              'Nenhuma notícia publicada ainda.',
-                              style: TextStyle(color: context.textSecondary),
-                            ),
-                          ),
-                        ],
-                      )
-                    : ListView.builder(
-                        itemCount: feedPosts.length,
-                        itemBuilder: (context, index) {
-                          final post = feedPosts[index];
-                          final liked =
-                              uid != null && post.likedBy.contains(uid);
-                          final canEdit =
-                              post.postType == PostType.manual &&
-                              (isAdmin ||
-                                  (uid != null && post.authorUid == uid));
-                          return PostCard(
-                            post: post,
-                            liked: liked,
-                            onLikeTap: () async {
-                              if (uid == null) {
-                                _showLoginRequired(context);
-                                return;
-                              }
-                              await ref
-                                  .read(postRepositoryProvider)
-                                  .toggleLike(post.id, uid, !liked);
-                            },
-                            onCommentTap: () {
-                              if (uid == null) {
-                                _showLoginRequired(context);
-                                return;
-                              }
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      PostCommentsPage(postId: post.id),
-                                ),
-                              );
-                            },
-                            onEditTap: canEdit
-                                ? () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          PostFormPage(editing: post),
-                                    ),
-                                  )
-                                : null,
-                            onDeleteTap: canEdit
-                                ? () => _confirmDelete(context, ref, post)
-                                : null,
-                          );
-                        },
+                return Column(
+                  children: [
+                    if (membershipAnniversaryPost != null)
+                      _MembershipAnniversaryBanner(
+                        text: membershipAnniversaryPost.text,
                       ),
-              ),
-            ],
-          );
-        },
+                    Expanded(
+                      child: feedPosts.isEmpty
+                          ? ListView(
+                              children: [
+                                const SizedBox(height: 80),
+                                Center(
+                                  child: Text(
+                                    'Nenhuma notícia publicada ainda.',
+                                    style: TextStyle(
+                                      color: context.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView.builder(
+                              itemCount: feedPosts.length,
+                              itemBuilder: (context, index) {
+                                final post = feedPosts[index];
+                                final liked =
+                                    uid != null &&
+                                    post.likedBy.contains(uid);
+                                final canEdit =
+                                    post.postType == PostType.manual &&
+                                    (isAdmin ||
+                                        (uid != null &&
+                                            post.authorUid == uid));
+                                return PostCard(
+                                  post: post,
+                                  liked: liked,
+                                  onLikeTap: () async {
+                                    if (uid == null) {
+                                      _showLoginRequired(context);
+                                      return;
+                                    }
+                                    await ref
+                                        .read(postRepositoryProvider)
+                                        .toggleLike(post.id, uid, !liked);
+                                  },
+                                  onCommentTap: () {
+                                    if (uid == null) {
+                                      _showLoginRequired(context);
+                                      return;
+                                    }
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            PostCommentsPage(postId: post.id),
+                                      ),
+                                    );
+                                  },
+                                  onEditTap: canEdit
+                                      ? () => Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                PostFormPage(editing: post),
+                                          ),
+                                        )
+                                      : null,
+                                  onDeleteTap: canEdit
+                                      ? () =>
+                                            _confirmDelete(context, ref, post)
+                                      : null,
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

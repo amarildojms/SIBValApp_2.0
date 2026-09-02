@@ -11,9 +11,10 @@ import '../theme/app_theme.dart';
 import '../util/scroll_to_save.dart';
 import '../widgets/sibval_app_bar.dart';
 
-/// Publicação manual no feed "Início" — tela nova (21/08/2026), sem
-/// equivalente no app nativo. Só quem tem `canManagePublications` (papel
-/// Publicações ou admin) chega aqui (gate no FAB de `HomeFeedPage`).
+/// Publicação manual no Mural — tela nova (21/08/2026), sem equivalente no
+/// app nativo. Só quem tem `canManagePublications` (papel Publicações ou
+/// admin) chega aqui (gate no FAB de `MuralPage`, extraído de `HomeFeedPage`
+/// em 02/09/2026 quando o Mural virou uma aba própria).
 ///
 /// Se [editing] vier preenchido, a tela edita esse post em vez de criar um
 /// novo (autor original ou admin, ver `PostCard`/`firestore.rules`).

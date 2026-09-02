@@ -84,7 +84,7 @@ class Post {
   /// critério de "Finalizado" (27/08/2026, pedido do usuário; antes era
   /// baseado no dia civil — "verdadeiro a partir do dia seguinte"). Usado
   /// pro selo "Finalizado"/sombreamento do card em `post_card.dart` e pra
-  /// rebaixar o post pro fim da lista do Início em `home_feed_page.dart`.
+  /// rebaixar o post pro fim da lista do Mural em `mural_page.dart`.
   bool get isPastEvent {
     final eventDate = eventDateSaoPaulo;
     if (eventDate == null) return false;
@@ -92,7 +92,7 @@ class Post {
   }
 
   /// Verdadeiro se a data do evento (`eventDateSaoPaulo`) cai no dia de hoje
-  /// (fuso America/Sao_Paulo) — usado por `home_feed_page.dart#_feedRank`
+  /// (fuso America/Sao_Paulo) — usado por `mural_page.dart#_feedRank`
   /// pra subir o post do evento pro topo do feed no próprio dia (27/08/2026,
   /// pedido do usuário), e por `post_card.dart` pra trocar `(dia da semana)`
   /// por `(Hoje)` no texto sem precisar repostar. Diferente de [isFromToday],
@@ -141,7 +141,7 @@ abstract final class PostType {
   static const birthday = 'birthday';
 
   /// `targetId` é o uid de quem faz aniversário de MEMBRESIA hoje. Não
-  /// aparece na lista do feed — `home_feed_page.dart` usa esse documento só
+  /// aparece na lista do feed — `mural_page.dart` usa esse documento só
   /// como fonte de dado em tempo real pro banner fixo acima da lista
   /// (`_MembershipAnniversaryBanner`, espelha `ownBirthdayBanner` do
   /// `HomeFragment.kt` nativo), visível só pro dono desse uid; todo mundo

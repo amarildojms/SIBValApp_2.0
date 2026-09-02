@@ -6,6 +6,7 @@ import '../birthdays/birthdays_page.dart';
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
+import '../home/mural_page.dart';
 import '../home/post_comments_page.dart';
 import '../introduction/introduction_page.dart';
 import '../main_shell.dart' show homeTabIndex, mainShellTabIndexProvider;
@@ -42,11 +43,13 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.membershipAnniversary:
       // Não abre mais PostCommentsPage — a mensagem de aniversário de
-      // MEMBRESIA virou um banner fixo em HomeFeedPage (25/08/2026, ver
-      // doc comment de `PostType.membershipAnniversary`), não um post
-      // comentável. Volta pra raiz da navegação e troca pra aba Início.
-      ProviderScope.containerOf(context, listen: false).read(mainShellTabIndexProvider.notifier).state = homeTabIndex;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // MEMBRESIA virou um banner fixo em `MuralPage` (25/08/2026, ver doc
+      // comment de `PostType.membershipAnniversary`; extraído de
+      // `HomeFeedPage` pro Mural em 02/09/2026, quando o Início virou um
+      // painel-resumo), não um post comentável. Mural deixou de ser uma aba
+      // da barra inferior na mesma sessão (agora só um item de `MaisPage`),
+      // então em vez de trocar de aba, só empurra a página por cima.
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MuralPage()));
     case NotificationType.prayerRequest:
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerPage()));
     case NotificationType.message:

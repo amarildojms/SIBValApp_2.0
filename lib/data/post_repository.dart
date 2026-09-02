@@ -17,7 +17,7 @@ import '../models/post.dart';
 /// Function que o cria/reposta (evento repostado 24h/6h antes, aniversariante
 /// às 01h, devocional no seu dia). A ordenação por *regra* (aniversariante >
 /// evento > devocional > ... > evento finalizado) é aplicada depois, no
-/// cliente, em `home_feed_page.dart` (`_compareFeedPosts`, 27/08/2026) —
+/// cliente, em `mural_page.dart` (`_compareFeedPosts`, 27/08/2026) —
 /// `createdAt` descendente vira só o desempate dentro de cada faixa.
 /// `postsProvider` usa `.snapshots()` (tempo real), não busca única.
 class PostRepository {

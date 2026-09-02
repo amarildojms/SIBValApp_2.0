@@ -7,30 +7,25 @@ import 'auth/communications_consent_banner.dart';
 import 'auth/edit_profile_page.dart';
 import 'auth/login_page.dart';
 import 'auth/required_consent_gate_page.dart';
-import 'bible/bible_book_list_page.dart';
 import 'birthdays/birthdays_page.dart';
 import 'contribute/contribute_page.dart';
 import 'data/cifra_repository.dart';
 import 'data/member_repository.dart';
 import 'data/post_repository.dart' show currentUidProvider;
-import 'data/prayer_repository.dart';
 import 'data/settings_repository.dart';
 import 'data/user_repository.dart';
 import 'data/devotional_repository.dart';
 import 'devotionals/devotionals_list_page.dart';
 import 'events/events_page.dart';
 import 'gallery/album_list_page.dart';
-import 'data/message_repository.dart';
-import 'home/home_feed_page.dart';
+import 'home/home_page.dart';
+import 'home/mural_page.dart';
 import 'hymnal/hymnals_page.dart';
 import 'introduction/introduction_page.dart';
-import 'messages/messages_page.dart';
 import 'notifications/notification_permission_banner.dart';
 import 'notifications/push_notification_service.dart';
 import 'partners/partners_page.dart';
 import 'praise/praise_ministry_page.dart';
-import 'prayer/prayer_page.dart';
-import 'service_order/service_order_list_page.dart';
 import 'settings/about_page.dart';
 import 'settings/settings_management_page.dart';
 import 'theme/app_theme.dart';
@@ -38,29 +33,33 @@ import 'util/cache_busted_image.dart';
 import 'widgets/sibval_app_bar.dart';
 import 'widgets/update_gate.dart';
 
-/// Início é a aba central (índice 2), igual ao app original — usado tanto
+/// Início é a aba inicial (índice 0, 02/09/2026 — era a aba central, índice
+/// 2, antes do usuário pedir pra movê-la pra primeira posição) — usado tanto
 /// pelo `NavigationBar` quanto por quem precisa levar o usuário pra lá de
 /// fora da árvore de widgets do `MainShell` (ex.: toque numa notificação de
-/// aniversário de MEMBRESIA, ver `notification_navigation.dart`).
-const homeTabIndex = 2;
+/// finalização de culto, ver `notification_navigation.dart`).
+const homeTabIndex = 0;
 
 /// Aba selecionada do `MainShell` — vira `StateProvider` (em vez de um campo
 /// local em `_MainShellState`) justamente pra permitir essa troca de aba
 /// vinda de fora, via `ref.read(mainShellTabIndexProvider.notifier).state`.
 final mainShellTabIndexProvider = StateProvider<int>((ref) => homeTabIndex);
 
-/// Espelha o bottom_nav_menu.xml original: Devocionais, Eventos, Início,
-/// Contribua, Mais. Só o Início tem conteúdo real nesta fase — os demais são
-/// placeholders "em breve" até as próximas fases da migração.
+/// Espelha o bottom_nav_menu.xml original, com duas mudanças pedidas pelo
+/// usuário em 02/09/2026: Início foi pra 1ª posição (era a 3ª, central) e
+/// Mais saiu da barra por completo — agora só é alcançado pelo ícone "Mais"
+/// da grade de Início (`HomeHighlights`/`MaisPage`, `Navigator.push`, não
+/// mais uma aba do `IndexedStack`). O Mural (que tinha virado uma aba nova
+/// nessa mesma sessão) também saiu da barra pelo mesmo motivo — vive dentro
+/// de `MaisPage` como mais um `MoreTile`.
 class MainShell extends ConsumerWidget {
   const MainShell({super.key});
 
   static const _pages = [
+    HomePage(),
     DevotionalsListPage(),
     EventsPage(),
-    HomeFeedPage(),
     ContributePage(),
-    _MaisPage(),
   ];
 
   @override
@@ -116,8 +115,9 @@ class MainShell extends ConsumerWidget {
         bottomNavigationBar: MediaQuery.withClampedTextScaling(
           // Telas menores + "Fonte grande" (comum em Samsung/OneUI, já viu
           // esse tipo de estouro antes no telefone da Recepção) cortavam o
-          // rótulo "Devocionais", o mais longo dos cinco — trava o quanto o
-          // texto da barra pode crescer além do que o layout fixo comporta.
+          // rótulo "Devocionais", o mais longo das quatro abas (02/09/2026,
+          // Mural e Mais saíram da barra) — trava o quanto o texto pode
+          // crescer além do que o layout fixo comporta.
           maxScaleFactor: 1.15,
           child: NavigationBar(
             selectedIndex: index,
@@ -125,6 +125,10 @@ class MainShell extends ConsumerWidget {
                 ref.read(mainShellTabIndexProvider.notifier).state = newIndex,
             backgroundColor: SibValColors.navyBlue,
             destinations: [
+              const NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                label: 'Início',
+              ),
               NavigationDestination(
                 icon: Badge(
                   label: Text('$unreadDevotionals'),
@@ -151,16 +155,8 @@ class MainShell extends ConsumerWidget {
                 label: 'Eventos',
               ),
               const NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                label: 'Início',
-              ),
-              const NavigationDestination(
                 icon: Icon(Icons.favorite_border),
                 label: 'Contribua',
-              ),
-              const NavigationDestination(
-                icon: Icon(Icons.more_horiz),
-                label: 'Mais',
               ),
             ],
           ),
@@ -257,41 +253,6 @@ class SettingsMailIcon extends StatelessWidget {
   }
 }
 
-/// Igreja com uma nota musical no canto — remete a "ordem de culto"
-/// (liturgia musical) sem precisar de um ícone customizado novo, mesma
-/// composição de `SettingsMailIcon`/`_IntroductionIcon` acima.
-class _ServiceOrderIcon extends StatelessWidget {
-  const _ServiceOrderIcon({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 24,
-      height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.church_outlined, color: color, size: 24),
-          Positioned(
-            top: -3,
-            right: -4,
-            child: Container(
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.music_note, color: color, size: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Mesa de recepção (ícone `desk_outlined`, que já traz um monitor
 /// embutido no desenho) com um boneco (pessoa) no canto — mesma composição
 /// de `SettingsMailIcon` acima, só trocando os dois ícones combinados.
@@ -329,8 +290,14 @@ class _IntroductionIcon extends StatelessWidget {
   }
 }
 
-class _MaisPage extends ConsumerWidget {
-  const _MaisPage();
+/// Pública (02/09/2026, era `_MaisPage`) — deixou de ser uma aba do
+/// `IndexedStack` e virou uma tela pushada normalmente
+/// (`Navigator.push(MaterialPageRoute(builder: (_) => const MaisPage()))`),
+/// alcançada pelo ícone "Mais" da grade de Início (`HomeHighlights`). Por
+/// isso precisou sair do escopo privado do arquivo — mesmo motivo que já
+/// tornou `MoreTile`/`SettingsMailIcon` públicos antes.
+class MaisPage extends ConsumerWidget {
+  const MaisPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -338,7 +305,6 @@ class _MaisPage extends ConsumerWidget {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final profile = profileAsync.asData?.value;
     final isAdmin = profile?.isAdmin ?? false;
-    final canViewPrayerRequests = profile?.canViewPrayerRequests ?? false;
     // NOVO (24/08/2026, unificado numa só tela em 25/08/2026, papel
     // renomeado de "Recepção" pra "Introdução" depois): área Introdução — o
     // que cada um vê dentro dela depende do papel, ver introduction_page.dart.
@@ -351,29 +317,31 @@ class _MaisPage extends ConsumerWidget {
         ? ref.watch(pendingUserCountProvider)
         : const AsyncValue.data(0);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
-    final pendingPrayerCountAsync = canViewPrayerRequests
-        ? ref.watch(pendingPrayerCountProvider)
-        : const AsyncValue.data(0);
-    final pendingPrayerCount = pendingPrayerCountAsync.asData?.value ?? 0;
-    final pendingMessagesCountAsync = uid != null
-        ? ref.watch(pendingMessagesCountProvider)
-        : const AsyncValue.data(0);
-    final pendingMessagesCount = pendingMessagesCountAsync.asData?.value ?? 0;
 
     final tiles = [
       // Tier 1 — disponível para todos, sem login.
+      // Bíblia, Oração e Mensagens saíram desta lista em 02/09/2026 (pedido
+      // do usuário: "os ícones que estão na tela inicial não devem repetir
+      // no menu Mais") — os três já vivem na grade de Início
+      // (`HomeHighlights`); Ordem de Culto, mais abaixo, pelo mesmo motivo.
+      //
+      // Mural (02/09/2026, pedido do usuário) — saiu da barra inferior e
+      // do grid de Início; alcançado só por aqui agora, junto com o resto
+      // do conteúdo de navegação livre. Curtir/comentar dentro dele
+      // continua exigindo login (gate na própria `MuralPage`).
+      MoreTile(
+        icon: Icons.dynamic_feed_outlined,
+        label: 'Mural',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MuralPage())),
+      ),
       MoreTile(
         icon: Icons.photo_camera_outlined,
         label: 'Galeria',
         onTap: () =>
             Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => const AlbumListPage())),
-      ),
-      MoreTile(
-        icon: Icons.menu_book,
-        label: 'Bíblia',
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const BibleBookListPage())),
       ),
       // Hinários (28/08/2026, pedido do usuário) — antes eram dois tiles
       // separados (Cantor Cristão / HCC), agora um só que abre a escolha.
@@ -383,14 +351,6 @@ class _MaisPage extends ConsumerWidget {
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const HymnalsPage())),
-      ),
-      MoreTile(
-        imageAsset: 'assets/icons/ic_prayer.png',
-        label: 'Pedido de Oração',
-        badgeCount: pendingPrayerCount,
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const PrayerPage())),
       ),
       MoreTile(
         icon: Icons.handshake_outlined,
@@ -423,14 +383,6 @@ class _MaisPage extends ConsumerWidget {
           onTap: () => Navigator.of(context)
               .push(MaterialPageRoute(builder: (_) => const BirthdaysPage())),
         ),
-      if (uid != null)
-        MoreTile(
-          icon: Icons.mail_outline,
-          label: 'Mensagens',
-          badgeCount: pendingMessagesCount,
-          onTap: () => Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const MessagesPage())),
-        ),
       // Tier 3 — admin / secretaria / eventos / dirigentes / introdução.
       // Introdução e Ordem de Culto sobem pro topo deste tier (28/08/2026,
       // pedido do usuário) — antes ficavam no fim da lista inteira.
@@ -443,22 +395,9 @@ class _MaisPage extends ConsumerWidget {
             context,
           ).push(MaterialPageRoute(builder: (_) => const IntroductionPage())),
         ),
-      // NOVO (27/08/2026): Ordem de Culto — dirigente/admin cadastra e gera;
-      // Louvor (28/08/2026, papel novo) só enxerga, numa visão própria com
-      // tom/cifra (ver `openServiceOrder`, `service_order_navigation.dart`). Abre
-      // primeiro a lista das ordens já cadastradas — antes ia direto pro
-      // cadastro. Tile incondicional (28/08/2026, pedido do usuário) — a
-      // partir de agora tem uma visão pra qualquer usuário, logado ou em
-      // acesso convidado (`ServiceOrderMemberViewPage`, mesmo padrão de
-      // leitura pública já usado por `posts`/`devotionals`), travada num
-      // timer até o dirigente tocar em "Iniciar Culto".
-      MoreTile(
-        customIcon: _ServiceOrderIcon(color: context.textPrimary),
-        label: 'Ordem de Culto',
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ServiceOrderListPage()),
-        ),
-      ),
+      // Ordem de Culto saiu daqui em 02/09/2026 (pedido do usuário: "os
+      // ícones que estão na tela inicial não devem repetir no menu Mais") —
+      // vive só como ícone da grade de Início agora (`HomeHighlights`).
       // NOVO (28/08/2026): Ministério de Louvor — repertório mensal/semanal
       // + menu ☰ com "Cifras". Gate é só Louvor/admin
       // (`canViewPraiseOrder`) + quem o admin selecionou individualmente
