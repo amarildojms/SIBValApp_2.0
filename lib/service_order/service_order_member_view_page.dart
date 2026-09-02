@@ -137,25 +137,35 @@ class _ServiceOrderMemberViewPageState extends ConsumerState<ServiceOrderMemberV
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              const Text(
-                'ORDEM DO CULTO',
-                style: TextStyle(
-                  color: SibValColors.goldAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                serviceOrderDisplayName(order),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              if (!order.isFinalized) ...[
+                const ServiceOrderLiveBadge(),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ORDEM DO CULTO',
+                      style: TextStyle(
+                        color: SibValColors.goldAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      serviceOrderDisplayName(order),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

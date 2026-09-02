@@ -131,25 +131,35 @@ class _ServiceOrderPraiseViewPageState
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              const Text(
-                'ORDEM DO CULTO — LOUVOR',
-                style: TextStyle(
-                  color: SibValColors.goldAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _dateFormat.format(order.dateTime),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              if (order.isStarted && !order.isFinalized) ...[
+                const ServiceOrderLiveBadge(),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ORDEM DO CULTO — LOUVOR',
+                      style: TextStyle(
+                        color: SibValColors.goldAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _dateFormat.format(order.dateTime),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -650,6 +660,9 @@ IconData _iconFor(ServiceOrderMomentType? type) {
   };
 }
 
+/// Emoji pros momentos que o usuário quer manter com o glifo de verdade —
+/// mesmo mapeamento de `service_order_live_page.dart`. `null` pros demais
+/// tipos, que usam `Icon(_iconFor(type))` normal.
 String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.prayer => '🙏',
   ServiceOrderMomentType.welcome => '🫂',
@@ -657,6 +670,30 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.communion => '🍷',
   _ => null,
 };
+
+/// Ícone do momento — emoji (`_emojiFor`) quando existe, senão `Icon`
+/// (`_iconFor`) normal, os dois sempre na mesma cor (01/09/2026, pedido do
+/// usuário: "não quero que mude os ícones, quero apenas que mantenha no
+/// mesmo padrão de cor") — `ColorFiltered`/`BlendMode.srcIn` porque
+/// `TextStyle.color` não tinge um glifo emoji colorido (a fonte de emoji já
+/// embute a própria cor); usa o alfa do glifo como máscara e pinta tudo com
+/// `color`, igual a um `Icon` monocromático. Mesmo helper de
+/// `service_order_live_page.dart`, duplicado aqui por ser privado ao
+/// arquivo.
+Widget _momentIcon(
+  ServiceOrderMomentType? type, {
+  required double size,
+  required Color color,
+}) {
+  final emoji = _emojiFor(type);
+  if (emoji != null) {
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Text(emoji, style: TextStyle(fontSize: size)),
+    );
+  }
+  return Icon(_iconFor(type), color: color, size: size);
+}
 
 /// Caixa com a anotação livre do dirigente pro momento "Boas-vindas"/"Avisos/
 /// Comunicações" (28/08/2026, pedido do usuário) — mesmo widget de
@@ -702,7 +739,6 @@ class _PraiseMomentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = item.summary(order);
-    final emoji = _emojiFor(item.type);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -735,9 +771,7 @@ class _PraiseMomentCard extends StatelessWidget {
                       ),
               ),
               const SizedBox(width: 12),
-              emoji != null
-                  ? Text(emoji, style: const TextStyle(fontSize: 20))
-                  : Icon(_iconFor(item.type), color: Colors.white70, size: 20),
+              _momentIcon(item.type, size: 20, color: Colors.white70),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(

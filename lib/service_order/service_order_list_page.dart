@@ -180,7 +180,12 @@ class ServiceOrderListPage extends ConsumerWidget {
                           count: entry.value.length,
                           children: [
                             for (final order in entry.value)
-                              _OrderTile(order: order, uid: uid, isAdmin: isAdmin),
+                              _OrderTile(
+                                order: order,
+                                uid: uid,
+                                isAdmin: isAdmin,
+                                isArchived: true,
+                              ),
                           ],
                         ),
                     ],
@@ -198,6 +203,26 @@ class ServiceOrderListPage extends ConsumerWidget {
 final _dateTimeFormat = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
 final _monthFormat = DateFormat("MMMM 'de' yyyy", 'pt_BR');
 
+/// Fundo diferente pro arquivamento mensal (01/09/2026, pedido do usuário:
+/// "arquivamento mensal das ordem de culto deve ficar de uma cor diferente
+/// das ordem do mês atual") — mesmo mecanismo de `_momentBox`
+/// (`service_order_form_page.dart`, `Color.alphaBlend` sobre a cor real do
+/// tema, não uma cor fixa), só com blend mais forte porque aqui a
+/// diferença precisa ser notada entre dois `Card`s lado a lado, não só um
+/// campo contra o fundo da tela.
+Color _archivedCardColor(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  // Escurece o card em vez de clarear nos dois temas — "recuado"/arquivado
+  // lê melhor assim do que uma cor mais clara chamando mais atenção que o
+  // mês corrente. Blend mais forte no escuro: `cardColor` já é um azul
+  // médio (`navyBlueLight`), precisa de mais alpha pra destacar do card
+  // normal do que o branco do tema claro precisa.
+  return Color.alphaBlend(
+    Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
+    Theme.of(context).cardColor,
+  );
+}
+
 /// Cabeçalho do grupo de mês (28/08/2026) — mesma capitalização manual de
 /// `ArchivedVisitorsPage._dayHeader` (`DateFormat` em pt_BR não capitaliza
 /// nome de mês sozinho).
@@ -210,17 +235,29 @@ String _monthHeader(DateTime month) {
 /// reaproveitado tanto solto (mês corrente) quanto dentro de um `_MonthGroup`
 /// (meses anteriores, compactados).
 class _OrderTile extends ConsumerWidget {
-  const _OrderTile({required this.order, required this.uid, required this.isAdmin});
+  const _OrderTile({
+    required this.order,
+    required this.uid,
+    required this.isAdmin,
+    this.isArchived = false,
+  });
 
   final ServiceOrder order;
   final String? uid;
   final bool isAdmin;
+
+  /// `true` pras ordens dentro de um `_MonthGroup` (mês anterior ao
+  /// corrente) — pinta o card numa cor levemente diferente (01/09/2026,
+  /// pedido do usuário) pra distinguir o arquivamento mensal das ordens do
+  /// mês atual sem precisar abrir o grupo pra notar.
+  final bool isArchived;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOwner = order.ownerUid == uid;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      color: isArchived ? _archivedCardColor(context) : null,
       child: ListTile(
         leading: Icon(
           order.isFinalized ? Icons.check_circle : Icons.church_outlined,
@@ -283,6 +320,9 @@ class _MonthGroup extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       clipBehavior: Clip.antiAlias,
+      // Mesma cor "arquivada" dos cards de dentro (01/09/2026, pedido do
+      // usuário) — o grupo inteiro já representa meses anteriores ao atual.
+      color: _archivedCardColor(context),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(

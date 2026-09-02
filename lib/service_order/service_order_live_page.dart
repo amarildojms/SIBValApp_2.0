@@ -18,7 +18,16 @@ import '../notifications/notification_read_sync.dart';
 import '../praise/cifra_view_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
+import 'service_order_countdown.dart';
 import 'service_order_mission_moment_page.dart';
+
+/// Verde de "momento concluído" no modo apresentação — dourado já significa
+/// "atual" nesta tela, então concluído precisa de uma cor própria pra não se
+/// confundir com pendente (antes os dois compartilhavam o mesmo fundo quase
+/// invisível, diferindo só pelo texto riscado/apagado — pedido do usuário,
+/// 01/09/2026, "cores para identificar com mais facilidade o que já foi
+/// concluído, e em que momento está").
+const _doneGreen = Color(0xFF43A047);
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). "Modo apresentação": aberto ao tocar em "Iniciar Culto"/
@@ -442,12 +451,14 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
         : '${visitors.length} visitantes hoje.';
   }
 
-  void _setDone(String key, bool done) {
+  void _setDone(String key, bool done) => _setDoneMany([key], done);
+
+  void _setDoneMany(Iterable<String> keys, bool done) {
     setState(() {
       if (done) {
-        _done.add(key);
+        _done.addAll(keys);
       } else {
-        _done.remove(key);
+        _done.removeAll(keys);
       }
     });
     ref
@@ -456,9 +467,15 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
         .catchError((_) {});
   }
 
+  /// Toque no corpo do card/linha — quando já concluído, reabre o link (se
+  /// houver) em vez de desmarcar (01/09/2026, pedido do usuário: "os
+  /// momentos que possuem links clicáveis poderão ser abertos novamente
+  /// mesmo que o momento já tenha sido concluído"). Desmarcar passou a ser
+  /// exclusivo de `_onToggleDone`, acionado só pela bolinha dourada de
+  /// check.
   Future<void> _onTapLeaf(String key, _SubAction? action) async {
     if (_done.contains(key)) {
-      _setDone(key, false);
+      if (action != null) await action.open(context);
       return;
     }
     if (action != null) {
@@ -467,6 +484,13 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     }
     _setDone(key, true);
   }
+
+  /// Toque na bolinha dourada de check — único jeito de desmarcar um
+  /// momento já concluído (01/09/2026, pedido do usuário). Marcar por aqui
+  /// (quando ainda não concluído) também funciona, direto, sem abrir o
+  /// link — atalho simétrico, não pedido explicitamente mas natural pro
+  /// mesmo botão.
+  void _onToggleDone(String key) => _setDone(key, !_done.contains(key));
 
   ({int total, int done}) _progress(List<ServiceOrderItem> items) {
     var total = 0;
@@ -560,6 +584,10 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
                 child: Row(
                   children: [
+                    if (!order.isFinalized) ...[
+                      const ServiceOrderLiveBadge(),
+                      const SizedBox(width: 10),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -619,6 +647,10 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                         isDone: isItemDone,
                         isCurrent: isCurrent,
                         onSubTap: (sub) => _onTapLeaf(sub.key, sub),
+                        onToggleSubDone: (sub) => _onToggleDone(sub.key),
+                        onToggleAllDone: isItemDone
+                            ? () => _setDoneMany(leaves, false)
+                            : null,
                       );
                     }
 
@@ -643,6 +675,7 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                       isLink: singleAction != null,
                       extraSummary: extraSummary,
                       onTap: () => _onTapLeaf(key, singleAction),
+                      onToggleDone: () => _onToggleDone(key),
                     );
                     // Anotação livre logo abaixo de "Boas-vindas"/"Avisos/
                     // Comunicações" (28/08/2026, pedido do usuário) — ver doc
@@ -760,12 +793,9 @@ IconData _iconFor(ServiceOrderMomentType? type) {
   };
 }
 
-/// Emoji pros três momentos que o usuário pediu pra trocar (28/08/2026) —
-/// Material Icons não tem "mãos juntas em oração"/"abraço"/"mãos recebendo
-/// bênção" de verdade, então usa emoji nesses três em vez de compor dois
-/// `Icons` (padrão de `_ServiceOrderIcon` etc. em `main_shell.dart`, que só
-/// funciona pra ícones vetoriais). `null` pros demais tipos, que continuam
-/// com `Icon(_iconFor(type))` normal.
+/// Emoji pros momentos que o usuário quer manter com o glifo de verdade
+/// (28/08/2026, "Material Icons não tem [gesto] de verdade") — `null` pros
+/// demais tipos, que usam `Icon(_iconFor(type))` normal.
 String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
   ServiceOrderMomentType.prayer => '🙏',
   ServiceOrderMomentType.welcome => '🫂',
@@ -776,6 +806,15 @@ String? _emojiFor(ServiceOrderMomentType? type) => switch (type) {
 
 /// Ícone do momento — emoji (`_emojiFor`) quando existe, senão `Icon`
 /// (`_iconFor`) normal. Reaproveitado por `_MomentCard`/`_MomentGroupCard`.
+///
+/// O emoji precisa do mesmo padrão de cor dos demais ícones (pendente/atual
+/// piscando dourado/concluído verde — 01/09/2026, pedido do usuário: "não
+/// quero que mude os ícones, quero apenas que mantenha no mesmo padrão de
+/// cor") mas `TextStyle.color` não tem efeito sobre um glifo emoji colorido
+/// (a fonte de emoji embute a própria cor, ignorando o `color` do texto) —
+/// por isso o `ColorFiltered`/`BlendMode.srcIn` abaixo: usa o alfa do glifo
+/// como máscara e pinta tudo com `color`, igual a um `Icon` monocromático
+/// normal, só que com o desenho do emoji.
 Widget _momentIcon(
   ServiceOrderMomentType? type, {
   required double size,
@@ -783,9 +822,72 @@ Widget _momentIcon(
 }) {
   final emoji = _emojiFor(type);
   if (emoji != null) {
-    return Text(emoji, style: TextStyle(fontSize: size));
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Text(emoji, style: TextStyle(fontSize: size)),
+    );
   }
   return Icon(_iconFor(type), color: color, size: size);
+}
+
+/// Pulsa um valor 0..1 continuamente enquanto `enabled` — usado pro
+/// destaque "dourado piscando" do momento atual (01/09/2026, pedido do
+/// usuário: "vamos testar... se fica bom"). Desligado, o builder recebe
+/// sempre `1.0` (estado "aceso" fixo), sem `AnimationController` rodando à
+/// toa nos outros cards da lista.
+class _PulseValue extends StatefulWidget {
+  const _PulseValue({required this.enabled, required this.builder});
+
+  final bool enabled;
+  final ValueWidgetBuilder<double> builder;
+
+  @override
+  State<_PulseValue> createState() => _PulseValueState();
+}
+
+class _PulseValueState extends State<_PulseValue>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  late final Animation<double> _animation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOut,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PulseValue oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !oldWidget.enabled) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.enabled && oldWidget.enabled) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.builder(context, 1, null);
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) =>
+          widget.builder(context, _animation.value, child),
+    );
+  }
 }
 
 class _MomentCard extends StatelessWidget {
@@ -796,6 +898,7 @@ class _MomentCard extends StatelessWidget {
     required this.isDone,
     required this.isCurrent,
     required this.onTap,
+    required this.onToggleDone,
     this.isLink = false,
     this.extraSummary,
   });
@@ -805,11 +908,21 @@ class _MomentCard extends StatelessWidget {
   final ServiceOrder order;
   final bool isDone;
   final bool isCurrent;
+
+  /// Toque no corpo do card — quando já concluído, reabre o link (bíblia/
+  /// cifra/hino), se houver, sem desmarcar (01/09/2026, pedido do usuário).
   final VoidCallback onTap;
 
+  /// Toque na bolinha dourada de check — único jeito de desmarcar um
+  /// momento já concluído (01/09/2026, pedido do usuário).
+  final VoidCallback onToggleDone;
+
   /// `true` quando o toque no card abre bíblia/hino/cifra em vez de só
-  /// marcar concluído — nesse caso o nome do momento vem em dourado (28/08,
-  /// pedido do usuário: "itens clicáveis na cor dourada padrão").
+  /// marcar concluído. O título do momento fica igual aos demais
+  /// (01/09/2026, pedido do usuário: "todos os momentos com a fonte na
+  /// mesma cor... Leitura bíblica e Louvor deve estar como os demais") — o
+  /// dourado migrou pro texto de baixo (`summary`/`extraSummary`), que é o
+  /// conteúdo de fato clicável: a referência bíblica ou o nome da música.
   final bool isLink;
   final String? extraSummary;
 
@@ -817,78 +930,100 @@ class _MomentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final baseSummary = item.summary(order);
     final summary = [?baseSummary, ?extraSummary].join('\n');
-    final textColor = isDone
-        ? Colors.white38
-        : (isLink ? SibValColors.goldAccent : Colors.white);
+    final textColor = isDone ? _doneGreen : Colors.white;
+    final summaryColor = isDone
+        ? Colors.white24
+        : (isLink ? SibValColors.goldAccent : Colors.white60);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: isCurrent
-            ? const Color(0xFF1E3A5F)
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
+      // Momento atual pisca em dourado (01/09/2026, pedido do usuário,
+      // "testar se fica bom") — só o card com `isCurrent` roda a animação;
+      // os demais recebem `t` fixo em 1.0 sem custo de controller.
+      child: _PulseValue(
+        enabled: isCurrent,
+        builder: (context, t, _) {
+          final goldPulse = SibValColors.goldAccent.withValues(
+            alpha: 0.5 + 0.5 * t,
+          );
+          return Material(
+            color: isCurrent
+                ? const Color(0xFF1E3A5F)
+                : (isDone
+                      ? _doneGreen.withValues(alpha: 0.12)
+                      : Colors.white.withValues(alpha: 0.04)),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              border: isCurrent
-                  ? Border.all(color: SibValColors.goldAccent, width: 1.5)
-                  : null,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StatusBadge(
-                  index: index,
-                  isDone: isDone,
-                  isCurrent: isCurrent,
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: isCurrent
+                      ? Border.all(color: goldPulse, width: 1.5)
+                      : (isDone
+                            ? Border.all(
+                                color: _doneGreen.withValues(alpha: 0.4),
+                              )
+                            : null),
                 ),
-                const SizedBox(width: 12),
-                _momentIcon(
-                  item.type,
-                  size: 20,
-                  color: isDone
-                      ? Colors.white24
-                      : (isCurrent ? SibValColors.goldAccent : Colors.white70),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          decoration: isDone
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StatusBadgeTapTarget(
+                      onTap: onToggleDone,
+                      child: _StatusBadge(
+                        index: index,
+                        isDone: isDone,
+                        isCurrent: isCurrent,
+                        currentColor: goldPulse,
                       ),
-                      if (summary.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            summary,
+                    ),
+                    const SizedBox(width: 12),
+                    _momentIcon(
+                      item.type,
+                      size: 20,
+                      color: isDone
+                          ? _doneGreen
+                          : (isCurrent ? goldPulse : Colors.white70),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.label,
                             style: TextStyle(
-                              color: isDone ? Colors.white24 : Colors.white60,
-                              fontSize: 13,
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              decoration: isDone
+                                  ? TextDecoration.lineThrough
+                                  : null,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+                          if (summary.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                summary,
+                                style: TextStyle(
+                                  color: summaryColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -933,6 +1068,8 @@ class _MomentGroupCard extends StatelessWidget {
     required this.isDone,
     required this.isCurrent,
     required this.onSubTap,
+    required this.onToggleSubDone,
+    required this.onToggleAllDone,
   });
 
   final int index;
@@ -948,67 +1085,109 @@ class _MomentGroupCard extends StatelessWidget {
   /// das sub-ações, não uma chave própria em `doneKeys`).
   final bool isDone;
   final bool isCurrent;
+
+  /// Toque no corpo de uma sub-ação — reabre o link quando já concluída, em
+  /// vez de desmarcar (01/09/2026, pedido do usuário, mesma regra do
+  /// `_MomentCard`).
   final ValueChanged<_SubAction> onSubTap;
+
+  /// Toque na bolinha dourada de check de uma sub-ação — único jeito de
+  /// desmarcá-la (01/09/2026, pedido do usuário).
+  final ValueChanged<_SubAction> onToggleSubDone;
+
+  /// Toque na bolinha dourada de check do cabeçalho do grupo — só chega
+  /// aqui quando `isDone` (todas as sub-ações concluídas); desmarca todas de
+  /// uma vez, permitindo refazer o grupo inteiro (01/09/2026, pedido do
+  /// usuário). `null` enquanto o grupo não está totalmente concluído — o
+  /// cabeçalho continua não-tocável nesse caso, como sempre foi.
+  final VoidCallback? onToggleAllDone;
 
   @override
   Widget build(BuildContext context) {
-    final textColor = isDone ? Colors.white38 : Colors.white;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isCurrent
-            ? const Color(0xFF1E3A5F)
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: isCurrent
-            ? Border.all(color: SibValColors.goldAccent, width: 1.5)
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _StatusBadge(index: index, isDone: isDone, isCurrent: isCurrent),
-              const SizedBox(width: 12),
-              _momentIcon(
-                item.type,
-                size: 20,
-                color: isDone ? Colors.white24 : Colors.white70,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    decoration: isDone ? TextDecoration.lineThrough : null,
-                  ),
+    final textColor = isDone ? _doneGreen : Colors.white;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _PulseValue(
+        enabled: isCurrent,
+        builder: (context, t, _) {
+          final goldPulse = SibValColors.goldAccent.withValues(
+            alpha: 0.5 + 0.5 * t,
+          );
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isCurrent
+                  ? const Color(0xFF1E3A5F)
+                  : (isDone
+                        ? _doneGreen.withValues(alpha: 0.12)
+                        : Colors.white.withValues(alpha: 0.04)),
+              borderRadius: BorderRadius.circular(14),
+              border: isCurrent
+                  ? Border.all(color: goldPulse, width: 1.5)
+                  : (isDone
+                        ? Border.all(color: _doneGreen.withValues(alpha: 0.4))
+                        : null),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _StatusBadgeTapTarget(
+                      onTap: onToggleAllDone,
+                      child: _StatusBadge(
+                        index: index,
+                        isDone: isDone,
+                        isCurrent: isCurrent,
+                        currentColor: goldPulse,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _momentIcon(
+                      item.type,
+                      size: 20,
+                      color: isDone
+                          ? _doneGreen
+                          : (isCurrent ? goldPulse : Colors.white70),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        item.label,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          decoration: isDone
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          if (subs.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(left: 42, top: 4),
-              child: Text(
-                'Nada preenchido.',
-                style: TextStyle(color: Colors.white38),
-              ),
+                if (subs.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 42, top: 4),
+                    child: Text(
+                      'Nada preenchido.',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                for (final sub in subs)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 6),
+                    child: _SubActionRow(
+                      sub: sub,
+                      isDone: doneKeys.contains(sub.key),
+                      onTap: () => onSubTap(sub),
+                      onToggleDone: () => onToggleSubDone(sub),
+                    ),
+                  ),
+              ],
             ),
-          for (final sub in subs)
-            Padding(
-              padding: const EdgeInsets.only(left: 32, top: 6),
-              child: _SubActionRow(
-                sub: sub,
-                isDone: doneKeys.contains(sub.key),
-                onTap: () => onSubTap(sub),
-              ),
-            ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1019,11 +1198,19 @@ class _SubActionRow extends StatelessWidget {
     required this.sub,
     required this.isDone,
     required this.onTap,
+    required this.onToggleDone,
   });
 
   final _SubAction sub;
   final bool isDone;
+
+  /// Reabre o link quando já concluída, em vez de desmarcar (01/09/2026,
+  /// pedido do usuário).
   final VoidCallback onTap;
+
+  /// Toque no ícone de check — único jeito de desmarcar uma sub-ação já
+  /// concluída (01/09/2026, pedido do usuário, mesma regra do `_MomentCard`).
+  final VoidCallback onToggleDone;
 
   @override
   Widget build(BuildContext context) {
@@ -1036,10 +1223,13 @@ class _SubActionRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Row(
             children: [
-              Icon(
-                isDone ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 18,
-                color: isDone ? SibValColors.goldAccent : Colors.white54,
+              _StatusBadgeTapTarget(
+                onTap: isDone ? onToggleDone : null,
+                child: Icon(
+                  isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: isDone ? _doneGreen : Colors.white54,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1047,8 +1237,9 @@ class _SubActionRow extends StatelessWidget {
                   sub.label,
                   style: TextStyle(
                     // Sub-ação sempre navega (abre bíblia/hino) — dourado
-                    // padrão de "clicável" (28/08, pedido do usuário).
-                    color: isDone ? Colors.white38 : SibValColors.goldAccent,
+                    // padrão de "clicável" (28/08, pedido do usuário);
+                    // concluída vira verde (01/09, ver `_doneGreen`).
+                    color: isDone ? _doneGreen : SibValColors.goldAccent,
                     fontSize: 14,
                     decoration: isDone ? TextDecoration.lineThrough : null,
                   ),
@@ -1068,29 +1259,62 @@ class _SubActionRow extends StatelessWidget {
   }
 }
 
+/// Área de toque isolada em volta da bolinha de status (badge do momento ou
+/// ícone de check da sub-ação) — captura o toque antes que ele chegue no
+/// `InkWell` do card/linha ao redor, permitindo um gesto próprio de
+/// alternar concluído/pendente independente do toque no corpo (01/09/2026,
+/// pedido do usuário: "só poderá ser desmarcado tocando na bolinha
+/// dourada"). `onTap == null` desativa o toque (badge de grupo antes de
+/// tudo concluído) sem quebrar o layout.
+class _StatusBadgeTapTarget extends StatelessWidget {
+  const _StatusBadgeTapTarget({required this.onTap, required this.child});
+
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({
     required this.index,
     required this.isDone,
     required this.isCurrent,
+    this.currentColor = SibValColors.goldAccent,
   });
 
   final int index;
   final bool isDone;
   final bool isCurrent;
 
+  /// Cor do badge quando `isCurrent` — recebe o dourado já pulsando (via
+  /// `_PulseValue`, 01/09/2026) de quem chamou; sem chamador animado, cai no
+  /// dourado sólido de sempre.
+  final Color currentColor;
+
   @override
   Widget build(BuildContext context) {
     if (isDone) {
       return const CircleAvatar(
         radius: 14,
-        backgroundColor: SibValColors.goldAccent,
-        child: Icon(Icons.check, size: 16, color: SibValColors.navyBlue),
+        backgroundColor: _doneGreen,
+        child: Icon(Icons.check, size: 16, color: Colors.white),
       );
     }
     return CircleAvatar(
       radius: 14,
-      backgroundColor: isCurrent ? SibValColors.goldAccent : Colors.white12,
+      backgroundColor: isCurrent ? currentColor : Colors.white12,
       child: Text(
         '${index + 1}',
         style: TextStyle(

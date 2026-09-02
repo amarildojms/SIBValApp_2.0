@@ -2705,6 +2705,137 @@ mesma sessão, pedidos do usuário):**
   pra mencionar a convenção nova. Sem migração de cifras já salvas com
   colchete — mesmo padrão de sempre.
 
+**Ordem de Culto — cores de status no modo apresentação (01/09/2026, pedido
+do usuário):** o dirigente relatou dificuldade de identificar num relance o
+que já foi concluído e em que momento o culto está — "concluído" e
+"pendente" compartilhavam o mesmo fundo quase invisível
+(`Colors.white.withValues(alpha: 0.04)`) em `service_order_live_page.dart`,
+diferindo só pelo texto riscado/apagado. Novo `_doneGreen`
+(`Color(0xFF43A047)`, constante de módulo só deste arquivo — a tela já é
+deliberadamente fora da paleta navy/dourado do resto do app, mesma nota já
+registrada sobre os emoji de ícone) vira um esquema de 3 cores tipo
+semáforo: pendente continua neutro (cinza/branco translúcido), atual
+continua dourado (fundo `0xFF1E3A5F` + borda dourada, inalterado), concluído
+ganha fundo verde-translúcido (`_doneGreen.withValues(alpha: 0.12)`) + borda
+verde fraca + badge/ícone/texto verdes — em vez do cinza-apagado antigo.
+Aplicado em `_MomentCard`, `_MomentGroupCard`, `_SubActionRow` e
+`_StatusBadge` (badge de check virou verde com ícone branco, era dourado com
+ícone navy). Só a tela do dirigente (`ServiceOrderLivePage`) foi tocada —
+`ServiceOrderReadOnlyBody` (visão do Louvor/membro/dono-antes-de-iniciar) não
+mostra progresso "atual" da mesma forma e ficou fora do pedido.
+
+**Ordem de Culto — título dos momentos numa cor só + dourado piscando no
+atual (01/09/2026, mesma sessão, pedidos do usuário):**
+
+- **Título uniforme.** `_MomentCard.isLink` deixou de colorir o título
+  (`item.label`) de dourado — "Leitura bíblica"/"Louvor" (quando linkados a
+  bíblia/cifra) ficavam destoando dos demais momentos, cujo título é sempre
+  branco. O dourado migrou pro texto de baixo (`summary`/`extraSummary` —
+  referência bíblica ou nome da música, o conteúdo de fato clicável), que
+  antes era sempre cinza (`Colors.white60`) independente de ser link ou não.
+  `_MomentGroupCard`/`_SubActionRow` não precisaram de mudança — o título do
+  grupo já era branco, e o rótulo de cada sub-ação (que já é a
+  referência/nome, ex. "Hino Congregacional: CC 45") já era dourado desde a
+  9ª rodada.
+- **Momento atual pisca em dourado** — "vamos testar, se fica bom" (feature
+  experimental, sujeita a reverter se o usuário não gostar no teste real).
+  Novo `_PulseValue` (`StatefulWidget` com `AnimationController.repeat
+  (reverse: true)`, 900ms, `Curves.easeInOut`) — só o card com `isCurrent`
+  roda a animação; os demais recebem um valor `t` fixo em `1.0`, sem
+  `AnimationController` ocioso na lista inteira. `_MomentCard`/
+  `_MomentGroupCard` calculam `goldPulse = goldAccent.withValues(alpha: 0.5 +
+  0.5*t)` e usam essa cor pulsante na borda, no ícone do momento e no
+  `_StatusBadge` (novo parâmetro `currentColor`, cai no dourado sólido de
+  sempre quando não vem de um `_PulseValue`). O fundo navy do card atual
+  (`0xFF1E3A5F`) continua estático — só os elementos dourados piscam, não o
+  card inteiro.
+
+**Ordem de Culto — desmarcar só pela bolinha de check; arquivamento mensal
+com cor diferente (01/09/2026, mesma sessão, pedidos do usuário):**
+
+- **Desmarcar exclusivo da bolinha de check.** Antes, tocar em qualquer
+  lugar de um momento já concluído (`_MomentCard`/`_MomentGroupCard`/
+  `_SubActionRow`, `service_order_live_page.dart`) desmarcava — o que
+  impedia reabrir um link (texto bíblico, cifra, hino) depois de já ter sido
+  marcado como concluído, já que o toque desfazia o progresso em vez de
+  navegar de novo. Pedido do usuário: só a bolinha dourada de check
+  (`_StatusBadge`, e o ícone de check de cada sub-ação em
+  `_SubActionRow`) desmarca; o corpo do card/linha, quando já concluído,
+  reabre o link (se houver) sem mexer no estado. `_onTapLeaf`
+  (`_ServiceOrderLivePageState`) mudou de "toca de novo = desmarca" pra
+  "toca de novo = reabre, sem alterar `_done`"; novo `_onToggleDone`
+  (badge/ícone) é o único caminho pra `_setDone(key, false)`. Novo widget
+  compartilhado `_StatusBadgeTapTarget` (`Material`+`InkWell` com
+  `CircleBorder`) isola o toque da bolinha do toque do card ao redor —
+  tocar na bolinha nunca também dispara o `onTap` do card (gesture arena
+  padrão do Flutter: o recognizer mais interno vence). No card de grupo
+  (`_MomentGroupCard`, ex. "Dedicação dos dízimos e ofertas"), a bolinha do
+  cabeçalho só fica tocável quando o grupo inteiro já está concluído
+  (`onToggleAllDone`, `null` antes disso — cabeçalho continua não-tocável
+  como sempre foi) e desmarca todas as sub-ações de uma vez, permitindo
+  refazer o grupo inteiro. `_setDone` virou um atalho de `_setDoneMany`
+  (novo, aceita `Iterable<String>` — usado pra desmarcar várias chaves
+  junto no toggle do grupo).
+- **Arquivamento mensal com cor diferente.** `ServiceOrderListPage` já
+  agrupava ordens de meses anteriores num `_MonthGroup` recolhido (28/08,
+  ver entrada de "compactadas por mês") — só o mês corrente ficava solto no
+  topo, mas ambos usavam a mesma cor de `Card`. Novo `_archivedCardColor`
+  (`service_order_list_page.dart`) — mesmo mecanismo de `_momentBox`
+  (`Color.alphaBlend` sobre a cor real do tema, não uma cor fixa), escurece
+  o `cardColor` do tema (alpha 0.22 no escuro, 0.05 no claro — mais forte no
+  escuro porque `cardColor` já é um azul médio, `navyBlueLight`, precisa de
+  mais contraste do que o branco do tema claro). Aplicado tanto no `Card` de
+  cada `_OrderTile` dentro de um mês arquivado (`isArchived: true`, novo
+  parâmetro) quanto no `Card` do próprio `_MonthGroup` — o mês corrente
+  continua com a cor padrão do tema.
+
+**Ordem de Culto — ícones dos momentos num padrão de cor só (01/09/2026,
+mesma sessão, pedido do usuário, revisado na mesma rodada):** Prelúdio/
+Oração/Boas-vindas/Benção Apostólica/Ceia do Senhor tinham virado emoji
+(28/08/2026, "Material Icons não tem [gesto] de verdade") — mas emoji são
+glifos coloridos fixos que ignoram `TextStyle.color`, então esses ficavam
+sempre com a cor própria do emoji enquanto os demais momentos seguiam o
+padrão da lista (branco/cinza pendente, dourado piscando atual, verde
+concluído) — destoando visivelmente. **Primeira tentativa** (revertida no
+mesmo pedido): trocar os 5 emoji por `Icon(_iconFor(type))` monocromático
+normal — o usuário corrigiu: queria manter os emoji originais, só com a
+mesma cor dos demais, não trocar o glifo. **Versão final**: `_momentIcon`
+(`service_order_live_page.dart`) e o equivalente duplicado em
+`_PraiseMomentCard`/`service_order_praise_view_page.dart` (visão do Louvor)
+mantiveram `_emojiFor`, mas passaram a envolver o `Text(emoji)` num
+`ColorFiltered(colorFilter: ColorFilter.mode(color, BlendMode.srcIn))` —
+usa o alfa do glifo como máscara e pinta tudo com a cor pedida (a mesma que
+um `Icon` normal receberia: branco/cinza pendente, dourado piscando atual,
+verde concluído na tela do dirigente; branco fixo na visão do Louvor), em
+vez de deixar a cor própria do emoji aparecer. `_iconFor`'s mapeamento de
+Benção Apostólica voltou pro `Icons.emoji_events` original (irrelevante na
+prática — só serve de fallback pra tipos sem emoji, nunca chega a ser
+desenhado pros 4 tipos que têm emoji). `ServiceOrderMemberViewPage`/
+`ServiceOrderPrecheckPage` (early-view) reaproveitam
+`ServiceOrderReadOnlyBody`/`_PraiseMomentCard` — ganharam o ajuste de graça,
+sem tocar nesses arquivos.
+
+**Ordem de Culto — selo "ao vivo" nas telas de apresentação, não no
+repositório (01/09/2026, mesma sessão, pedido do usuário, revisado no mesmo
+pedido):** primeira versão pôs um indicador no topo de `ServiceOrderListPage`
+(a lista) — o usuário corrigiu: queria o selo na tela da ordem de culto em
+si (quando iniciada), não no repositório de ordens; e pediu pra acrescentar
+"traços dos lados" ao ponto piscando. **Versão final**: novo
+`ServiceOrderLiveBadge` (`service_order_countdown.dart`, público — mesmo
+arquivo de helpers já compartilhado entre as 3 telas de apresentação) usa
+`Icons.sensors` (ponto + arcos de sinal nos dois lados) em vez de um
+`Icons.circle` liso, piscando via `AnimationController.repeat(reverse:
+true)` em vermelho — fora da paleta navy/dourado de propósito, mesmo
+precedente da faixa "ATENÇÃO". Aplicado no canto esquerdo do cabeçalho de
+`ServiceOrderLivePage` (dirigente, sempre visível — a tela só existe depois
+de iniciado), `ServiceOrderPraiseViewPage` (Louvor, condicionado a
+`order.isStarted && !order.isFinalized`) e `ServiceOrderMemberViewPage`
+(membro/convidado, `_buildStarted` já garante `isStarted`, só falta checar
+`!isFinalized`) — as três telas que renderizam o conteúdo de uma ordem
+específica. `ServiceOrderListPage` (`_LiveIndicator`, a versão anterior)
+voltou ao estado original, sem nenhum indicador — não varre mais a lista
+inteira procurando um culto ao vivo.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

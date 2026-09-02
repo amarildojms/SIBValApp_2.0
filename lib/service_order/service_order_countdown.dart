@@ -43,6 +43,60 @@ String formatServiceOrderCountdown(Duration d) {
 bool isServiceOrderViewableEarly(DateTime dateTime) =>
     !DateTime.now().isBefore(dateTime.subtract(const Duration(hours: 2)));
 
+/// Selo "ao vivo" — ponto piscando com traços de sinal nos dois lados
+/// (`Icons.sensors`, convenção visual de transmissão ao vivo),
+/// deliberadamente fora da paleta navy/dourado da marca, mesmo precedente
+/// da faixa "ATENÇÃO" de post manual urgente. Usado no canto esquerdo do
+/// cabeçalho das telas que exibem a ordem de culto em andamento
+/// (`ServiceOrderLivePage`/`ServiceOrderPraiseViewPage`/
+/// `ServiceOrderMemberViewPage`) — não no repositório de ordens
+/// (`ServiceOrderListPage`), a pedido do usuário (01/09/2026, revisando o
+/// pedido anterior: "o ícone deve ficar na tela da ordem de culto em si...
+/// e não no repositório de ordens").
+class ServiceOrderLiveBadge extends StatefulWidget {
+  const ServiceOrderLiveBadge({super.key, this.size = 20});
+
+  final double size;
+
+  @override
+  State<ServiceOrderLiveBadge> createState() => _ServiceOrderLiveBadgeState();
+}
+
+class _ServiceOrderLiveBadgeState extends State<ServiceOrderLiveBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+  late final Animation<double> _animation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOut,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Culto ao vivo agora',
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, _) => Icon(
+          Icons.sensors,
+          size: widget.size,
+          color: Colors.redAccent.withValues(
+            alpha: 0.45 + 0.55 * _animation.value,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Card com o contador regressivo — usado por `ServiceOrderMemberViewPage`
 /// (28/08/2026, pedido do usuário: visão dos demais membros/visitantes).
 /// [label] é o texto acima do número, [value] é o texto central (contagem
