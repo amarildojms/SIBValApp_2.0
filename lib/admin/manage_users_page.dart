@@ -24,6 +24,7 @@ class ManageUsersPage extends ConsumerStatefulWidget {
 class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
   final _searchController = TextEditingController();
   String _query = '';
+  bool _louvorMirrorBackfilled = false;
 
   @override
   void initState() {
@@ -63,6 +64,14 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => Center(child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary))),
               data: (users) {
+                // Backfill do espelho `settings/louvorMembers` (03/09/2026,
+                // pedido do usuário) — uma vez por visita a esta tela, não a
+                // cada emissão do stream. Ver doc comment de
+                // `PraiseLouvorMembersRepository.backfillFromUsers`.
+                if (!_louvorMirrorBackfilled) {
+                  _louvorMirrorBackfilled = true;
+                  ref.read(praiseLouvorMembersRepositoryProvider).backfillFromUsers(users);
+                }
                 final filtered = _query.trim().isEmpty
                     ? users
                     : users

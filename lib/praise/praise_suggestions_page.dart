@@ -12,14 +12,15 @@ import '../widgets/sibval_app_bar.dart';
 /// "tema" e o app busca em todo `praiseSongs` (`praiseSongsProvider`, já
 /// carregado em tempo real) músicas que combinem com o tema.
 ///
-/// **Como o "tema" casa com uma música**: não existe (nem foi pedido) um
-/// campo de tags/tema livre por música — o casamento é uma busca de texto
-/// (`_normalizeText`, case/acento-insensível, mesmo helper duplicado de
-/// outras telas desta base) contra nome, cantor/banda e o rótulo da
-/// classificação (`PraiseSongClassification.label` — "Chamada a adoração",
-/// "Celebração", "Adoração", "Avulso"). Isso já cobre o caso mais comum na
-/// prática (digitar "adoração" e achar as músicas classificadas como tal),
-/// mas não é uma busca semântica de verdade.
+/// **Como o "tema" casa com uma música** (revisado na sessão seguinte,
+/// pedido do usuário): a busca de texto (`_normalizeText`, case/acento-
+/// insensível, mesmo helper duplicado de outras telas desta base) agora vai
+/// contra **nome e letra** (`PraiseSong.lyrics`), não mais cantor/banda ou o
+/// rótulo da classificação — classificação e solista viraram filtros
+/// próprios (dropdowns "Todas"/"Todos" por padrão) que, quando selecionados,
+/// **restringem** o resultado da busca por tema (AND, não OR). Os filtros
+/// também funcionam sozinhos, sem tema digitado, pra navegar o catálogo por
+/// classificação/solista.
 ///
 /// Cada resultado mostra nome, cantor/banda, classificação, solista(s) e mês
 /// referência, com um botão "+" que adiciona a música ao repertório sendo
@@ -38,6 +39,8 @@ class PraiseSuggestionsPage extends ConsumerStatefulWidget {
 class _PraiseSuggestionsPageState extends ConsumerState<PraiseSuggestionsPage> {
   final _themeController = TextEditingController();
   String _query = '';
+  PraiseSongClassification? _filterClassification;
+  String? _filterSoloist;
   final Set<String> _added = {};
 
   @override
@@ -50,14 +53,24 @@ class _PraiseSuggestionsPageState extends ConsumerState<PraiseSuggestionsPage> {
   Widget build(BuildContext context) {
     final songsAsync = ref.watch(praiseSongsProvider);
     final songs = songsAsync.asData?.value ?? const [];
+    final soloistOptions = songs.expand((s) => s.soloists).toSet().toList()..sort();
     final query = _normalizeText(_query);
-    final results = query.isEmpty
+    final hasCriteria =
+        query.isNotEmpty || _filterClassification != null || _filterSoloist != null;
+    final results = !hasCriteria
         ? const <PraiseSong>[]
         : songs.where((s) {
-            final haystack = _normalizeText(
-              '${s.name} ${s.artist} ${s.classification.label}',
-            );
-            return haystack.contains(query);
+            if (_filterClassification != null && s.classification != _filterClassification) {
+              return false;
+            }
+            if (_filterSoloist != null && !s.soloists.contains(_filterSoloist)) {
+              return false;
+            }
+            if (query.isNotEmpty) {
+              final haystack = _normalizeText('${s.name} ${s.lyrics}');
+              if (!_matchesAllWords(haystack, query)) return false;
+            }
+            return true;
           }).toList();
 
     return Scaffold(
@@ -71,42 +84,93 @@ class _PraiseSuggestionsPageState extends ConsumerState<PraiseSuggestionsPage> {
             const ScreenTitle('Sugestões por Tema'),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _themeController,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Tema',
-                        hintText: 'Ex.: adoração, natal, batismo...',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _themeController,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            labelText: 'Tema',
+                            hintText: 'Ex.: adoração, natal, batismo...',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (value) => setState(() => _query = value),
+                        ),
                       ),
-                      onSubmitted: (value) => setState(() => _query = value),
-                    ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => setState(() => _query = _themeController.text),
+                        child: const Text('Buscar'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () => setState(() => _query = _themeController.text),
-                    child: const Text('Buscar'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<PraiseSongClassification>(
+                          initialValue: _filterClassification,
+                          isExpanded: true,
+                          dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          decoration: const InputDecoration(
+                            labelText: 'Classificação',
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('Todas')),
+                            for (final c in PraiseSongClassification.values)
+                              DropdownMenuItem(value: c, child: Text(c.label)),
+                          ],
+                          onChanged: (value) => setState(() => _filterClassification = value),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _filterSoloist,
+                          isExpanded: true,
+                          dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          decoration: const InputDecoration(labelText: 'Solista', isDense: true),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('Todos')),
+                            for (final s in soloistOptions)
+                              DropdownMenuItem(value: s, child: Text(s)),
+                          ],
+                          onChanged: (value) => setState(() => _filterSoloist = value),
+                        ),
+                      ),
+                      if (_filterClassification != null || _filterSoloist != null)
+                        IconButton(
+                          icon: const Icon(Icons.filter_alt_off_outlined),
+                          tooltip: 'Limpar filtros',
+                          onPressed: () => setState(() {
+                            _filterClassification = null;
+                            _filterSoloist = null;
+                          }),
+                        ),
+                    ],
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: query.isEmpty
+              child: !hasCriteria
                   ? Center(
                       child: Text(
-                        'Digite um tema e toque em Buscar.',
+                        'Digite um tema ou selecione um filtro e toque em Buscar.',
                         style: TextStyle(color: context.textSecondary),
+                        textAlign: TextAlign.center,
                       ),
                     )
                   : results.isEmpty
                   ? Center(
                       child: Text(
-                        'Nenhuma música encontrada para esse tema.',
+                        'Nenhuma música encontrada para esse tema/filtro.',
                         style: TextStyle(color: context.textSecondary),
                       ),
                     )
@@ -165,4 +229,13 @@ String _normalizeText(String value) {
     result = result.replaceAll(_diacritics[i], _plainLetters[i]);
   }
   return result;
+}
+
+/// Mesma lógica de `_matchesAllWords` em `praise_ministry_page.dart`: mais
+/// de uma palavra no Tema (ex.: "bondade deus") precisa achar "Bondade de
+/// Deus" mesmo sem bater a frase exata — cada palavra precisa aparecer em
+/// [normalizedHaystack], em qualquer ordem/posição.
+bool _matchesAllWords(String normalizedHaystack, String normalizedQuery) {
+  final words = normalizedQuery.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+  return words.every(normalizedHaystack.contains);
 }

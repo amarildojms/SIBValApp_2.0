@@ -160,13 +160,14 @@ class EventsPage extends ConsumerWidget {
             );
           }
 
-          final featured = filtered.first;
+          final ordered = _orderForDisplay(filtered);
+          final featured = ordered.first;
           final rest = tab == EventsTab.pontual
-              ? filtered
+              ? ordered
                     .skip(1)
                     .where((event) => _matchesFilter(event, filter))
                     .toList()
-              : filtered.skip(1).toList();
+              : ordered.skip(1).toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -310,6 +311,36 @@ class EventsPage extends ConsumerWidget {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Reordena [events] (já vêm ordenados por `dateTimeMillis` ascendente da
+  /// query) aplicando a regra pedida pelo usuário (02/09/2026): quando dois
+  /// eventos caem no mesmo dia, o que começa mais tarde "assume o topo" —
+  /// passa a vir antes do outro — a partir de 6 horas antes do seu próprio
+  /// horário de início. Fora dessa janela (ou em dias diferentes), a ordem
+  /// cronológica normal (mais próximo primeiro) prevalece. Afeta tanto o
+  /// card de destaque (sempre `ordered.first`) quanto a posição dentro de
+  /// "Próximos Eventos".
+  List<Event> _orderForDisplay(List<Event> events) {
+    final ordered = [...events];
+    ordered.sort(_compareForDisplay);
+    return ordered;
+  }
+
+  int _compareForDisplay(Event a, Event b) {
+    final aDate = DateTime.fromMillisecondsSinceEpoch(a.dateTimeMillis);
+    final bDate = DateTime.fromMillisecondsSinceEpoch(b.dateTimeMillis);
+    if (!_isSameDay(aDate, bDate)) {
+      return a.dateTimeMillis.compareTo(b.dateTimeMillis);
+    }
+    final later = a.dateTimeMillis >= b.dateTimeMillis ? a : b;
+    final promotionThresholdMillis =
+        later.dateTimeMillis - const Duration(hours: 6).inMilliseconds;
+    final promoted = DateTime.now().millisecondsSinceEpoch >= promotionThresholdMillis;
+    if (promoted) {
+      return identical(a, later) ? -1 : 1;
+    }
+    return a.dateTimeMillis.compareTo(b.dateTimeMillis);
+  }
 
   bool _isSameWeek(DateTime date, DateTime reference) {
     final weekStart = _startOfWeek(reference);

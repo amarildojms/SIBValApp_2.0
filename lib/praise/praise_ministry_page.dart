@@ -164,9 +164,11 @@ class _PraiseMenuButton extends StatelessWidget {
 /// particiona por mês — ver doc comment de `PraiseSong`.
 ///
 /// Filtro (02/09/2026, pedido do usuário — corrigido nesta rodada: mora
-/// aqui, no Repertório Mensal, não no Semanal) por classificação, solista e
-/// um campo de texto que busca em nome **e letra** (`PraiseSong.lyrics`) da
-/// música.
+/// aqui, no Repertório Mensal, não no Semanal) por classificação, solista,
+/// período (mês/ano do "Mês referência") e um campo de texto que busca em
+/// nome **e letra** (`PraiseSong.lyrics`) da música — reorganizado numa
+/// rodada seguinte pra um botão "Filtro" que abre essas opções num bottom
+/// sheet, em vez de ficar tudo sempre visível na tela.
 class _MonthlyRepertoireTab extends ConsumerStatefulWidget {
   const _MonthlyRepertoireTab();
 
@@ -178,9 +180,25 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
   PraiseSongClassification? _filterClassification;
   String? _filterSoloist;
   String _filterQuery = '';
+  int? _filterMonth;
+  int? _filterYear;
 
   bool get _hasFilter =>
-      _filterClassification != null || _filterSoloist != null || _filterQuery.isNotEmpty;
+      _filterClassification != null ||
+      _filterSoloist != null ||
+      _filterQuery.isNotEmpty ||
+      (_filterMonth != null && _filterYear != null);
+
+  String get _filterSummary {
+    final parts = <String>[
+      if (_filterQuery.isNotEmpty) '"$_filterQuery"',
+      if (_filterClassification != null) _filterClassification!.label,
+      if (_filterSoloist != null) _filterSoloist!,
+      if (_filterMonth != null && _filterYear != null)
+        '${praiseMonthNames[_filterMonth! - 1]} de $_filterYear',
+    ];
+    return parts.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -207,6 +225,9 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
           }
           final soloistOptions = allSongs.expand((s) => s.soloists).toSet().toList()..sort();
           final query = _normalizePraiseText(_filterQuery);
+          final periodKey = (_filterMonth != null && _filterYear != null)
+              ? '$_filterYear-${_filterMonth!.toString().padLeft(2, '0')}'
+              : null;
           final songs = allSongs.where((song) {
             if (_filterClassification != null && song.classification != _filterClassification) {
               return false;
@@ -214,9 +235,12 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
             if (_filterSoloist != null && !song.soloists.contains(_filterSoloist)) {
               return false;
             }
+            if (periodKey != null && song.referenceMonthKey != periodKey) {
+              return false;
+            }
             if (query.isNotEmpty) {
               final haystack = _normalizePraiseText('${song.name} ${song.lyrics}');
-              if (!haystack.contains(query)) return false;
+              if (!_matchesAllWords(haystack, query)) return false;
             }
             return true;
           }).toList();
@@ -224,73 +248,41 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<PraiseSongClassification>(
-                            initialValue: _filterClassification,
-                            isExpanded: true,
-                            dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            decoration: const InputDecoration(
-                              labelText: 'Classificação',
-                              isDense: true,
-                            ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('Todas')),
-                              for (final c in PraiseSongClassification.values)
-                                DropdownMenuItem(value: c, child: Text(c.label)),
-                            ],
-                            onChanged: (value) => setState(() => _filterClassification = value),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _filterSoloist,
-                            isExpanded: true,
-                            dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            decoration: const InputDecoration(
-                              labelText: 'Solista',
-                              isDense: true,
-                            ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('Todos')),
-                              for (final s in soloistOptions)
-                                DropdownMenuItem(value: s, child: Text(s)),
-                            ],
-                            onChanged: (value) => setState(() => _filterSoloist = value),
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: Text(
+                        _hasFilter ? _filterSummary : 'Nenhum filtro aplicado',
+                        style: TextStyle(color: context.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              labelText: 'Buscar por nome ou letra',
-                              prefixIcon: Icon(Icons.search),
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (value) => setState(() => _filterQuery = value),
-                          ),
+                    TextButton.icon(
+                      onPressed: () => _showFilterSheet(context, soloistOptions),
+                      icon: Icon(
+                        Icons.filter_alt_outlined,
+                        color: _hasFilter ? SibValColors.goldAccent : context.textPrimary,
+                      ),
+                      label: Text(
+                        'Filtro',
+                        style: TextStyle(
+                          color: _hasFilter ? SibValColors.goldAccent : context.textPrimary,
                         ),
-                        if (_hasFilter)
-                          IconButton(
-                            icon: const Icon(Icons.filter_alt_off_outlined),
-                            tooltip: 'Limpar filtro',
-                            onPressed: () => setState(() {
-                              _filterClassification = null;
-                              _filterSoloist = null;
-                              _filterQuery = '';
-                            }),
-                          ),
-                      ],
+                      ),
                     ),
+                    if (_hasFilter)
+                      IconButton(
+                        icon: const Icon(Icons.filter_alt_off_outlined),
+                        tooltip: 'Limpar filtro',
+                        onPressed: () => setState(() {
+                          _filterClassification = null;
+                          _filterSoloist = null;
+                          _filterQuery = '';
+                          _filterMonth = null;
+                          _filterYear = null;
+                        }),
+                      ),
                   ],
                 ),
               ),
@@ -353,11 +345,194 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
           leading: const Icon(Icons.folder_outlined),
           title: Text(praiseReferenceMonthLabel(key)),
           subtitle: Text('${groupSongs.length} música(s)'),
-          // Fechadas por padrão (03/09/2026, pedido do usuário).
-          initiallyExpanded: false,
+          // Abertas por padrão de novo (02/09/2026 sessão seguinte, pedido
+          // do usuário — reverte o "fechadas por padrão" de 03/09/2026).
+          initiallyExpanded: true,
           children: [for (final song in groupSongs) tileFor(song)],
         );
       },
+    );
+  }
+
+  /// Bottom sheet com as opções de filtro (texto, classificação, solista,
+  /// período mês/ano) — separado do botão "Filtro" pra não ocupar espaço
+  /// permanente na tela. Estado só é aplicado ao próprio `_MonthlyRepertoireTab`
+  /// ao tocar "Aplicar"; "Limpar filtro" zera tudo direto.
+  void _showFilterSheet(BuildContext context, List<String> soloistOptions) {
+    var tempQuery = _filterQuery;
+    var tempClassification = _filterClassification;
+    var tempSoloist = _filterSoloist;
+    var tempMonth = _filterMonth;
+    var tempYear = _filterYear;
+    // Sem `.dispose()` deste controller de propósito — mesmo motivo já
+    // documentado em `_showSongDialog` (bug real "'_dependents.isEmpty': is
+    // not true", 03/09/2026): o `TextField` que usa este controller ainda
+    // está montado durante a animação de fechamento do bottom sheet quando
+    // `.whenComplete()`/o callback de Aplicar/Limpar rodaria o dispose,
+    // derrubando o app. Deixa o GC coletar, mesmo padrão de
+    // `nameController`/`artistController` nesta mesma tela.
+    final queryController = TextEditingController(text: tempQuery);
+    final now = DateTime.now();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          // Sem isso, "Aplicar"/"Limpar filtro" ficavam embaixo da barra de
+          // navegação do sistema (3 botões) — invisíveis e, pior, o toque
+          // caía na própria barra do Android em vez de chegar no app
+          // (confirmado via `dumpsys window`: a barra ocupa uma faixa fixa
+          // no fim da tela que intercepta o toque antes do Flutter,
+          // independente de onde o widget "pensa" que está desenhado).
+          bottom: true,
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Filtrar músicas',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: context.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: queryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Buscar por nome ou letra',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => tempQuery = value,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<PraiseSongClassification>(
+                  initialValue: tempClassification,
+                  isExpanded: true,
+                  dropdownColor: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                  decoration: const InputDecoration(labelText: 'Classificação', isDense: true),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Todas')),
+                    for (final c in PraiseSongClassification.values)
+                      DropdownMenuItem(value: c, child: Text(c.label)),
+                  ],
+                  onChanged: (value) => setSheetState(() => tempClassification = value),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: tempSoloist,
+                  isExpanded: true,
+                  dropdownColor: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                  decoration: const InputDecoration(labelText: 'Solista', isDense: true),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Todos')),
+                    for (final s in soloistOptions) DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  onChanged: (value) => setSheetState(() => tempSoloist = value),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Período (mês/ano)',
+                  style: TextStyle(
+                    color: context.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: DropdownButtonFormField<int>(
+                        initialValue: tempMonth,
+                        isExpanded: true,
+                        dropdownColor: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                        decoration: const InputDecoration(labelText: 'Mês', isDense: true),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Todos')),
+                          for (var m = 1; m <= 12; m++)
+                            DropdownMenuItem(value: m, child: Text(praiseMonthNames[m - 1])),
+                        ],
+                        onChanged: (value) => setSheetState(() {
+                          tempMonth = value;
+                          if (value != null) tempYear ??= now.year;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<int>(
+                        initialValue: tempYear,
+                        isExpanded: true,
+                        dropdownColor: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                        decoration: const InputDecoration(labelText: 'Ano', isDense: true),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Todos')),
+                          for (var y = now.year - 2; y <= now.year + 2; y++)
+                            DropdownMenuItem(value: y, child: Text('$y')),
+                        ],
+                        onChanged: (value) => setSheetState(() => tempYear = value),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          setState(() {
+                            _filterQuery = '';
+                            _filterClassification = null;
+                            _filterSoloist = null;
+                            _filterMonth = null;
+                            _filterYear = null;
+                          });
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('Limpar filtro'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _filterQuery = tempQuery;
+                            _filterClassification = tempClassification;
+                            _filterSoloist = tempSoloist;
+                            _filterMonth = tempMonth;
+                            _filterYear = tempYear;
+                          });
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('Aplicar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        ),
+      ),
     );
   }
 
@@ -365,9 +540,11 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
     final nameController = TextEditingController(text: song?.name ?? '');
     final artistController = TextEditingController(text: song?.artist ?? '');
     var classification = song?.classification ?? PraiseSongClassification.avulso;
-    final soloistControllers = (song?.soloists.isEmpty ?? true)
-        ? [TextEditingController()]
-        : song!.soloists.map((s) => TextEditingController(text: s)).toList();
+    // Seleção (não mais texto livre) restrita a quem tem o papel Louvor —
+    // ver `_SoloistDropdown` (03/09/2026, pedido do usuário).
+    final soloistSelections = (song?.soloists.isEmpty ?? true)
+        ? <String?>[null]
+        : List<String?>.of(song!.soloists);
     final lyricsController = TextEditingController(text: song?.lyrics ?? '');
     // Mês referência — mês/ano (02/09/2026, pedido do usuário). Sem seletor
     // de dia: só interessa em que mês a música entrou/foi usada.
@@ -382,10 +559,69 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
       }
     }
 
+    // Aviso de "sair sem salvar?" ao voltar (03/09/2026, pedido do usuário)
+    // — mesmo padrão de `PopScope`/`_dirty` já usado em telas de formulário
+    // desta base (`introduction_page.dart`, `service_order_form_page.dart`),
+    // adaptado pra um diálogo: compara o estado atual contra o snapshot de
+    // quando o diálogo abriu, em vez de uma flag `_dirty` à parte — mais
+    // simples aqui porque não há valor padrão "pré-preenchido" que já
+    // contaria como alteração (diferente da Ordem de Culto).
+    final initialName = nameController.text;
+    final initialArtist = artistController.text;
+    final initialClassification = classification;
+    final initialSoloists = List<String?>.of(soloistSelections);
+    final initialRefMonth = refMonth;
+    final initialRefYear = refYear;
+    final initialLyrics = lyricsController.text;
+
+    bool soloistsChanged() {
+      if (soloistSelections.length != initialSoloists.length) return true;
+      for (var i = 0; i < soloistSelections.length; i++) {
+        if (soloistSelections[i] != initialSoloists[i]) return true;
+      }
+      return false;
+    }
+
+    bool hasUnsavedChanges() =>
+        nameController.text != initialName ||
+        artistController.text != initialArtist ||
+        classification != initialClassification ||
+        soloistsChanged() ||
+        refMonth != initialRefMonth ||
+        refYear != initialRefYear ||
+        lyricsController.text != initialLyrics;
+
+    Future<void> confirmDiscardAndPop(BuildContext dialogContext) async {
+      final discard = await showDialog<bool>(
+        context: dialogContext,
+        builder: (confirmContext) => AlertDialog(
+          title: const Text('Sair sem salvar?'),
+          content: const Text('Os dados preenchidos ainda não foram salvos.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(confirmContext).pop(false),
+              child: const Text('Continuar preenchendo'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(confirmContext).pop(true),
+              child: const Text('Sair'),
+            ),
+          ],
+        ),
+      );
+      if (discard == true && dialogContext.mounted) Navigator.of(dialogContext).pop();
+    }
+
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
+        builder: (dialogContext, setDialogState) => PopScope(
+          canPop: !hasUnsavedChanges(),
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            confirmDiscardAndPop(dialogContext);
+          },
+          child: AlertDialog(
           title: Text(song == null ? 'Adicionar música' : 'Editar música'),
           content: SizedBox(
             width: double.maxFinite,
@@ -399,12 +635,17 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                     autofocus: true,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: const InputDecoration(labelText: 'Nome da música'),
+                    // Sem isso, `canPop` do `PopScope` ficava preso no valor
+                    // do primeiro build — mesmo bug já documentado em
+                    // `introduction_page.dart` (03/09/2026).
+                    onChanged: (_) => setDialogState(() {}),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: artistController,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Cantor/Banda'),
+                    onChanged: (_) => setDialogState(() {}),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<PraiseSongClassification>(
@@ -430,30 +671,23 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  for (var i = 0; i < soloistControllers.length; i++)
+                  for (var i = 0; i < soloistSelections.length; i++)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _SoloistField(controller: soloistControllers[i])),
+                          Expanded(
+                            child: _SoloistDropdown(
+                              value: soloistSelections[i],
+                              onChanged: (value) =>
+                                  setDialogState(() => soloistSelections[i] = value),
+                            ),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 18),
-                            // Sem `.dispose()` aqui de propósito — o campo
-                            // (`_SoloistField`) ainda está montado no
-                            // momento deste callback (a remoção da árvore só
-                            // acontece depois, quando `setDialogState`
-                            // reconstrói); descartar o controller antes
-                            // disso causava
-                            // "'_dependents.isEmpty': is not true" (bug real
-                            // relatado pelo usuário, 03/09/2026) — mesmo
-                            // motivo por trás da correção no Salvar/Cancelar
-                            // abaixo. Mesmo padrão de não descartar
-                            // controller de diálogo ad-hoc já usado em
-                            // `nameController`/`artistController`.
-                            onPressed: soloistControllers.length > 1
-                                ? () =>
-                                      setDialogState(() => soloistControllers.removeAt(i))
+                            onPressed: soloistSelections.length > 1
+                                ? () => setDialogState(() => soloistSelections.removeAt(i))
                                 : null,
                           ),
                         ],
@@ -462,8 +696,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: () =>
-                          setDialogState(() => soloistControllers.add(TextEditingController())),
+                      onPressed: () => setDialogState(() => soloistSelections.add(null)),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Adicionar solista'),
                     ),
@@ -556,6 +789,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
+                    onChanged: (_) => setDialogState(() {}),
                   ),
                 ],
               ),
@@ -563,14 +797,15 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
           ),
           actions: [
             TextButton(
-              // Sem `.dispose()` de `soloistControllers`/`lyricsController`
-              // aqui — mesmo motivo do botão "X" acima: o diálogo (e os
-              // `_SoloistField`s dentro dele) ainda está montado durante a
-              // animação de saída do `Navigator.pop()`, então descartar os
-              // controllers aqui derrubava o app com
-              // "'_dependents.isEmpty': is not true" (bug real relatado pelo
-              // usuário, 03/09/2026). Mesmo padrão de não descartar
-              // controller de diálogo ad-hoc já usado em
+              // Sem `.dispose()` de `lyricsController` aqui — o diálogo ainda
+              // está montado durante a animação de saída do
+              // `Navigator.pop()`, então descartar o controller aqui
+              // derrubava o app com "'_dependents.isEmpty': is not true"
+              // (bug real relatado pelo usuário, 03/09/2026, na época com os
+              // campos de solista — que eram texto livre com
+              // `TextEditingController` próprio; viraram dropdown de
+              // seleção depois e não têm mais esse risco). Mesmo padrão de
+              // não descartar controller de diálogo ad-hoc já usado em
               // `nameController`/`artistController` neste mesmo diálogo.
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancelar'),
@@ -580,10 +815,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
                 final artist = artistController.text.trim();
-                final soloists = soloistControllers
-                    .map((c) => c.text.trim())
-                    .where((s) => s.isNotEmpty)
-                    .toList();
+                final soloists = soloistSelections.whereType<String>().toSet().toList();
                 final referenceMonthKey = (refMonth != null && refYear != null)
                     ? '$refYear-${refMonth!.toString().padLeft(2, '0')}'
                     : null;
@@ -615,6 +847,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
               child: const Text('Salvar'),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -900,97 +1133,41 @@ class _WeeklyRepertoireTab extends ConsumerWidget {
   }
 }
 
-/// Campo "Nome do solista" com sugestão entre quem tem o papel Louvor
-/// (02/09/2026, pedido do usuário) — mesmo padrão embutido-na-árvore de
-/// `_ParticipationField`/`service_order_form_page.dart` (escolhido de
-/// propósito no lugar de `Autocomplete`, que já causou um bug de assert
-/// nesta base — ver `[[feedback_flutter_migration_style]]`). `FocusNode`
-/// próprio (não recebido por fora) porque cada linha de solista é criada e
-/// removida dinamicamente — mais simples que o chamador rastrear uma lista
-/// paralela de `FocusNode`s.
-class _SoloistField extends ConsumerStatefulWidget {
-  const _SoloistField({required this.controller});
+/// Dropdown de solista restrito a quem tem o papel Louvor (03/09/2026,
+/// pedido do usuário: "o solista deve ser selecionado entre os
+/// usuários/membros do app que tenham papel de Louvor") — substitui o campo
+/// de texto livre com sugestões que existia antes (`_SoloistField`, aceitava
+/// qualquer nome digitado, a lista era só uma sugestão). Fonte:
+/// `louvorMemberNamesProvider` (`settings/louvorMembers.names`, mantido por
+/// `manage_users_page.dart` ao marcar/desmarcar o chip "Louvor" — ver doc
+/// comment em `praise_repertoire_repository.dart`). `ConsumerWidget` simples
+/// (sem estado próprio) — o valor selecionado vive no
+/// `soloistSelections[i]` do diálogo chamador, igual aos demais dropdowns
+/// controlados desta tela (Classificação, Mês, Ano).
+class _SoloistDropdown extends ConsumerWidget {
+  const _SoloistDropdown({required this.value, required this.onChanged});
 
-  final TextEditingController controller;
-
-  @override
-  ConsumerState<_SoloistField> createState() => _SoloistFieldState();
-}
-
-class _SoloistFieldState extends ConsumerState<_SoloistField> {
-  final _focusNode = FocusNode();
+  final String? value;
+  final ValueChanged<String?> onChanged;
 
   @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onChanged);
-    _focusNode.addListener(_onChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onChanged);
-    _focusNode.removeListener(_onChanged);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _onChanged() => setState(() {});
-
-  List<String> _matches(List<String> names) {
-    final query = _normalizePraiseText(widget.controller.text);
-    if (query.isEmpty) return const [];
-    return names.where((name) => _normalizePraiseText(name).contains(query)).take(8).toList();
-  }
-
-  void _select(String name) {
-    widget.controller.text = name;
-    widget.controller.selection = TextSelection.collapsed(offset: name.length);
-    _focusNode.unfocus();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final names = ref.watch(louvorMemberNamesProvider).asData?.value ?? const <String>[];
-    final matches = _focusNode.hasFocus ? _matches(names) : const <String>[];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (matches.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(bottom: 4),
-            constraints: const BoxConstraints(maxHeight: 160),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: matches.length,
-              itemBuilder: (context, index) {
-                final name = matches[index];
-                return ListTile(
-                  dense: true,
-                  title: Text(name, style: TextStyle(color: context.textPrimary)),
-                  onTap: () => _select(name),
-                );
-              },
-            ),
-          ),
-        TextField(
-          controller: widget.controller,
-          focusNode: _focusNode,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            hintText: 'Nome do solista (busca entre quem tem o papel Louvor)',
-            isDense: true,
-          ),
-        ),
-      ],
+    // Um solista já salvo que não está mais na lista (ex.: perdeu o papel
+    // Louvor depois de escalado) continua aparecendo como opção, pra não
+    // sumir um dado já gravado sozinho — só some da lista de escolha se o
+    // dialogo for reaberto sem esse valor pré-selecionado.
+    final options = value != null && !names.contains(value) ? [value!, ...names] : names;
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      decoration: const InputDecoration(
+        hintText: 'Selecione um solista',
+        isDense: true,
+      ),
+      items: [for (final name in options) DropdownMenuItem(value: name, child: Text(name))],
+      onChanged: onChanged,
     );
   }
 }
@@ -1006,4 +1183,15 @@ String _normalizePraiseText(String value) {
     result = result.replaceAll(_praiseDiacritics[i], _praisePlainLetters[i]);
   }
   return result;
+}
+
+/// Uma busca de mais de uma palavra (ex.: "bondade deus") deve achar
+/// "Bondade de Deus" mesmo sem bater a frase exata — [normalizedQuery] (já
+/// passada por [_normalizePraiseText]) é dividida em palavras e cada uma
+/// precisa aparecer em [normalizedHaystack], em qualquer ordem/posição, em
+/// vez de exigir a frase inteira como substring única (03/09/2026, corrige
+/// busca que não achava nada com mais de uma palavra).
+bool _matchesAllWords(String normalizedHaystack, String normalizedQuery) {
+  final words = normalizedQuery.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+  return words.every(normalizedHaystack.contains);
 }

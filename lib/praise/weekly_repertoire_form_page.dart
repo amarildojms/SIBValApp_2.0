@@ -89,6 +89,19 @@ class _WeeklyRepertoireFormPageState
   final List<TextEditingController> _linkControllers = [];
   bool _saving = false;
 
+  /// Aviso de "sair sem salvar?" ao voltar (03/09/2026, pedido do usuário)
+  /// — mesmo padrão de `PopScope`/`_dirty` já usado em
+  /// `service_order_form_page.dart`. Flag explícita (não um cálculo "algum
+  /// campo preenchido"), porque o formulário já nasce com valores padrão
+  /// (data = próximo domingo, "Louvor 1" no momento de cada música) que não
+  /// devem contar como alteração — só vira `true` quando o usuário de fato
+  /// interage com algum campo.
+  bool _dirty = false;
+
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
   bool get _isEditing => widget.editing != null;
 
   @override
@@ -124,32 +137,74 @@ class _WeeklyRepertoireFormPageState
     super.dispose();
   }
 
-  void _addAssignment() => setState(() => _assignments.add(_AssignmentDraft()));
+  void _addAssignment() => setState(() {
+    _dirty = true;
+    _assignments.add(_AssignmentDraft());
+  });
 
-  /// Chamado pelo botão "+" de `PraiseSuggestionsPage` — acrescenta a música
-  /// escolhida como uma nova linha, sem fechar a tela de sugestões
-  /// (02/09/2026, pedido do usuário: "uma opção de adicionar cada música ao
-  /// repertório semanal").
+  /// Chamado pelo botão "+" de `PraiseSuggestionsPage` — sem fechar a tela
+  /// de sugestões (02/09/2026, pedido do usuário: "uma opção de adicionar
+  /// cada música ao repertório semanal"). Revisado (03/09/2026, pedido do
+  /// usuário): se o **último** campo de música da lista ainda estiver vazio
+  /// (nenhuma música selecionada), a primeira sugestão escolhida preenche
+  /// esse campo em vez de abrir um novo; só a partir da segunda sugestão
+  /// escolhida é que novos campos são acrescentados abaixo. Evita deixar um
+  /// campo "Selecione" vazio esquecido no meio/fim da lista quando o
+  /// dirigente monta o repertório inteiro via Sugestões.
   void _addAssignmentFromSong(PraiseSong song) {
     setState(() {
-      _assignments.add(
-        _AssignmentDraft(songId: song.id, songName: song.name, songArtist: song.artist),
-      );
+      _dirty = true;
+      final last = _assignments.isEmpty ? null : _assignments.last;
+      if (last != null && last.songId == null) {
+        last.songId = song.id;
+        last.songName = song.name;
+        last.songArtist = song.artist;
+      } else {
+        _assignments.add(
+          _AssignmentDraft(songId: song.id, songName: song.name, songArtist: song.artist),
+        );
+      }
     });
   }
 
   void _removeAssignment(int index) {
     final draft = _assignments.removeAt(index);
     draft.dispose();
-    setState(() {});
+    setState(() => _dirty = true);
   }
 
-  void _addLink() => setState(() => _linkControllers.add(TextEditingController()));
+  void _addLink() => setState(() {
+    _dirty = true;
+    _linkControllers.add(TextEditingController());
+  });
 
   void _removeLink(int index) {
     final controller = _linkControllers.removeAt(index);
     controller.dispose();
-    setState(() {});
+    setState(() => _dirty = true);
+  }
+
+  Future<void> _confirmDiscardAndPop() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair sem salvar?'),
+        content: const Text(
+          'Os dados preenchidos no repertório ainda não foram salvos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Continuar preenchendo'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.of(context).pop();
   }
 
   Future<void> _save() async {
@@ -187,7 +242,13 @@ class _WeeklyRepertoireFormPageState
     final songsAsync = ref.watch(praiseSongsProvider);
     final songs = songsAsync.asData?.value ?? const [];
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _confirmDiscardAndPop();
+      },
+      child: Scaffold(
       // Excluir saiu daqui — agora é só via toque longo na lista
       // (`_WeeklyRepertoireTab`, 28/08/2026, pedido do usuário: "Tirar
       // lixeira do editar repertório", editar/excluir/copiar via toque
@@ -218,7 +279,10 @@ class _WeeklyRepertoireFormPageState
                       firstDate: DateTime(DateTime.now().year - 1),
                       lastDate: DateTime(DateTime.now().year + 3),
                       decoration: const InputDecoration(border: OutlineInputBorder()),
-                      onChanged: (date) => setState(() => _weekDate = date),
+                      onChanged: (date) => setState(() {
+                        _dirty = true;
+                        _weekDate = date;
+                      }),
                     ),
                   const SizedBox(height: 16),
                   _label(context, 'Músicas escaladas'),
@@ -230,7 +294,7 @@ class _WeeklyRepertoireFormPageState
                       child: _AssignmentRow(
                         draft: _assignments[i],
                         songs: songs,
-                        onChanged: () => setState(() {}),
+                        onChanged: () => setState(() => _dirty = true),
                         onRemove: _assignments.length > 1
                             ? () => _removeAssignment(i)
                             : null,
@@ -277,6 +341,7 @@ class _WeeklyRepertoireFormPageState
                                   vertical: 12,
                                 ),
                               ),
+                              onChanged: (_) => _markDirty(),
                             ),
                           ),
                           IconButton(
@@ -316,6 +381,7 @@ class _WeeklyRepertoireFormPageState
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -499,6 +565,7 @@ class _AssignmentRow extends StatelessWidget {
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               ),
+              onChanged: (_) => onChanged(),
             ),
           ],
         ],

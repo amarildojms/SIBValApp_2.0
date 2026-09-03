@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../models/app_user.dart';
 import '../models/praise_repertoire.dart';
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
@@ -137,6 +138,34 @@ class PraiseLouvorMembersRepository {
     return _doc.set({
       'names': {uid: isMember ? name : FieldValue.delete()},
     }, SetOptions(merge: true));
+  }
+
+  /// Reconcilia o espelho inteiro contra [users] (03/09/2026, pedido do
+  /// usuário: "só está aparecendo um solista, temos mais de 4 com o papel
+  /// Louvor") — sem isso, só quem tivesse o chip "Louvor" marcado/desmarcado
+  /// de novo *depois* que o espelho passou a existir entrava na lista (ver
+  /// `setMember`, chamado só no `onSelected` do chip); quem já tinha o papel
+  /// antes disso nunca era escrito em `settings/louvorMembers`. Chamada uma
+  /// vez por visita a `ManageUsersPage` (só admin chega lá, que já tem
+  /// permissão de escrita em `settings/*`) — compara contra o documento
+  /// atual e só grava o que de fato mudou (adiciona quem tem o papel e não
+  /// está lá, atualiza nome se mudou, remove quem não tem mais o papel mas
+  /// ainda está no espelho), evitando um `set` redundante a cada chamada.
+  Future<void> backfillFromUsers(List<AppUser> users) async {
+    final snapshot = await _doc.get();
+    final current = (snapshot.data()?['names'] as Map<String, dynamic>?) ?? const {};
+    final updates = <String, dynamic>{};
+    for (final user in users) {
+      final shouldBeMember = user.roles.contains(UserRole.louvor);
+      final currentName = current[user.uid];
+      if (shouldBeMember) {
+        if (currentName != user.name) updates[user.uid] = user.name;
+      } else if (currentName != null) {
+        updates[user.uid] = FieldValue.delete();
+      }
+    }
+    if (updates.isEmpty) return;
+    await _doc.set({'names': updates}, SetOptions(merge: true));
   }
 }
 
