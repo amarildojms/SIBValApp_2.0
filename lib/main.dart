@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 
 import 'firebase_options.dart';
 import 'main_shell.dart';
@@ -46,6 +47,7 @@ class SibValApp extends ConsumerWidget {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+        SfGlobalLocalizations.delegate,
       ],
       home: const MainShell(),
     );

@@ -1291,7 +1291,7 @@ packages:
     source: hosted
     version: "34.2.6"
   syncfusion_localizations:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: syncfusion_localizations
       sha256: "4e9868ce6a5c47f0a9713b9458c0d73db48b0a95b58d734c41d1c701c5dc97b9"

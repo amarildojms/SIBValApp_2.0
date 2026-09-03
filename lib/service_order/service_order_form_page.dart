@@ -805,7 +805,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                             child: OutlinedButton.icon(
                               onPressed: _addBibleReading,
                               icon: const Icon(Icons.add, size: 18),
-                              label: const Text('+ Texto bíblico'),
+                              label: const Text('Texto bíblico'),
                             ),
                           ),
                         ]),
@@ -922,7 +922,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                               child: OutlinedButton.icon(
                                 onPressed: _addMissionMotto,
                                 icon: const Icon(Icons.add, size: 18),
-                                label: const Text('+ Texto bíblico'),
+                                label: const Text('Texto bíblico'),
                               ),
                             ),
                           ],
@@ -966,7 +966,7 @@ class _ServiceOrderFormPageState extends ConsumerState<ServiceOrderFormPage> {
                             child: OutlinedButton.icon(
                               onPressed: _addTithesBible,
                               icon: const Icon(Icons.add, size: 18),
-                              label: const Text('+ Texto bíblico'),
+                              label: const Text('Texto bíblico'),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1831,7 +1831,7 @@ class _MultiBibleReferenceDialogState
                 child: OutlinedButton.icon(
                   onPressed: _add,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('+ Texto bíblico'),
+                  label: const Text('Texto bíblico'),
                 ),
               ),
             ],

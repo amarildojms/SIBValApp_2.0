@@ -3250,6 +3250,130 @@ continua falhando em produção) e `functions` (`onAgendaEntryCreatedNotify`,
 `sendAgendaEntryReminders` novas). Precisa de um pedido explícito separado
 pra cada um, mesma cautela de sempre.
 
+**Agenda dos ministérios — layout inspirado no Outlook mobile (03/09/2026,
+pedido do usuário, com prints de referência em `C:\temp`):** troca do
+`SegmentedButton` Dia/Semana/Mês por um menu de visualização (ícone no lugar
+do antigo segmented control) com quatro opções — Agenda/Dia/3 Dias/Mês
+(`_AgendaViewMode`, `agenda_page.dart`) — e uma faixa de semana navegável por
+toque (`_WeekStrip`, letras D S T Q Q S S + `PageView` "infinito" por
+semana, só na visualização Agenda) acima do `SfCalendar`, mesmo motor de
+antes. Mapeamento pro Syncfusion: Agenda → `CalendarView.schedule`; Dia →
+`CalendarView.day`; 3 Dias → `CalendarView.day` +
+`TimeSlotViewSettings(numberOfDaysInView: 3)`; Mês → `CalendarView.month`
+(`showAgenda: false`, pra bater com a grade cheia do print de referência, sem
+painel de agenda embaixo). Cabeçalho nativo do `SfCalendar` ocultado
+(`headerHeight: 0`) — o título "Agenda" + o menu de visualização já cobrem
+esse papel; troca de mês/dia continua por gesto de arrastar.
+`ScheduleViewSettings.hideEmptyScheduleWeek: true` evita uma lista infinita
+de faixas semanais vazias ("set. 06-12", "set. 13-19"...) sem fim pro futuro.
+`syncfusion_localizations` (já uma dependência transitiva, promovida a
+direta em `pubspec.yaml`) foi ligada em `main.dart`
+(`SfGlobalLocalizations.delegate`) pra textos nativos do Syncfusion saírem em
+pt-BR ("Sem eventos" no lugar de "No events").
+
+**Bug real encontrado e corrigido na mesma sessão** — trocar de visualização
+atualizava o ícone/rádio do menu, mas o `SfCalendar` continuava preso na
+visualização anterior. Causa: `CalendarController` guarda seu próprio `view`
+internamente e só usa `SfCalendar.view` (a prop do widget) pra inicializar
+**uma única vez**, na primeira montagem (`_controller.view ??= widget.view`,
+código-fonte do pacote) — depois disso, mudar `view:` no widget (mesmo com
+`key: ValueKey(_mode)` forçando remontagem completa) não tem efeito nenhum,
+porque o controller já não está mais nulo. Corrigido setando
+`_calendarController.view` explicitamente a cada troca de modo
+(`_setMode`), em vez de confiar só na prop `view:` do widget. Confirmado
+funcionando ao vivo no celular do usuário nas quatro visualizações (mesma
+técnica de dirigir o adb direto, ver `[[feedback_adb_ui_diagnosis]]`).
+
+**Agenda — ajustes da mesma sessão (03/09/2026, pedidos do usuário logo
+após o teste da rodada anterior):**
+
+- **"3 Dias" virou "Semana"** — `_AgendaViewMode.threeDays` renomeado pra
+  `.week` (ícone `Icons.view_week_outlined`), mapeado pra
+  `CalendarView.week` (7 dias, em vez de `CalendarView.day` +
+  `numberOfDaysInView: 3`). Como não há mais nenhum modo com contagem de
+  dias customizada, `TimeSlotViewSettings.numberOfDaysInView` saiu de cena;
+  ganhou no lugar `nonWorkingDays: const []` (Dia/Semana), porque o padrão
+  do pacote sombreia sábado/domingo como "não úteis" — o oposto do que faz
+  sentido numa agenda de igreja, onde o fim de semana costuma ser o pico de
+  atividade.
+- **Mês/ano em exibição no cabeçalho** — abaixo do título "Agenda" (mesmo
+  card, ainda sem tocar em `ScreenTitle` compartilhado — o título dessa
+  tela virou markup próprio só pra caber a segunda linha), um texto tipo
+  "Setembro 2026" que acompanha a navegação: atualizado tanto ao tocar um
+  dia na faixa de semana quanto por gesto de arrastar entre
+  dias/semanas/meses, via `SfCalendar.onViewChanged`
+  (`details.visibleDates`, pega a data do meio do intervalo visível pra
+  decidir o mês — cobre inclusive a Agenda, cujo "intervalo visível" é o
+  que está no topo da lista rolável no momento).
+- **Bypass do admin pra CRIAR restaurado** — a 1ª versão desta feature
+  (rodada anterior, mesmo dia) tinha excluído admin da criação de
+  compromisso de propósito ("cada líder só pode marcar horário pros
+  próprios ministérios", pedido explícito de então). Usuário testou como
+  admin sem liderar nenhum ministério e não viu o botão de inserir —
+  perguntado (`AskUserQuestion`), confirmou que quer o bypass de volta:
+  `creatableIds` passou a ser `isAdmin ? todos os ministérios : ledIds`,
+  igual a `manageableIds` (que já tinha esse bypass desde a 1ª versão, só
+  pra editar/excluir). `AgendaEntryFormPage` não precisou de nenhuma
+  mudança — já aceitava genericamente qualquer conjunto de ministérios em
+  `manageableMinistryIds`.
+
+**Agenda — ícone do FAB, e bug real de crash ao alternar visualizações
+(03/09/2026, mesma sessão, pedidos do usuário):**
+
+- **Ícone do FAB "novo compromisso"** — trocado de `Icons.add` solto pra um
+  ícone composto (`_NewAgendaEntryIcon`): calendário
+  (`Icons.calendar_today`) com um círculo "+" no canto, mesmo padrão de
+  ícone composto já usado em `main_shell.dart` (`SettingsMailIcon` etc.,
+  dois `Icons` do Material empilhados via `Stack`, sem asset novo). O
+  círculo do "+" usa a própria cor de fundo do FAB
+  (`SibValColors.goldAccent`) — efeito de "recorte" em vez de um badge de
+  cor diferente por cima.
+
+- **Bug real de crash ao alternar Agenda/Dia/Semana/Mês repetidamente e
+  tocar num dia** — reportado pelo usuário, investigado ao vivo no celular
+  dele. A investigação inicial (revisão de código) apontou uma causa errada
+  — suspeitei do `key: ValueKey(_mode)` que eu tinha posto no `SfCalendar`
+  pra forçar remontagem completa a cada troca de modo; removê-lo **não**
+  resolveu (confirmado reproduzindo de novo com o mesmo passo a passo antes
+  de declarar corrigido — ver `[[feedback_adb_ui_diagnosis]]`). A causa real
+  só apareceu rodando com `flutter run` anexado (em vez do fluxo normal
+  `flutter build apk --debug` + `adb install`, que só mostra a tela vermelha
+  sem stack trace) e lendo o stack trace completo: `_onCalendarViewChanged`
+  (callback de `SfCalendar.onViewChanged`, adicionado na rodada anterior pra
+  mostrar o mês em exibição no cabeçalho) chamava `setState` **de forma
+  síncrona** — e o Syncfusion dispara `onViewChanged` de dentro do próprio
+  `initState()` de um widget interno
+  (`_CustomCalendarScrollViewState._updateVisibleDates`), ou seja, em plena
+  fase de build da árvore. Isso derrubava o app com "setState() or
+  markNeedsBuild() called during build", que por sua vez deixava a árvore de
+  elementos inconsistente e gerava a cascata de
+  `Failed assertion: '_elements.contains(element)': is not true` a cada
+  frame seguinte. Corrigido adiando a atualização com
+  `WidgetsBinding.instance.addPostFrameCallback` — o `key: ValueKey(_mode)`
+  continua removido (redundante desde que `_calendarController.view` já é
+  setado explicitamente, ver entrada anterior), mas não foi a causa deste
+  crash. Confirmado resolvido repetindo a mesma sequência de teste (inclusive
+  um teste de estresse de 3 ciclos completos Mês→Dia→Semana→Agenda com toque
+  em dia a cada volta) sem nenhum erro.
+
+**Ordem de Culto — remoção do "+" redundante nos botões "Texto bíblico"
+(03/09/2026, pedido do usuário):** os 4 botões "+ Texto bíblico"
+(`OutlinedButton.icon` de Leitura bíblica, Divisa do Momento Missionário,
+Texto bíblico dos dízimos, e do diálogo de momento adicional com referência
+bíblica — todos em `service_order_form_page.dart`) já tinham
+`icon: Icon(Icons.add)` — o "+" no texto do label era redundante. Virou só
+"Texto bíblico" nos 4 lugares.
+
+**Agenda — régua de horários em formato 24h (03/09/2026, mesma sessão,
+pedido do usuário):** `TimeSlotViewSettings.timeFormat` (visualizações
+Dia/Semana) trocado do padrão do pacote (`'h a'`, ex. "1 AM") pra `'HH:mm'`
+(ex. "01:00") — único lugar do `SfCalendar` que imprimia hora em texto fixo
+fora do padrão 24h já usado no resto do app (o bottom sheet de detalhe do
+compromisso já usava `DateFormat('HH:mm', 'pt_BR')` desde a 1ª versão). As
+visualizações Agenda/Mês e os blocos de compromisso em si não imprimem
+horário como texto solto (só a posição vertical/altura do bloco já
+comunica isso), então não precisaram de ajuste.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

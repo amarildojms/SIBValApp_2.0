@@ -82,6 +82,9 @@ dependencies:
   qr_flutter: ^4.1.0
   diacritic: ^0.1.6
   syncfusion_flutter_calendar: ^34.2.6
+  # Localização pt-BR nativa do Syncfusion (textos como "Sem eventos", "Hoje")
+  # para a Agenda dos ministérios — 03/09/2026.
+  syncfusion_localizations: ^34.2.6
 dev_dependencies:
   flutter_test:
     sdk: flutter
