@@ -99,126 +99,132 @@ class _MuralPageState extends ConsumerState<MuralPage> {
               child: const Icon(Icons.add),
             )
           : null,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const ScreenTitle('Mural'),
-          Expanded(
-            child: postsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => ListView(
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Text(
-                      'Falha ao carregar: $error',
-                      style: TextStyle(color: context.textPrimary),
-                    ),
-                  ),
-                ],
-              ),
-              data: (posts) {
-                // Post de aniversário de MEMBRESIA só vira o banner fixo pra
-                // quem tem targetId == uid logado, e só no próprio dia do
-                // aniversário (isFromToday) — todo mundo mais nem sabe que
-                // ele existe, mesmo a coleção `posts` sendo de leitura
-                // pública (o filtro é só aqui, no cliente; ver
-                // PostType.membershipAnniversary). Nunca entra na lista
-                // comum, curtível/comentável.
-                Post? membershipAnniversaryPost;
-                final feedPosts = <Post>[];
-                for (final post in posts) {
-                  if (post.postType == PostType.membershipAnniversary) {
-                    if (uid != null &&
-                        post.targetId == uid &&
-                        post.isFromToday) {
-                      membershipAnniversaryPost = post;
-                    }
-                    continue;
-                  }
-                  feedPosts.add(post);
-                }
-                feedPosts.sort(_compareFeedPosts);
-
-                return Column(
+      // `SafeArea` no rodapé (03/09/2026, corrige conteúdo escondido atrás
+      // dos botões de navegação do sistema, relatado pelo usuário) — mesmo
+      // padrão já usado no resto do app.
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const ScreenTitle('Mural'),
+            Expanded(
+              child: postsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => ListView(
                   children: [
-                    if (membershipAnniversaryPost != null)
-                      _MembershipAnniversaryBanner(
-                        text: membershipAnniversaryPost.text,
+                    const SizedBox(height: 80),
+                    Center(
+                      child: Text(
+                        'Falha ao carregar: $error',
+                        style: TextStyle(color: context.textPrimary),
                       ),
-                    Expanded(
-                      child: feedPosts.isEmpty
-                          ? ListView(
-                              children: [
-                                const SizedBox(height: 80),
-                                Center(
-                                  child: Text(
-                                    'Nenhuma notícia publicada ainda.',
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ListView.builder(
-                              itemCount: feedPosts.length,
-                              itemBuilder: (context, index) {
-                                final post = feedPosts[index];
-                                final liked =
-                                    uid != null &&
-                                    post.likedBy.contains(uid);
-                                final canEdit =
-                                    post.postType == PostType.manual &&
-                                    (isAdmin ||
-                                        (uid != null &&
-                                            post.authorUid == uid));
-                                return PostCard(
-                                  post: post,
-                                  liked: liked,
-                                  onLikeTap: () async {
-                                    if (uid == null) {
-                                      _showLoginRequired(context);
-                                      return;
-                                    }
-                                    await ref
-                                        .read(postRepositoryProvider)
-                                        .toggleLike(post.id, uid, !liked);
-                                  },
-                                  onCommentTap: () {
-                                    if (uid == null) {
-                                      _showLoginRequired(context);
-                                      return;
-                                    }
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            PostCommentsPage(postId: post.id),
-                                      ),
-                                    );
-                                  },
-                                  onEditTap: canEdit
-                                      ? () => Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                PostFormPage(editing: post),
-                                          ),
-                                        )
-                                      : null,
-                                  onDeleteTap: canEdit
-                                      ? () =>
-                                            _confirmDelete(context, ref, post)
-                                      : null,
-                                );
-                              },
-                            ),
                     ),
                   ],
-                );
-              },
+                ),
+                data: (posts) {
+                  // Post de aniversário de MEMBRESIA só vira o banner fixo pra
+                  // quem tem targetId == uid logado, e só no próprio dia do
+                  // aniversário (isFromToday) — todo mundo mais nem sabe que
+                  // ele existe, mesmo a coleção `posts` sendo de leitura
+                  // pública (o filtro é só aqui, no cliente; ver
+                  // PostType.membershipAnniversary). Nunca entra na lista
+                  // comum, curtível/comentável.
+                  Post? membershipAnniversaryPost;
+                  final feedPosts = <Post>[];
+                  for (final post in posts) {
+                    if (post.postType == PostType.membershipAnniversary) {
+                      if (uid != null &&
+                          post.targetId == uid &&
+                          post.isFromToday) {
+                        membershipAnniversaryPost = post;
+                      }
+                      continue;
+                    }
+                    feedPosts.add(post);
+                  }
+                  feedPosts.sort(_compareFeedPosts);
+
+                  return Column(
+                    children: [
+                      if (membershipAnniversaryPost != null)
+                        _MembershipAnniversaryBanner(
+                          text: membershipAnniversaryPost.text,
+                        ),
+                      Expanded(
+                        child: feedPosts.isEmpty
+                            ? ListView(
+                                children: [
+                                  const SizedBox(height: 80),
+                                  Center(
+                                    child: Text(
+                                      'Nenhuma notícia publicada ainda.',
+                                      style: TextStyle(
+                                        color: context.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView.builder(
+                                itemCount: feedPosts.length,
+                                itemBuilder: (context, index) {
+                                  final post = feedPosts[index];
+                                  final liked =
+                                      uid != null && post.likedBy.contains(uid);
+                                  final canEdit =
+                                      post.postType == PostType.manual &&
+                                      (isAdmin ||
+                                          (uid != null &&
+                                              post.authorUid == uid));
+                                  return PostCard(
+                                    post: post,
+                                    liked: liked,
+                                    onLikeTap: () async {
+                                      if (uid == null) {
+                                        _showLoginRequired(context);
+                                        return;
+                                      }
+                                      await ref
+                                          .read(postRepositoryProvider)
+                                          .toggleLike(post.id, uid, !liked);
+                                    },
+                                    onCommentTap: () {
+                                      if (uid == null) {
+                                        _showLoginRequired(context);
+                                        return;
+                                      }
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              PostCommentsPage(postId: post.id),
+                                        ),
+                                      );
+                                    },
+                                    onEditTap: canEdit
+                                        ? () => Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  PostFormPage(editing: post),
+                                            ),
+                                          )
+                                        : null,
+                                    onDeleteTap: canEdit
+                                        ? () =>
+                                              _confirmDelete(context, ref, post)
+                                        : null,
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -325,7 +331,8 @@ int _feedRank(Post post) {
   if (isEvent && !post.isRecurringEvent && !post.isPastEvent) return 3;
   if (isDevotional && post.isFromToday) return 4;
   if (isEvent && post.isRecurringEvent && !post.isPastEvent) return 5;
-  if ((isEvent && post.isPastEvent) || (isDevotional && !post.isFromToday)) return 7;
+  if ((isEvent && post.isPastEvent) || (isDevotional && !post.isFromToday))
+    return 7;
   return 6;
 }
 

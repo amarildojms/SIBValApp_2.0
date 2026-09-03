@@ -16,15 +16,22 @@ import '../widgets/sibval_app_bar.dart';
 /// tem pelo menos um ministério em [manageableMinistryIds] (líder do
 /// ministério, ou admin — checado por `AgendaPage`). Se [editing] vier
 /// preenchido, edita esse compromisso em vez de criar um novo.
+///
+/// [initialDate] pré-preenche Data (e Início/Término, quando o valor traz
+/// hora de verdade) a partir do que já estava selecionado no calendário ao
+/// tocar em "Novo Compromisso" (03/09/2026, pedido do usuário) — ignorado em
+/// modo edição, onde a data/hora vem sempre do compromisso existente.
 class AgendaEntryFormPage extends ConsumerStatefulWidget {
   const AgendaEntryFormPage({
     super.key,
     required this.manageableMinistryIds,
     this.editing,
+    this.initialDate,
   });
 
   final Set<String> manageableMinistryIds;
   final AgendaEntry? editing;
+  final DateTime? initialDate;
 
   @override
   ConsumerState<AgendaEntryFormPage> createState() =>
@@ -63,8 +70,24 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
       );
       _startTime = TimeOfDay.fromDateTime(editing.startDateTime);
       _endTime = TimeOfDay.fromDateTime(editing.endDateTime);
-    } else if (widget.manageableMinistryIds.length == 1) {
-      _ministryId = widget.manageableMinistryIds.first;
+    } else {
+      if (widget.manageableMinistryIds.length == 1) {
+        _ministryId = widget.manageableMinistryIds.first;
+      }
+      final initial = widget.initialDate;
+      if (initial != null) {
+        _date = DateTime(initial.year, initial.month, initial.day);
+        // Só puxa horário quando a seleção do calendário já trazia hora de
+        // verdade (toque em Dia/Semana) — meia-noite exata é o que o
+        // Syncfusion também usa pra "só a data" (toque em Mês, ou a faixa
+        // de semana da Agenda), então não teria como distinguir das duas
+        // situações; nesse caso o horário fica em branco pro usuário
+        // escolher, como já era antes desta mudança.
+        if (initial.hour != 0 || initial.minute != 0) {
+          _startTime = TimeOfDay(hour: initial.hour, minute: initial.minute);
+          _endTime = TimeOfDay(hour: (initial.hour + 1) % 24, minute: initial.minute);
+        }
+      }
     }
     _titleController.addListener(_markDirty);
     _descriptionController.addListener(_markDirty);

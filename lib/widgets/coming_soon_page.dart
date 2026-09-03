@@ -17,43 +17,50 @@ class ComingSoonPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ScreenTitle(title),
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.construction_outlined,
-                      size: 48,
-                      color: context.textSecondary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Em breve',
-                      style: TextStyle(
-                        color: context.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+      // `SafeArea` no rodapé (03/09/2026, corrige conteúdo escondido atrás
+      // dos botões de navegação do sistema, relatado pelo usuário) — mesmo
+      // padrão já usado no resto do app.
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ScreenTitle(title),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.construction_outlined,
+                        size: 48,
+                        color: context.textSecondary,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Essa funcionalidade ainda está sendo preparada.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: context.textSecondary),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Text(
+                        'Em breve',
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Essa funcionalidade ainda está sendo preparada.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: context.textSecondary),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

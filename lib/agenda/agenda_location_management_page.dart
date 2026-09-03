@@ -24,51 +24,73 @@ class AgendaLocationManagementPage extends ConsumerWidget {
         onPressed: () => _showEditDialog(context, ref),
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const ScreenTitle('Locais da Agenda'),
-          Expanded(
-            child: locationsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(
-                child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+      // `SafeArea` no rodapé (03/09/2026, corrige conteúdo escondido atrás
+      // dos botões de navegação do sistema, relatado pelo usuário) — mesmo
+      // padrão já usado no resto do app.
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const ScreenTitle('Locais da Agenda'),
+            Expanded(
+              child: locationsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(
+                  child: Text(
+                    'Falha ao carregar: $error',
+                    style: TextStyle(color: context.textPrimary),
+                  ),
+                ),
+                data: (locations) => locations.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Nenhum local cadastrado ainda.',
+                          style: TextStyle(color: context.textSecondary),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: locations.length,
+                        itemBuilder: (context, index) {
+                          final location = locations[index];
+                          return ListTile(
+                            leading: const Icon(Icons.place_outlined),
+                            title: Text(location.name),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _showEditDialog(
+                                    context,
+                                    ref,
+                                    existing: location,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () =>
+                                      _confirmDelete(context, ref, location),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
               ),
-              data: (locations) => locations.isEmpty
-                  ? Center(
-                      child: Text('Nenhum local cadastrado ainda.', style: TextStyle(color: context.textSecondary)),
-                    )
-                  : ListView.builder(
-                      itemCount: locations.length,
-                      itemBuilder: (context, index) {
-                        final location = locations[index];
-                        return ListTile(
-                          leading: const Icon(Icons.place_outlined),
-                          title: Text(location.name),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                onPressed: () => _showEditDialog(context, ref, existing: location),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                onPressed: () => _confirmDelete(context, ref, location),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, {AgendaLocation? existing}) {
+  void _showEditDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    AgendaLocation? existing,
+  }) {
     final controller = TextEditingController(text: existing?.name ?? '');
     showDialog<void>(
       context: context,
@@ -81,7 +103,10 @@ class AgendaLocationManagementPage extends ConsumerWidget {
           decoration: const InputDecoration(labelText: 'Nome do local'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
           TextButton(
             onPressed: () async {
               final name = controller.text.trim();
@@ -101,14 +126,21 @@ class AgendaLocationManagementPage extends ConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, AgendaLocation location) {
+  void _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    AgendaLocation location,
+  ) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir local'),
         content: Text('Excluir "${location.name}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
