@@ -27,7 +27,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # lado); o feed de publicações (Mural) saiu do Início e virou uma tela
 # própria dentro de Mais; barra inferior reduzida pra Início/Devocionais/
 # Eventos/Contribua (Mural e Mais saíram dela).
-version: 1.7.2+43
+version: 1.7.2+44
 
 environment:
   sdk: ^3.13.0
