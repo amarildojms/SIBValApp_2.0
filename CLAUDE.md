@@ -3069,6 +3069,187 @@ tocado — lá a regra já era diferente (`initiallyExpanded: keys.length ==
 1`, só a pasta única abre sozinha), contexto de escolher uma música, não de
 navegar a lista.
 
+**Quadro de Avisos + Agenda dos ministérios (03/09/2026, pedidos do usuário,
+sem equivalente no nativo):**
+
+- **Quadro de Avisos** (`lib/models/notice.dart`, `lib/data/notice_repository.dart`,
+  `lib/notices/`) — coleção própria `notices` (não reaproveita mais os posts
+  manuais do Mural). Gerenciado por quem tem `canManagePublications` (papel
+  Publicações ou admin — reaproveitado, decisão confirmada com o usuário via
+  `AskUserQuestion` em vez de criar um papel dedicado), alcançado por um novo
+  tile "Quadro de Avisos" no menu Mais (`home_quick_tiles.dart`, id
+  `noticeBoard`, só visível a quem gerencia) que abre `NoticeManagementPage`
+  (lista + inserir/editar/excluir, `NoticeFormPage`). Os demais usuários só
+  veem os avisos pelo painel rotativo "Avisos" na Início
+  (`_NoticesCard`/`home_highlights.dart`, que passou de reaproveitar posts
+  manuais do Mural pra ler direto de `notices`) — um `PageView` com
+  `Timer.periodic` de 5s trocando de aviso sozinho — tocando abre
+  `NoticeDetailPage` em tela cheia; não existe uma "ver todos" pra quem não
+  gerencia, só a Central de gerenciamento tem lista completa.
+
+  "Buscar o link de oferta na Contribua" (`NoticeFormPage._pickOffer`): como
+  `PixEntry` (`contribution_info.dart`) não tem id estável (só posição numa
+  lista), o aviso guarda um **retrato** dos 4 campos necessários pra gerar o
+  Pix (`offerPixKey`/`offerDescription`/`offerChurchName`/`offerCity`), não
+  uma referência viva — editar/excluir a chave na Contribua depois não afeta
+  avisos já publicados (decisão registrada no doc comment de `Notice`, não
+  confirmada explicitamente com o usuário, mas evita a complexidade de dar
+  id estável a `PixEntry` só por causa disso). `NoticeDetailPage` reaproveita
+  `PixOfferPage` (`contribute/pix_offer_page.dart`) direto com esses 4
+  campos — nenhuma lógica de geração de código Pix duplicada.
+
+- **Agenda dos ministérios** (`lib/models/agenda_entry.dart`,
+  `lib/data/agenda_repository.dart`, `lib/agenda/`) — substitui o ícone
+  "Agenda" da grade de Início, que era só um `ComingSoonPage` (id `agenda`,
+  já existia no catálogo de tiles). Líderes de cada ministério marcam
+  compromissos (ensaio, reunião etc.) pro próprio ministério; os demais
+  membros do ministério (liderados) só visualizam; admin vê/gerencia tudo.
+
+  **Como o app sabe quem é "líder"** — decisão tomada via `AskUserQuestion`:
+  não é um papel novo nem uma tela de seleção — é o cargo de texto livre já
+  existente em `MemberMinistry.cargos` (Rol de Membros): um membro com um
+  cargo cujo texto normalizado (sem acento/maiúsculas, casamento exato —
+  "Vice-líder" não conta) seja "lider", dentro de um vínculo de ministério
+  específico, vira líder **daquele** ministério
+  (`MemberRepository.isLeaderCargo`). `Ministry.leaderUids` (novo campo,
+  `lib/data/ministry_repository.dart`) é o espelho de verdade — mantido
+  automaticamente por `MemberRepository.update` (diff entre o
+  `member.ministries` antigo e o novo a cada edição da Secretaria, chamando
+  `MinistryRepository.addLeader`/`removeLeader`) sempre que o membro já tem
+  `linkedUid` (sem backfill pra quem virar líder antes de ter conta,
+  mesmo padrão de sempre nesta base). Precisou virar um campo em
+  `ministries/{id}` em vez de uma consulta a `members` porque
+  `firestore.rules` não libera `list` em `members` pra não-admin/Secretaria
+  — a regra de escrita de `agendaEntries`
+  (`isMinistryLeader(ministryId)`, nova função) só pode `get()` um documento
+  conhecido, não fazer uma query livre.
+
+  **Conflito de horário** — decisão via `AskUserQuestion`: evita conflito
+  **entre ministérios diferentes**, mas só quando o [location] (campo livre
+  "Local/Área", com sugestão dos locais já usados —
+  `_LocationField`, mesmo padrão embutido-na-árvore de `_ParticipationField`)
+  bate normalizado; áreas diferentes podem coincidir livremente no mesmo
+  horário (pedido explícito do usuário — "dois ou três no mesmo horário por
+  utilizarem áreas diferentes da igreja"). `findAgendaConflicts`
+  (`agenda_repository.dart`) é um aviso soft (`AlertDialog` "Continuar mesmo
+  assim?"), não um bloqueio duro — o líder pode confirmar e salvar mesmo com
+  conflito. `AgendaPage` só lista compromissos futuros (`endDateTime` ainda
+  não passou), mesma filosofia de "agenda de planejamento" já usada em
+  `LeaderScheduleListPage`.
+
+  `SIBValApp2/firestore.rules` ganhou `isMinistryLeader(ministryId)` (função
+  nova, dobra admin dentro de si, mesmo padrão de `isCifraEditor`),
+  `match /agendaEntries` e `match /notices` — **só editei o código-fonte,
+  não fiz `firebase deploy`**, mesma cautela de sempre; até o deploy, criar
+  compromisso na Agenda ou aviso no Quadro falha com permission-denied em
+  produção.
+
+**Quadro de Avisos + Agenda — correções e reforma (03/09/2026, mesma sessão,
+pedidos do usuário):**
+
+- **Bug real "aviso não salva"**: `NoticeFormPage._save()` só tinha
+  `try/finally`, sem `catch` — qualquer exceção (a real: `storage.rules`
+  nunca ganhou um bloco `match /notices/{imageId}`, então subir a imagem do
+  aviso falhava com permission-denied) ficava muda, o spinner só voltava ao
+  normal sem nenhum aviso. Corrigido com `catch` mostrando a mensagem de erro
+  num `SnackBar`, e um `AlertDialog` "Aviso salvo com sucesso" (mesmo padrão
+  já usado em `ReceptionPage`) antes de fechar a tela — pedido explícito do
+  usuário. `SIBValApp2/storage.rules` ganhou o bloco `notices/{imageId}`
+  (mesma regra de `posts/`, papel Publicações ou admin) — **só código-fonte,
+  sem deploy ainda**.
+- **Notice ganhou "Requer inscrição" + link** (`requiresRegistration`/
+  `registrationLink`, mesmo par de campos e mesmo texto de botão
+  "Inscreva-se" já usado em `Event`) — segunda flag, distinta de
+  `needsOffering`; os dois viraram `Row`+`Switch` (era `CheckboxListTile` só
+  na de oferta), mesmo padrão visual de `EventFormPage`.
+- **Seletor de imagem do aviso alinhado ao de Eventos**: `AspectRatio(16/9)`
+  em vez de `Container` de altura fixa, ícone 40 (era 32), só o aviso de
+  proporção recomendada (tirado o "(opcional)" solto) — pedido explícito do
+  usuário ("no mesmo padrão das demais, igual nos posts e eventos").
+
+- **Agenda virou um calendário de verdade** (`SfCalendar`, pacote
+  `syncfusion_flutter_calendar` — decisão de licença Community confirmada
+  com o usuário via `AskUserQuestion`, dependência nova em `pubspec.yaml`),
+  com `SegmentedButton` Dia/Semana/Mês na app bar. Substituiu a lista simples
+  ordenada por data da 1ª versão. Cada compromisso vira um `Appointment`
+  colorido por ministério (`_colorForMinistry`, hash determinístico sobre
+  uma paleta fixa — só pra distinguir visualmente vários ministérios no
+  mesmo calendário, majoritariamente útil pro admin). Tocar um compromisso
+  abre um bottom sheet de detalhe com Editar/Excluir quando aplicável.
+- **Criar compromisso restrito aos próprios ministérios, mesmo pra admin**
+  (pedido explícito do usuário: "cada líder só pode marcar horário para seus
+  próprios ministérios") — `_creatableMinistryIds` (FAB "Novo Compromisso" +
+  dropdown "Ministério" do formulário) deixou de ter o bypass
+  `isAdmin ? todos : ledIds` que a 1ª versão tinha — agora é sempre
+  `myLedMinistryIdsProvider`, sem exceção pro admin. **Editar/excluir um
+  compromisso já existente continua com o bypass de admin** (oversight/
+  gerenciamento, não é "criar do zero") — o bottom sheet de detalhe passa
+  `{manageableIds, entry.ministryId}` pro formulário de edição, garantindo
+  que o dropdown sempre tenha pelo menos o ministério atual mesmo se quem
+  edita (admin) não lidera aquele ministério.
+- **Local/Área virou catálogo configurável pelo admin** (pedido explícito) —
+  novo `AgendaLocation`/`AgendaLocationRepository` (coleção
+  `agendaLocations`), `AgendaLocationManagementPage` (CRUD simples, mesmo
+  padrão de `ManageMinistriesPage`), alcançada por um ícone de local na app
+  bar de `AgendaPage`, só admin. O campo "Local/Área" do formulário deixou
+  de ser texto livre com sugestão — virou `DropdownButtonFormField` sobre
+  esse catálogo (com fallback defensivo: o valor já salvo num compromisso
+  continua aparecendo na lista mesmo se o local foi renomeado/excluído
+  depois, senão o dropdown quebra com um valor fora dos `items`).
+  `SIBValApp2/firestore.rules` ganhou `match /agendaLocations` (leitura
+  autenticada, escrita só admin) — **só código-fonte, sem deploy ainda**.
+- **Horário de término pré-preenchido** — selecionar o horário de início
+  agora seta o término pro mesmo horário +1h automaticamente
+  (`(hour + 1) % 24`), continua editável depois (pedido explícito do
+  usuário).
+- **Mensagem automática pra todo mundo do ministério + lembretes 24h/12h**
+  (sem equivalente no nativo, pedido explícito do usuário) — em
+  `SIBValApp2/functions/index.js` (**só código-fonte, sem deploy ainda**):
+  `onAgendaEntryCreatedNotify` (`onDocumentCreated agendaEntries/{entryId}`)
+  resolve os membros do ministério (`members` com `ministryIds
+  array-contains` + `linkedUid`, mesma lógica de
+  `MessageRepository._resolveMinistryMemberUids` no cliente, replicada aqui
+  porque o gatilho roda no servidor) e manda uma mensagem de verdade pela
+  Central de Mensagens (`messages`, dispara push sozinha via
+  `onMessageCreated` já existente) — exclui quem criou o compromisso (o
+  próprio líder) da lista de destinatários. Nova `sendAgendaEntryReminders`
+  (`onSchedule`, a cada 15 min, mesmo padrão de janela/idempotência de
+  `sendServiceOrderParticipationReminders`) cobre os dois lembretes
+  (`reminder24hSent`/`reminder12hSent`, independentes um do outro).
+
+- **Gerenciar Usuários: papéis compactados atrás de "Permissões"** (pedido
+  explícito do usuário: "estamos ficando com muitos papéis... vamos ajustar
+  a tela para que fique algo mais compacto, como um link de permissões, e
+  dentro dele tenham os papéis para selecionar") — os 9 `_RoleChip`s que
+  ficavam sempre visíveis num `Wrap` (deixando cada card de usuário bem
+  alto) viraram um `ExpansionTile` "Permissões (N)" fechado por padrão, só
+  reorganização visual — nenhuma mudança de papel/regra.
+
+- **Papéis configuráveis pelo admin (criar/excluir papel, definir direitos de
+  acesso) — avaliado, não implementado.** Hoje todo papel é hardcoded em dois
+  lugares que precisam ficar sincronizados manualmente: `UserRole` (Dart,
+  `lib/models/app_user.dart`, uma constante por papel) e uma função própria
+  por papel em `firestore.rules` (`isPublicacoes()`, `isDirigentes()` etc.),
+  além de cada tela conferir uma permissão específica
+  (`profile.canManagePublications`, ...) — não existe um sistema genérico de
+  "capacidades" que um papel dinâmico pudesse carregar. Tornar isso
+  configurável de verdade exigiria reescrever esse modelo inteiro pra
+  algo como `hasCapability('manage_notices')` lido de um documento de
+  permissões por papel, tanto no Dart quanto (mais arriscado) em
+  `firestore.rules` — dezenas de telas e todo `match` do banco tocados,
+  risco real de destravar acesso errado em produção se algo sair torto. Não
+  implementado nesta rodada; se o usuário quiser seguir com isso, vale um
+  pedido à parte, tratado como uma migração própria, não um ajuste dentro de
+  outra tarefa.
+
+**Pendente de deploy (mesma sessão, aval do usuário cobre só o pedido
+anterior de `firestore:rules` — as mudanças desta rodada ainda não foram
+publicadas):** `firestore:rules` (bloco `agendaLocations` novo),
+`storage:rules` (bloco `notices/` novo — sem ele, subir imagem de aviso
+continua falhando em produção) e `functions` (`onAgendaEntryCreatedNotify`,
+`sendAgendaEntryReminders` novas). Precisa de um pedido explícito separado
+pra cada um, mesma cautela de sempre.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

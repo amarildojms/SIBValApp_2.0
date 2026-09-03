@@ -1,14 +1,31 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:diacritic/diacritic.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/address.dart';
 import '../models/app_user.dart';
 import '../models/member.dart';
+import 'ministry_repository.dart';
 import 'post_repository.dart' show currentUidProvider;
 import 'user_repository.dart' show currentUserProfileProvider;
+
+/// Cargo que marca o membro como líder daquele vínculo de ministério
+/// (`MemberMinistry`) — comparação sem acento/maiúsculas, casamento exato
+/// (não "contém") pra "Vice-líder"/"Auxiliar de líder" não contarem como
+/// liderança de verdade (03/09/2026, Agenda: só quem tem esse cargo pode
+/// agendar compromissos pro ministério — ver `Ministry.leaderUids`).
+bool isLeaderCargo(String cargo) =>
+    removeDiacritics(cargo).trim().toLowerCase() == 'lider';
+
+Set<String> _leaderMinistryIds(List<MemberMinistry> ministries) {
+  return {
+    for (final m in ministries)
+      if (m.cargos.any(isLeaderCargo)) m.ministryId,
+  };
+}
 
 /// Espelha app/src/main/java/com/sibval/app/data/repository/MemberRepository.kt.
 /// A foto já sai comprimida do image_picker (maxWidth/maxHeight/imageQuality),
@@ -23,10 +40,11 @@ import 'user_repository.dart' show currentUserProfileProvider;
 /// sincronizar. Se o CPF ou e-mail mudar, o documento precisa migrar de id
 /// (senão vira lixo órfão, ou pior, outro membro reusa o id antigo).
 class MemberRepository {
-  MemberRepository(this._firestore, this._storage);
+  MemberRepository(this._firestore, this._storage, this._ministries);
 
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
+  final MinistryRepository _ministries;
 
   CollectionReference<Map<String, dynamic>> get _members =>
       _firestore.collection('members');
@@ -278,6 +296,21 @@ class MemberRepository {
       // aqui.
       await _members.doc(member.id).set(data, SetOptions(merge: true));
     }
+
+    // Sincroniza `ministries/{id}.leaderUids` (03/09/2026, Agenda) — só
+    // funciona se o membro já tiver conta vinculada (`linkedUid`); sem
+    // backfill pra quem virar líder antes de ter conta, mesmo padrão já
+    // usado em todo o resto desta base (ver CLAUDE.md).
+    if (member.linkedUid.isNotEmpty) {
+      final oldLeaderIds = _leaderMinistryIds(member.ministries);
+      final newLeaderIds = _leaderMinistryIds(ministries);
+      for (final id in newLeaderIds.difference(oldLeaderIds)) {
+        await _ministries.addLeader(id, member.linkedUid);
+      }
+      for (final id in oldLeaderIds.difference(newLeaderIds)) {
+        await _ministries.removeLeader(id, member.linkedUid);
+      }
+    }
   }
 
   /// Espelha MemberRepository.kt upsertFromUser(): chamado ao aprovar um
@@ -429,7 +462,11 @@ class MemberRepository {
 }
 
 final memberRepositoryProvider = Provider<MemberRepository>((ref) {
-  return MemberRepository(FirebaseFirestore.instance, FirebaseStorage.instance);
+  return MemberRepository(
+    FirebaseFirestore.instance,
+    FirebaseStorage.instance,
+    ref.watch(ministryRepositoryProvider),
+  );
 });
 
 /// `StreamProvider` (21/08/2026, era `FutureProvider`) — Rol de Membros e

@@ -217,29 +217,7 @@ class _UserCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                children: [
-                  _RoleChip(label: 'Secretaria', role: UserRole.secretaria, user: user),
-                  _RoleChip(label: 'Mídia', role: UserRole.midia, user: user),
-                  _RoleChip(label: 'Intercessão', role: UserRole.intercessao, user: user),
-                  _RoleChip(label: 'Eventos', role: UserRole.eventos, user: user),
-                  _RoleChip(label: 'Publicações', role: UserRole.publicacoes, user: user),
-                  // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
-                  // Também obtido automaticamente por quem entra no ministério
-                  // Introdução (ver functions/index.js: onMemberMinistryRoleSync).
-                  _RoleChip(label: 'Introdução', role: UserRole.introducao, user: user),
-                  // Também obtido automaticamente por quem entra no ministério
-                  // Dirigente(s) (ver functions/index.js: onMemberMinistryRoleSync).
-                  _RoleChip(label: 'Dirigentes', role: UserRole.dirigentes, user: user),
-                  _RoleChip(label: 'Pastor', role: UserRole.pastor, user: user),
-                  // NOVO (28/08/2026): Ministério de Louvor — ver
-                  // lib/models/praise_repertoire.dart. Quem edita cifras NÃO
-                  // é um papel — é uma seleção individual do admin dentro da
-                  // própria tela de Cifras (`CifraEditorsManagementPage`).
-                  _RoleChip(label: 'Louvor', role: UserRole.louvor, user: user),
-                ],
-              ),
+              _PermissionsSection(user: user),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -296,6 +274,66 @@ class _StatusChip extends StatelessWidget {
       backgroundColor: color,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
+    );
+  }
+}
+
+/// Lista de papéis compactada atrás de um link "Permissões" (03/09/2026,
+/// pedido do usuário: "estamos ficando com muitos papéis, e está ficando uma
+/// lista extensa... vamos ajustar a tela para que fique algo mais compacto,
+/// como um link de permissões, e dentro dele tenham os papéis para
+/// selecionar") — antes os 9 `_RoleChip`s ficavam sempre visíveis num `Wrap`,
+/// deixando cada card de usuário bem alto; agora é um `ExpansionTile`
+/// fechado por padrão, com o subtítulo já mostrando quantos papéis o usuário
+/// tem, pra dar uma ideia sem precisar abrir.
+class _PermissionsSection extends StatelessWidget {
+  const _PermissionsSection({required this.user});
+
+  final AppUser user;
+
+  static const _roles = [
+    (label: 'Secretaria', role: UserRole.secretaria),
+    (label: 'Mídia', role: UserRole.midia),
+    (label: 'Intercessão', role: UserRole.intercessao),
+    (label: 'Eventos', role: UserRole.eventos),
+    (label: 'Publicações', role: UserRole.publicacoes),
+    // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
+    // Também obtido automaticamente por quem entra no ministério Introdução
+    // (ver functions/index.js: onMemberMinistryRoleSync).
+    (label: 'Introdução', role: UserRole.introducao),
+    // Também obtido automaticamente por quem entra no ministério
+    // Dirigente(s) (ver functions/index.js: onMemberMinistryRoleSync).
+    (label: 'Dirigentes', role: UserRole.dirigentes),
+    (label: 'Pastor', role: UserRole.pastor),
+    // NOVO (28/08/2026): Ministério de Louvor — ver
+    // lib/models/praise_repertoire.dart. Quem edita cifras NÃO é um papel —
+    // é uma seleção individual do admin dentro da própria tela de Cifras
+    // (`CifraEditorsManagementPage`).
+    (label: 'Louvor', role: UserRole.louvor),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final activeCount = _roles.where((r) => user.roles.contains(r.role)).length;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        title: Text(
+          activeCount == 0 ? 'Permissões' : 'Permissões ($activeCount)',
+          style: TextStyle(color: context.textPrimary, fontSize: 14),
+        ),
+        children: [
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final r in _roles)
+                _RoleChip(label: r.label, role: r.role, user: user),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

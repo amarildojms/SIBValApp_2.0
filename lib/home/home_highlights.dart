@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../data/devotional_repository.dart';
 import '../data/event_repository.dart';
 import '../data/home_quick_tiles_repository.dart';
+import '../data/notice_repository.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
 import '../devotionals/devotional_detail_page.dart';
@@ -12,12 +15,13 @@ import '../events/event_detail_page.dart';
 import '../main_shell.dart' show mainShellTabIndexProvider, MaisPage;
 import '../models/devotional.dart';
 import '../models/event.dart';
+import '../models/notice.dart';
 import '../models/post.dart';
+import '../notices/notice_detail_page.dart';
 import '../service_order/service_order_countdown.dart';
 import '../theme/app_theme.dart';
 import '../util/verse_of_day.dart';
 import 'home_quick_tiles.dart';
-import 'mural_page.dart';
 
 /// Índice da aba Eventos na barra inferior (`MainShell._pages`) — Início(0),
 /// Devocionais(1), Eventos(2), Contribua(3). Usado pelo "Ver todos"/"Ver
@@ -1298,75 +1302,103 @@ class _WeekDayGroup extends StatelessWidget {
   }
 }
 
-/// "Avisos" — reaproveita os posts manuais (`PostType.manual`) do Mural
-/// (`postsProvider`) como fonte de dado: são literalmente publicações
-/// escritas por quem tem o papel Publicações/admin, o mesmo conceito de
-/// "aviso" do modelo de referência — sem coleção nova. Mostra "Nenhum aviso
-/// no momento." quando não há nenhum, em vez de sumir (ver doc comment de
-/// `_WeekAndNoticesRow`). Toque num aviso (ou "Ver todos") abre o Mural
-/// completo (onde dá pra curtir/comentar de verdade).
-class _NoticesCard extends ConsumerWidget {
+/// "Avisos" — Quadro de Avisos (03/09/2026, pedido do usuário): painel que
+/// passa dinamicamente pelos avisos cadastrados (`noticesProvider`, coleção
+/// própria `notices` — não reaproveita mais os posts manuais do Mural, ver
+/// `NoticeManagementPage`/`home_quick_tiles.dart`). Mostra "Nenhum aviso no
+/// momento." quando não há nenhum, em vez de sumir (ver doc comment de
+/// `_WeekAndNoticesRow`). Sem "Ver todos": só quem gerencia o quadro
+/// (`canManagePublications`) tem uma lista completa, pelo ícone no menu Mais
+/// — os demais usuários só veem o aviso tocando aqui (pedido explícito do
+/// usuário), que abre `NoticeDetailPage` em tela cheia.
+class _NoticesCard extends ConsumerStatefulWidget {
   const _NoticesCard();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final postsAsync = ref.watch(postsProvider);
-    final posts = postsAsync.asData?.value ?? const <Post>[];
-    final notices = posts
-        .where((p) => p.postType == PostType.manual)
-        .take(3)
+  ConsumerState<_NoticesCard> createState() => _NoticesCardState();
+}
+
+class _NoticesCardState extends ConsumerState<_NoticesCard> {
+  final _pageController = PageController();
+  Timer? _autoAdvanceTimer;
+  int _count = 0;
+
+  void _ensureTimer(int count) {
+    if (count == _count) return;
+    _count = count;
+    _autoAdvanceTimer?.cancel();
+    if (count <= 1) return;
+    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_pageController.hasClients) return;
+      final next = ((_pageController.page ?? 0).round() + 1) % count;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final noticesAsync = ref.watch(noticesProvider);
+    final notices = (noticesAsync.asData?.value ?? const <Notice>[])
+        .take(5)
         .toList();
+    _ensureTimer(notices.length);
 
     return _HighlightCard(
       title: 'Avisos',
-      onSeeAll: notices.isEmpty
-          ? null
-          : () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const MuralPage())),
       child: notices.isEmpty
           ? Text(
               'Nenhum aviso no momento.',
               style: TextStyle(color: context.textSecondary, fontSize: 11),
             )
-          : Column(
-              children: [
-                for (var i = 0; i < notices.length; i++) ...[
-                  if (i > 0) Divider(height: 12, color: context.textTertiary),
-                  _NoticeRow(post: notices[i]),
-                ],
-              ],
+          : SizedBox(
+              height: 54,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: notices.length,
+                itemBuilder: (context, index) => _NoticeRow(notice: notices[index]),
+              ),
             ),
     );
   }
 }
 
 class _NoticeRow extends StatelessWidget {
-  const _NoticeRow({required this.post});
+  const _NoticeRow({required this.notice});
 
-  final Post post;
+  final Notice notice;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const MuralPage())),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => NoticeDetailPage(notice: notice)),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (post.imageUrl.isNotEmpty) ...[
+          if (notice.imageUrl.isNotEmpty) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
-                post.imageUrl,
-                width: 32,
-                height: 32,
+                notice.imageUrl,
+                width: 40,
+                height: 40,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stack) => Container(
-                  width: 32,
-                  height: 32,
+                  width: 40,
+                  height: 40,
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               ),
@@ -1374,8 +1406,8 @@ class _NoticeRow extends StatelessWidget {
             const SizedBox(width: 8),
           ] else ...[
             Container(
-              width: 32,
-              height: 32,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: SibValColors.goldAccent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
@@ -1383,17 +1415,34 @@ class _NoticeRow extends StatelessWidget {
               child: const Icon(
                 Icons.campaign_outlined,
                 color: SibValColors.goldAccent,
-                size: 16,
+                size: 18,
               ),
             ),
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Text(
-              post.text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: context.textPrimary, fontSize: 10.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  notice.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  notice.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.textSecondary, fontSize: 10),
+                ),
+              ],
             ),
           ),
         ],

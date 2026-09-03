@@ -28,6 +28,7 @@ const List<String> defaultHomeQuickTileOrder = [
   'birthdays',
   'introduction',
   'praiseMinistry',
+  'noticeBoard',
 ];
 
 const _prefsKey = 'home_quick_tiles_order';

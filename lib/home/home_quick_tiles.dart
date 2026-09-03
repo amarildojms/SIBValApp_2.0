@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../agenda/agenda_page.dart';
 import '../bible/bible_book_list_page.dart';
 import '../birthdays/birthdays_page.dart';
 import '../data/cifra_repository.dart';
@@ -13,6 +14,7 @@ import '../gallery/album_list_page.dart';
 import '../hymnal/hymnals_page.dart';
 import '../introduction/introduction_page.dart';
 import '../messages/messages_page.dart';
+import '../notices/notice_management_page.dart';
 import '../partners/partners_page.dart';
 import '../praise/praise_commitment_page.dart';
 import '../prayer/prayer_page.dart';
@@ -105,6 +107,7 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
       (profile?.canRegisterVisitors ?? false) ||
       (profile?.canViewVisitorSummaries ?? false) ||
       (profile?.canViewVisitorDetails ?? false);
+  final canManageNoticeBoard = profile?.canManagePublications ?? false;
   final canAccessPraise =
       (profile?.canViewPraiseOrder ?? false) || ref.watch(canEditCifrasProvider);
 
@@ -156,11 +159,9 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
       id: 'agenda',
       label: 'Agenda',
       icon: Icons.calendar_month_outlined,
-      onTap: (ctx) => Navigator.of(ctx).push(
-        MaterialPageRoute(
-          builder: (_) => const ComingSoonPage(title: 'Agenda'),
-        ),
-      ),
+      onTap: (ctx) => Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const AgendaPage())),
     ),
     HomeQuickTileDef(
       id: 'pgms',
@@ -237,6 +238,18 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
         // Passa pelo Termo de Compromisso no 1º acesso (02/09/2026, pedido
         // do usuário) — ver `openPraiseMinistry`.
         onTap: (ctx) => openPraiseMinistry(ctx, ref),
+      ),
+    if (canManageNoticeBoard)
+      HomeQuickTileDef(
+        id: 'noticeBoard',
+        label: 'Quadro de Avisos',
+        icon: Icons.campaign_outlined,
+        // Gerenciamento (inserir/editar/excluir) — quem não tem
+        // `canManagePublications` nunca vê este tile; só enxerga os avisos
+        // pelo painel rotativo da Início (`_NoticesCard`/home_highlights.dart).
+        onTap: (ctx) => Navigator.of(
+          ctx,
+        ).push(MaterialPageRoute(builder: (_) => const NoticeManagementPage())),
       ),
   ];
 }
