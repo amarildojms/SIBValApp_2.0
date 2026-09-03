@@ -38,6 +38,8 @@ class NoticeRepository {
     String offerCity = '',
     bool requiresRegistration = false,
     String registrationLink = '',
+    int? eventDateMillis,
+    String? eventTime,
     required String createdByUid,
     required String createdByName,
   }) async {
@@ -62,6 +64,8 @@ class NoticeRepository {
       'offerCity': needsOffering ? offerCity : '',
       'requiresRegistration': requiresRegistration,
       'registrationLink': requiresRegistration ? registrationLink : '',
+      'eventDateMillis': eventDateMillis,
+      'eventTime': eventTime,
       'createdByUid': createdByUid,
       'createdByName': createdByName,
       'createdAt': FieldValue.serverTimestamp(),
@@ -80,6 +84,8 @@ class NoticeRepository {
     String offerCity = '',
     bool requiresRegistration = false,
     String registrationLink = '',
+    int? eventDateMillis,
+    String? eventTime,
   }) async {
     var imageUrl = notice.imageUrl;
     var storagePath = notice.storagePath;
@@ -106,6 +112,8 @@ class NoticeRepository {
       'offerCity': needsOffering ? offerCity : '',
       'requiresRegistration': requiresRegistration,
       'registrationLink': requiresRegistration ? registrationLink : '',
+      'eventDateMillis': eventDateMillis,
+      'eventTime': eventTime,
     });
   }
 

@@ -41,15 +41,21 @@ class HomeHighlights extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ordem revisada (03/09/2026, pedido do usuário): Esta Semana + Avisos
+    // (lado a lado, `_WeekAndNoticesRow`), Minha EBD, Devocional de Hoje,
+    // Próximo na Igreja. "Esta Semana"/"Avisos" chegaram a virar dois cards
+    // de largura total numa rodada anterior — revertido no mesmo dia (pedido
+    // do usuário: "devem ser maiores na vertical somente, mas continuar um
+    // ao lado do outro") — ficam mais altos, não mais largos.
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _GreetingAndVerse(),
         _QuickAccessGrid(),
-        _UpcomingEventsSection(),
-        _TodayDevotionalSection(),
-        _MyClassSection(),
         _WeekAndNoticesRow(),
+        _MyClassSection(),
+        _TodayDevotionalSection(),
+        _UpcomingEventsSection(),
         SizedBox(height: 8),
       ],
     );
@@ -230,7 +236,11 @@ class _HighlightCard extends StatelessWidget {
           color: Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      // Topo reduzido (03/09/2026, pedido do usuário: "coloque o título de
+      // cada um um pouco mais para cima em cada card") — 12→8 só no topo,
+      // aproxima o título da borda superior do card sem mudar o resto do
+      // preenchimento.
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1126,13 +1136,26 @@ class _MyClassSection extends StatelessWidget {
   }
 }
 
-/// "Esta Semana" + "Avisos" lado a lado (02/09/2026, pedido do usuário —
-/// eram dois cards empilhados; "Avisos" também não estava aparecendo porque
-/// escondia o card inteiro quando não havia nenhum post manual ainda, e o
-/// usuário esperava ver a caixa mesmo assim). Os dois agora são sempre
-/// visíveis, com uma mensagem de estado vazio no lugar da lista quando não
-/// há dado — isso é o que garante o par ficar sempre "lado a lado", em vez
-/// de um sumir e o outro ficar sozinho ocupando a linha inteira.
+/// "Esta Semana" + "Avisos" lado a lado (02/09/2026, pedido do usuário — os
+/// dois viraram cards de largura total numa rodada seguinte, e voltaram a
+/// ficar lado a lado no mesmo dia: "devem ser maiores na vertical somente,
+/// mas continuar um ao lado do outro"). Sempre visíveis, com uma mensagem de
+/// estado vazio no lugar da lista quando não há dado.
+/// Altura padrão compartilhada por "Esta Semana" e "Avisos" (03/09/2026,
+/// pedido do usuário: "ESTA SEMANA deve ficar no tamanho padrão igual
+/// AVISOS mesmo que não tenham eventos suficiente para preencher todo o
+/// quadro") — os dois cards vivem em `Expanded`s de larguras iguais dentro
+/// do mesmo `Row`, então aplicar a mesma fórmula à largura medida por cada
+/// um (`LayoutBuilder`, já depois do padding interno do `_HighlightCard`)
+/// garante a mesma altura nos dois sem precisar coordená-los entre si. É a
+/// mesma conta já usada pra calcular a altura da imagem 16:9 do aviso —
+/// "Esta Semana" nunca teve imagem, mas passa a reservar o mesmo espaço.
+double _weekNoticeCardHeight(BuildContext context, double innerWidth) {
+  final imageHeight = innerWidth * 9 / 16;
+  final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.6);
+  return imageHeight + 56 * textScale;
+}
+
 class _WeekAndNoticesRow extends StatelessWidget {
   const _WeekAndNoticesRow();
 
@@ -1185,48 +1208,65 @@ class _ThisWeekCard extends ConsumerWidget {
 
     return _HighlightCard(
       title: 'Esta Semana',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (days.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                'Nenhum evento essa semana.',
-                style: TextStyle(color: context.textSecondary, fontSize: 11),
-              ),
-            )
-          else
-            for (final day in days)
-              _WeekDayGroup(day: day, events: groups[day]!),
-          InkWell(
-            onTap: () =>
-                ref.read(mainShellTabIndexProvider.notifier).state =
-                    _eventsTabIndex,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  // "Ver todos os eventos" (02/09/2026, era "Ver agenda
-                  // completa") — pedido do usuário: "Agenda" vai virar uma
-                  // função à parte (ícone da grade, ainda "Em breve"), esse
-                  // link é só pra lista de eventos de verdade (Eventos).
-                  'Ver todos os eventos',
-                  style: TextStyle(
-                    color: SibValColors.goldAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
+      // Altura padrão forçada, igual à de "Avisos" (03/09/2026, pedido do
+      // usuário — ver `_weekNoticeCardHeight`), mesmo quando a lista de
+      // eventos é curta (ou vazia): sobra espaço em branco abaixo do
+      // conteúdo em vez do card encolher. `SingleChildScrollView` é só uma
+      // defesa pro caso raro de a semana ter eventos demais pra caber na
+      // altura padrão — nesse caso rola em vez de estourar
+      // ("BOTTOM OVERFLOWED", mesmo bug já corrigido no card de Avisos).
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            height: _weekNoticeCardHeight(context, constraints.maxWidth),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (days.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Nenhum evento essa semana.',
+                        style: TextStyle(color: context.textSecondary, fontSize: 11),
+                      ),
+                    )
+                  else
+                    for (final day in days)
+                      _WeekDayGroup(day: day, events: groups[day]!),
+                  InkWell(
+                    onTap: () =>
+                        ref.read(mainShellTabIndexProvider.notifier).state =
+                            _eventsTabIndex,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          // "Ver todos os eventos" (02/09/2026, era "Ver
+                          // agenda completa") — pedido do usuário: "Agenda"
+                          // vai virar uma função à parte (ícone da grade,
+                          // ainda "Em breve"), esse link é só pra lista de
+                          // eventos de verdade (Eventos).
+                          'Ver todos os eventos',
+                          style: TextStyle(
+                            color: SibValColors.goldAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          color: SibValColors.goldAccent,
+                          size: 14,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: SibValColors.goldAccent,
-                  size: 14,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1356,23 +1396,47 @@ class _NoticesCardState extends ConsumerState<_NoticesCard> {
 
     return _HighlightCard(
       title: 'Avisos',
-      child: notices.isEmpty
-          ? Text(
-              'Nenhum aviso no momento.',
-              style: TextStyle(color: context.textSecondary, fontSize: 11),
-            )
-          : SizedBox(
-              height: 54,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: notices.length,
-                itemBuilder: (context, index) => _NoticeRow(notice: notices[index]),
+      // Altura padrão sempre forçada, mesmo sem nenhum aviso cadastrado
+      // (03/09/2026, corrige "BOTTOM OVERFLOWED" relatado pelo usuário —
+      // voltar a ficar lado a lado de "Esta Semana" estreitou o card pela
+      // metade) via `_weekNoticeCardHeight` — mesma fórmula usada por "Esta
+      // Semana" pra forçar as duas alturas a baterem sempre, inclusive
+      // quando um dos dois cards está vazio.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final height = _weekNoticeCardHeight(context, constraints.maxWidth);
+          if (notices.isEmpty) {
+            return SizedBox(
+              height: height,
+              child: Text(
+                'Nenhum aviso no momento.',
+                style: TextStyle(color: context.textSecondary, fontSize: 11),
               ),
+            );
+          }
+          return SizedBox(
+            height: height,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: notices.length,
+              itemBuilder: (context, index) => _NoticeRow(notice: notices[index]),
             ),
+          );
+        },
+      ),
     );
   }
 }
 
+/// Imagem pequena em cima (ocupando a largura do card, na proporção
+/// original 16:9, sem cortar — `BoxFit.contain`), título e descrição
+/// embaixo (03/09/2026, revisão pedida pelo usuário — era imagem à esquerda/
+/// texto à direita). O bloco de texto vive dentro de um `Expanded`, então
+/// mesmo se a altura calculada em `_NoticesCardState.build` ficar apertada
+/// (fonte grande do aparelho, título comprido...) o texto só encolhe/corta
+/// com reticências em vez de estourar a caixa (mesmo cuidado defensivo já
+/// usado no telefone de `VisitorFullTile`, ver
+/// `[[feedback_adb_ui_diagnosis]]` na memória automática).
 class _NoticeRow extends StatelessWidget {
   const _NoticeRow({required this.notice});
 
@@ -1385,45 +1449,30 @@ class _NoticeRow extends StatelessWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => NoticeDetailPage(notice: notice)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (notice.imageUrl.isNotEmpty) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                notice.imageUrl,
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stack) => Container(
-                  width: 40,
-                  height: 40,
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                ),
-              ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: notice.imageUrl.isNotEmpty
+                  ? Container(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Image.network(
+                        notice.imageUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stack) => const _NoticeIconThumb(),
+                      ),
+                    )
+                  : const _NoticeIconThumb(),
             ),
-            const SizedBox(width: 8),
-          ] else ...[
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: SibValColors.goldAccent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.campaign_outlined,
-                color: SibValColors.goldAccent,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
+          ),
+          const SizedBox(height: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 Text(
                   notice.title,
@@ -1432,20 +1481,40 @@ class _NoticeRow extends StatelessWidget {
                   style: TextStyle(
                     color: context.textPrimary,
                     fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  notice.message,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: context.textSecondary, fontSize: 10),
+                Flexible(
+                  child: Text(
+                    notice.message,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: context.textSecondary, fontSize: 11),
+                  ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NoticeIconThumb extends StatelessWidget {
+  const _NoticeIconThumb();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: SibValColors.goldAccent.withValues(alpha: 0.15),
+      child: const Center(
+        child: Icon(
+          Icons.campaign_outlined,
+          color: SibValColors.goldAccent,
+          size: 28,
+        ),
       ),
     );
   }

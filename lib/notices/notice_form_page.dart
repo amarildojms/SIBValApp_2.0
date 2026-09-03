@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../data/contribution_repository.dart' show contributionInfoProvider;
 import '../data/notice_repository.dart';
@@ -11,6 +12,7 @@ import '../data/user_repository.dart';
 import '../models/contribution_info.dart';
 import '../models/notice.dart';
 import '../theme/app_theme.dart';
+import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Cadastro/edição de aviso do Quadro de Avisos (03/09/2026) — só chega aqui
@@ -35,8 +37,12 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
   String _offerChurchName = '';
   String _offerCity = '';
   bool _requiresRegistration = false;
+  DateTime? _selectedDate;
+  TimeOfDay? _selectedTime;
   bool _dirty = false;
   bool _saving = false;
+
+  static final _timeFormat = DateFormat('HH:mm', 'pt_BR');
 
   bool get _isEditing => widget.editing != null;
 
@@ -54,6 +60,16 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
       _offerCity = editing.offerCity;
       _requiresRegistration = editing.requiresRegistration;
       _registrationLinkController.text = editing.registrationLink;
+      _selectedDate = editing.eventDate;
+      final time = editing.eventTime;
+      if (time != null && time.contains(':')) {
+        final parts = time.split(':');
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour != null && minute != null) {
+          _selectedTime = TimeOfDay(hour: hour, minute: minute);
+        }
+      }
     }
     _titleController.addListener(_markDirty);
     _messageController.addListener(_markDirty);
@@ -104,6 +120,16 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
     if (picked != null) {
       setState(() {
         _pickedImage = File(picked.path);
+        _dirty = true;
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(context: context, initialTime: _selectedTime ?? TimeOfDay.now());
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
         _dirty = true;
       });
     }
@@ -182,6 +208,11 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
       return;
     }
 
+    final eventDateMillis = _selectedDate?.millisecondsSinceEpoch;
+    final eventTime = _selectedTime != null
+        ? _timeFormat.format(DateTime(2000, 1, 1, _selectedTime!.hour, _selectedTime!.minute))
+        : null;
+
     setState(() => _saving = true);
     try {
       final repo = ref.read(noticeRepositoryProvider);
@@ -198,6 +229,8 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
           offerCity: _offerCity,
           requiresRegistration: _requiresRegistration,
           registrationLink: registrationLink,
+          eventDateMillis: eventDateMillis,
+          eventTime: eventTime,
         );
       } else {
         final uid = ref.read(currentUidProvider) ?? '';
@@ -213,6 +246,8 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
           offerCity: _offerCity,
           requiresRegistration: _requiresRegistration,
           registrationLink: registrationLink,
+          eventDateMillis: eventDateMillis,
+          eventTime: eventTime,
           createdByUid: uid,
           createdByName: profile?.shortName ?? '',
         );
@@ -312,6 +347,45 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
                   maxLines: 6,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(labelText: 'Texto do aviso', alignLabelWithHint: true),
+                ),
+                const SizedBox(height: 16),
+                // Data/horário do que o aviso anuncia (03/09/2026, pedido do
+                // usuário) — os dois opcionais, independentes um do outro.
+                Row(
+                  children: [
+                    Expanded(
+                      child: DateField(
+                        label: 'Data (opcional)',
+                        value: _selectedDate,
+                        firstDate: DateTime(DateTime.now().year - 1),
+                        lastDate: DateTime(DateTime.now().year + 5),
+                        onChanged: (date) => setState(() {
+                          _selectedDate = date;
+                          _dirty = true;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickTime,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Horário (opcional)',
+                            suffixIcon: Icon(Icons.access_time_outlined),
+                          ),
+                          child: Text(
+                            _selectedTime != null
+                                ? _timeFormat.format(
+                                    DateTime(2000, 1, 1, _selectedTime!.hour, _selectedTime!.minute),
+                                  )
+                                : '',
+                            style: TextStyle(color: context.textPrimary),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 // Mesmo estilo Row+Switch de "Requer inscrição" em

@@ -28,6 +28,8 @@ class Notice {
     this.offerCity = '',
     this.requiresRegistration = false,
     this.registrationLink = '',
+    this.eventDateMillis,
+    this.eventTime,
     required this.createdByUid,
     required this.createdByName,
     this.createdAt,
@@ -49,9 +51,22 @@ class Notice {
   /// (`event_form_page.dart`), reaproveitado aqui pelo mesmo nome.
   final bool requiresRegistration;
   final String registrationLink;
+
+  /// Data/horário do que o aviso anuncia (03/09/2026, pedido do usuário: "no
+  /// cadastro de quadro de avisos acrescente os campos data e horários"),
+  /// ambos opcionais e independentes um do outro — não é a data em que o
+  /// aviso foi publicado (isso é [createdAt]). [eventTime] fica em texto
+  /// livre "HH:mm" (mesmo formato de exibição do resto do app) porque um
+  /// horário sem data (ou vice-versa) precisa continuar representável.
+  final int? eventDateMillis;
+  final String? eventTime;
   final String createdByUid;
   final String createdByName;
   final DateTime? createdAt;
+
+  DateTime? get eventDate => eventDateMillis != null
+      ? DateTime.fromMillisecondsSinceEpoch(eventDateMillis!)
+      : null;
 
   factory Notice.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -68,6 +83,8 @@ class Notice {
       offerCity: data['offerCity'] as String? ?? '',
       requiresRegistration: data['requiresRegistration'] as bool? ?? false,
       registrationLink: data['registrationLink'] as String? ?? '',
+      eventDateMillis: (data['eventDateMillis'] as num?)?.toInt(),
+      eventTime: data['eventTime'] as String?,
       createdByUid: data['createdByUid'] as String? ?? '',
       createdByName: data['createdByName'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
@@ -86,6 +103,8 @@ class Notice {
     'offerCity': offerCity,
     'requiresRegistration': requiresRegistration,
     'registrationLink': registrationLink,
+    'eventDateMillis': eventDateMillis,
+    'eventTime': eventTime,
     'createdByUid': createdByUid,
     'createdByName': createdByName,
   };

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../contribute/pix_offer_page.dart';
@@ -14,6 +15,8 @@ class NoticeDetailPage extends StatelessWidget {
   const NoticeDetailPage({super.key, required this.notice});
 
   final Notice notice;
+
+  static final _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +47,26 @@ class NoticeDetailPage extends StatelessWidget {
                         fontSize: 21,
                       ),
                     ),
+                    if (notice.eventDate != null || (notice.eventTime?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.event_outlined, color: SibValColors.goldAccent, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            [
+                              if (notice.eventDate != null) _dateFormat.format(notice.eventDate!),
+                              if (notice.eventTime?.isNotEmpty ?? false) notice.eventTime!,
+                            ].join(' às '),
+                            style: TextStyle(
+                              color: SibValColors.goldAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Text(
                       notice.message,
