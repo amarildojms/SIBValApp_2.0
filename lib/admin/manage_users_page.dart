@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/member_repository.dart';
 import '../data/praise_repertoire_repository.dart';
+import '../data/role_repository.dart';
 import '../data/user_repository.dart';
+import '../models/app_role.dart';
 import '../models/app_user.dart';
 import '../models/notification.dart';
 import '../notifications/notification_read_sync.dart';
@@ -30,6 +32,12 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
   void initState() {
     super.initState();
     syncNotificationsForScreen(ref, type: NotificationType.userApproval);
+    // Semeia o catálogo de papéis configuráveis (03/09/2026) na 1ª vez que
+    // um admin abre esta tela, se ainda não existir — mesmo padrão de
+    // `ServiceOrderExtraMomentRepository`/momentos especiais. Falha em
+    // silêncio (ex.: `firestore.rules` de `roles`/`capabilityRoles` ainda
+    // não deployada) — não bloqueia o resto da tela.
+    ref.read(roleRepositoryProvider).seedDefaultsIfEmpty().catchError((_) {});
   }
 
   @override
@@ -41,6 +49,7 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);
+    final roleCatalog = ref.watch(rolesProvider).asData?.value ?? const <AppRole>[];
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -67,10 +76,12 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
                 // Backfill do espelho `settings/louvorMembers` (03/09/2026,
                 // pedido do usuário) — uma vez por visita a esta tela, não a
                 // cada emissão do stream. Ver doc comment de
-                // `PraiseLouvorMembersRepository.backfillFromUsers`.
-                if (!_louvorMirrorBackfilled) {
+                // `PraiseLouvorMembersRepository.backfillFromUsers`. Espera o
+                // catálogo de papéis carregar (senão nenhum usuário bateria
+                // a capacidade e o backfill removeria todo mundo do espelho).
+                if (!_louvorMirrorBackfilled && roleCatalog.isNotEmpty) {
                   _louvorMirrorBackfilled = true;
-                  ref.read(praiseLouvorMembersRepositoryProvider).backfillFromUsers(users);
+                  ref.read(praiseLouvorMembersRepositoryProvider).backfillFromUsers(users, roleCatalog);
                 }
                 final filtered = _query.trim().isEmpty
                     ? users
@@ -91,6 +102,7 @@ class _ManageUsersPageState extends ConsumerState<ManageUsersPage> {
                     return _UserCard(
                       user: user,
                       hasDuplicateCpf: user.cpf.isNotEmpty && duplicateCpfs.contains(user.cpf),
+                      roleCatalog: roleCatalog,
                     );
                   },
                 );
@@ -120,10 +132,11 @@ Set<String> _findDuplicateCpfs(List<AppUser> users) {
 }
 
 class _UserCard extends ConsumerWidget {
-  const _UserCard({required this.user, required this.hasDuplicateCpf});
+  const _UserCard({required this.user, required this.hasDuplicateCpf, required this.roleCatalog});
 
   final AppUser user;
   final bool hasDuplicateCpf;
+  final List<AppRole> roleCatalog;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -217,7 +230,7 @@ class _UserCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              _PermissionsSection(user: user),
+              _PermissionsSection(user: user, roleCatalog: roleCatalog),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -282,39 +295,26 @@ class _StatusChip extends StatelessWidget {
 /// pedido do usuário: "estamos ficando com muitos papéis, e está ficando uma
 /// lista extensa... vamos ajustar a tela para que fique algo mais compacto,
 /// como um link de permissões, e dentro dele tenham os papéis para
-/// selecionar") — antes os 9 `_RoleChip`s ficavam sempre visíveis num `Wrap`,
-/// deixando cada card de usuário bem alto; agora é um `ExpansionTile`
-/// fechado por padrão, com o subtítulo já mostrando quantos papéis o usuário
-/// tem, pra dar uma ideia sem precisar abrir.
+/// selecionar") — um `ExpansionTile` fechado por padrão, com o subtítulo já
+/// mostrando quantos papéis o usuário tem, pra dar uma ideia sem precisar
+/// abrir.
+///
+/// A lista de chips deixou de ser hardcoded (mesma sessão, papéis
+/// configuráveis) — vem de [roleCatalog] (`rolesProvider`), o mesmo catálogo
+/// que o admin edita em `ManageRolesPage`. Papéis "Introdução"/"Dirigentes"
+/// também podem ser obtidos automaticamente por quem entra no ministério
+/// correspondente (ver `functions/index.js: onMemberMinistryRoleSync`,
+/// hardcoded pros ids `introducao`/`dirigentes` — excluir esses papéis aqui
+/// quebra esse sync).
 class _PermissionsSection extends StatelessWidget {
-  const _PermissionsSection({required this.user});
+  const _PermissionsSection({required this.user, required this.roleCatalog});
 
   final AppUser user;
-
-  static const _roles = [
-    (label: 'Secretaria', role: UserRole.secretaria),
-    (label: 'Mídia', role: UserRole.midia),
-    (label: 'Intercessão', role: UserRole.intercessao),
-    (label: 'Eventos', role: UserRole.eventos),
-    (label: 'Publicações', role: UserRole.publicacoes),
-    // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
-    // Também obtido automaticamente por quem entra no ministério Introdução
-    // (ver functions/index.js: onMemberMinistryRoleSync).
-    (label: 'Introdução', role: UserRole.introducao),
-    // Também obtido automaticamente por quem entra no ministério
-    // Dirigente(s) (ver functions/index.js: onMemberMinistryRoleSync).
-    (label: 'Dirigentes', role: UserRole.dirigentes),
-    (label: 'Pastor', role: UserRole.pastor),
-    // NOVO (28/08/2026): Ministério de Louvor — ver
-    // lib/models/praise_repertoire.dart. Quem edita cifras NÃO é um papel —
-    // é uma seleção individual do admin dentro da própria tela de Cifras
-    // (`CifraEditorsManagementPage`).
-    (label: 'Louvor', role: UserRole.louvor),
-  ];
+  final List<AppRole> roleCatalog;
 
   @override
   Widget build(BuildContext context) {
-    final activeCount = _roles.where((r) => user.roles.contains(r.role)).length;
+    final activeCount = roleCatalog.where((r) => user.roles.contains(r.id)).length;
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -325,13 +325,19 @@ class _PermissionsSection extends StatelessWidget {
           style: TextStyle(color: context.textPrimary, fontSize: 14),
         ),
         children: [
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final r in _roles)
-                _RoleChip(label: r.label, role: r.role, user: user),
-            ],
-          ),
+          if (roleCatalog.isEmpty)
+            Text(
+              'Nenhum perfil de acesso cadastrado ainda — cadastre em "Gerenciar Perfis de Acesso".',
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final role in roleCatalog)
+                  _RoleChip(role: role, user: user, roleCatalog: roleCatalog),
+              ],
+            ),
         ],
       ),
     );
@@ -339,29 +345,31 @@ class _PermissionsSection extends StatelessWidget {
 }
 
 class _RoleChip extends ConsumerWidget {
-  const _RoleChip({required this.label, required this.role, required this.user});
+  const _RoleChip({required this.role, required this.user, required this.roleCatalog});
 
-  final String label;
-  final String role;
+  final AppRole role;
   final AppUser user;
+  final List<AppRole> roleCatalog;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enabled = user.roles.contains(role);
+    final enabled = user.roles.contains(role.id);
     return FilterChip(
-      label: Text(label),
+      label: Text(role.label),
       selected: enabled,
       onSelected: (value) {
-        final newRoles = value ? [...user.roles, role] : user.roles.where((r) => r != role).toList();
+        final newRoles = value ? [...user.roles, role.id] : user.roles.where((r) => r != role.id).toList();
         ref.read(userRepositoryProvider).updateRoles(user.uid, newRoles).then((_) => ref.invalidate(allUsersProvider));
         // Espelho pra sugestão de "Adicionar solista" no Ministério de
         // Louvor (02/09/2026, pedido do usuário) — só quem não é admin
         // consegue ler nomes de outros usuários por essa via, já que
         // `users.list` é admin-only (ver doc comment de
-        // `PraiseLouvorMembersRepository`).
-        if (role == UserRole.louvor) {
-          ref.read(praiseLouvorMembersRepositoryProvider).setMember(user.uid, user.name, value);
-        }
+        // `PraiseLouvorMembersRepository`). Recalculado pela capacidade, não
+        // pelo id do papel tocado — como papéis são configuráveis, qualquer
+        // um deles pode conceder `viewPraiseOrder`, não só o antigo
+        // "louvor".
+        final grantsPraiseOrder = resolveCapabilities(newRoles, roleCatalog).contains(Capability.viewPraiseOrder);
+        ref.read(praiseLouvorMembersRepositoryProvider).setMember(user.uid, user.name, grantsPraiseOrder);
       },
     );
   }

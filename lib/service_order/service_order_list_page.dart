@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 
 import '../admin/manage_service_order_moments_page.dart';
 import '../data/post_repository.dart' show currentUidProvider;
+import '../data/role_repository.dart';
 import '../data/service_order_repository.dart';
 import '../data/user_repository.dart';
+import '../models/app_role.dart';
 import '../models/app_user.dart';
 import '../models/service_order.dart';
 import '../theme/app_theme.dart';
@@ -517,6 +519,7 @@ class _TransferOwnerSheetState extends ConsumerState<_TransferOwnerSheet> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);
+    final roleCatalog = ref.watch(rolesProvider).asData?.value ?? const <AppRole>[];
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -569,7 +572,7 @@ class _TransferOwnerSheetState extends ConsumerState<_TransferOwnerSheet> {
                             .where(
                               (u) =>
                                   u.status == UserStatus.approved &&
-                                  (u.isAdmin || u.roles.contains('dirigentes')),
+                                  userHasCapability(u.isAdmin, u.roles, Capability.manageServiceOrders, roleCatalog),
                             )
                             .toList()
                           ..sort((a, b) => a.name.compareTo(b.name));

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/contribution_repository.dart' show contributionInfoProvider;
@@ -12,6 +11,7 @@ import '../data/user_repository.dart';
 import '../models/contribution_info.dart';
 import '../models/notice.dart';
 import '../theme/app_theme.dart';
+import '../util/photo_picker.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -111,15 +111,10 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
   }
 
   Future<void> _pickImage() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
+    final cropped = await pickAndCropBannerPhoto();
+    if (cropped != null) {
       setState(() {
-        _pickedImage = File(picked.path);
+        _pickedImage = cropped;
         _dirty = true;
       });
     }

@@ -5,9 +5,11 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/address.dart';
+import '../models/app_role.dart';
 import '../models/app_user.dart';
 import '../models/member.dart';
 import 'post_repository.dart' show currentUidProvider;
+import 'role_repository.dart' show resolveCapabilities, rolesProvider;
 
 /// Espelha os checks de permissão de app/src/main/java/com/sibval/app/data/model/User.kt
 /// (isAdmin || roles.contains(...)). A seção "Dados eclesiásticos" (forma de
@@ -15,6 +17,14 @@ import 'post_repository.dart' show currentUidProvider;
 /// da Secretaria, editada direto no `Member` vinculado (ver
 /// `completionPercent`, que agora recebe esse `Member?` pra calcular o % de
 /// cadastro em vez de campos locais).
+///
+/// Os getters `canX` (03/09/2026) deixaram de checar `roles.contains('...')`
+/// direto — agora consultam [capabilities], já resolvido contra o catálogo
+/// configurável de papéis (`roles/{roleId}`, ver `RoleRepository`) no
+/// momento em que este objeto é construído (`currentUserProfileProvider`
+/// abaixo). Os nomes/assinaturas dos getters não mudaram de propósito —
+/// nenhum call site (main_shell.dart, tiles do menu Mais, etc.) precisou ser
+/// tocado.
 class CurrentUserProfile {
   const CurrentUserProfile({
     required this.name,
@@ -22,6 +32,7 @@ class CurrentUserProfile {
     required this.photoUrl,
     required this.isAdmin,
     required this.roles,
+    this.capabilities = const {},
     required this.cpf,
     required this.hasBirthdate,
     this.phone = '',
@@ -39,6 +50,7 @@ class CurrentUserProfile {
   final String photoUrl;
   final bool isAdmin;
   final List<String> roles;
+  final Set<String> capabilities;
   final String cpf;
   final bool hasBirthdate;
   final String phone;
@@ -64,41 +76,42 @@ class CurrentUserProfile {
   final bool acceptedPrivacyPolicy;
   final bool acceptedTermsOfUse;
 
-  bool get canViewPrayerRequests => isAdmin || roles.contains('intercessao');
-  bool get canManageBirthdays => isAdmin || roles.contains('secretaria');
-  bool get canManageEventos => isAdmin || roles.contains('eventos');
-  bool get canManageGallery => isAdmin || roles.contains('midia');
+  bool get canViewPrayerRequests => isAdmin || capabilities.contains(Capability.viewPrayerRequests);
+  bool get canManageBirthdays => isAdmin || capabilities.contains(Capability.manageBirthdays);
+  bool get canManageEventos => isAdmin || capabilities.contains(Capability.manageEventos);
+  bool get canManageGallery => isAdmin || capabilities.contains(Capability.manageGallery);
   // ALTERADO (21/08/2026): publicar devocionais e posts manuais no feed
-  // "Início" virou exclusividade do papel Publicações — a Secretaria não
-  // gerencia mais esse conteúdo.
-  bool get canManageDevotionals => isAdmin || roles.contains('publicacoes');
-  bool get canManagePublications => isAdmin || roles.contains('publicacoes');
+  // "Início" virou exclusividade de quem tem a capacidade managePublications
+  // (antes, do papel Publicações) — a Secretaria não gerencia mais esse
+  // conteúdo por padrão.
+  bool get canManageDevotionals => isAdmin || capabilities.contains(Capability.managePublications);
+  bool get canManagePublications => isAdmin || capabilities.contains(Capability.managePublications);
 
   // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
-  bool get canRegisterVisitors => isAdmin || roles.contains('introducao');
-  bool get canViewVisitorSummaries => isAdmin || roles.contains('dirigentes');
-  bool get canViewVisitorDetails => isAdmin || roles.contains('pastor');
+  bool get canRegisterVisitors => isAdmin || capabilities.contains(Capability.registerVisitors);
+  bool get canViewVisitorSummaries => isAdmin || capabilities.contains(Capability.viewVisitorSummaries);
+  bool get canViewVisitorDetails => isAdmin || capabilities.contains(Capability.viewVisitorDetails);
 
-  // NOVO (27/08/2026): Ordem de Culto — só dirigente ou admin cadastra (ver
-  // lib/models/service_order.dart). Edição/exclusão são restritas ao dono da
-  // ordem (`ServiceOrder.ownerUid`) ou admin — checado ponto a ponto na tela,
-  // não aqui, porque depende do documento, não só do papel do usuário.
-  bool get canManageServiceOrders => isAdmin || roles.contains('dirigentes');
+  // NOVO (27/08/2026): Ordem de Culto — só quem tem essa capacidade ou admin
+  // cadastra (ver lib/models/service_order.dart). Edição/exclusão são
+  // restritas ao dono da ordem (`ServiceOrder.ownerUid`) ou admin — checado
+  // ponto a ponto na tela, não aqui, porque depende do documento, não só da
+  // capacidade do usuário.
+  bool get canManageServiceOrders => isAdmin || capabilities.contains(Capability.manageServiceOrders);
 
-  // NOVO (28/08/2026): Ministério de Louvor — papel próprio pra quem só
+  // NOVO (28/08/2026): Ministério de Louvor — capacidade própria pra quem só
   // precisa ver a Ordem de Culto (com tom/cifra), não gerenciá-la. Quem
   // edita cifras NÃO é um papel — é uma seleção individual do admin
   // (`canEditCifrasProvider` em `lib/data/cifra_repository.dart`), por isso
   // não tem getter aqui.
-  bool get canViewPraiseOrder => isAdmin || roles.contains('louvor');
+  bool get canViewPraiseOrder => isAdmin || capabilities.contains(Capability.viewPraiseOrder);
 
   // NOVO (28/08/2026): Escala de Dirigentes — planejamento antecipado de
   // quem vai dirigir cada culto + tema (menu ☰ dentro de "Ordem de Culto",
   // ver lib/service_order/leader_schedule_*.dart), distinto da ServiceOrder
-  // em si. Pastor cadastra/edita/exclui; Dirigentes só visualiza.
-  bool get canManageLeaderSchedule => isAdmin || roles.contains('pastor');
-  bool get canViewLeaderSchedule =>
-      isAdmin || roles.contains('pastor') || roles.contains('dirigentes');
+  // em si.
+  bool get canManageLeaderSchedule => isAdmin || capabilities.contains(Capability.manageLeaderSchedule);
+  bool get canViewLeaderSchedule => isAdmin || capabilities.contains(Capability.viewLeaderSchedule);
 
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
@@ -164,6 +177,15 @@ final currentUserProfileProvider =
     StreamProvider.autoDispose<CurrentUserProfile?>((ref) {
       final uid = ref.watch(currentUidProvider);
       if (uid == null) return Stream.value(null);
+      // `ref.watch(rolesProvider)` (03/09/2026, papéis configuráveis) —
+      // reexecuta este builder (nova assinatura em `.snapshots()`, que
+      // reemite o cache local na hora) sempre que o catálogo de papéis
+      // mudar, pra `capabilities` refletir a mudança. Erro aqui (ex.:
+      // permission-denied antes do deploy de `firestore.rules`/`roles`/
+      // `capabilityRoles`) não deve derrubar o perfil inteiro — `asData` é
+      // `null` nesse caso, cai pro catálogo vazio (admin continua
+      // funcionando via o `isAdmin ||` de cada getter).
+      final roleCatalog = ref.watch(rolesProvider).asData?.value ?? const <AppRole>[];
       return FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -171,12 +193,14 @@ final currentUserProfileProvider =
           .map((doc) {
             final data = doc.data();
             if (data == null) return null;
+            final userRoles = List<String>.from(data['roles'] as List? ?? const []);
             return CurrentUserProfile(
               name: data['name'] as String? ?? '',
               email: data['email'] as String? ?? '',
               photoUrl: data['photoUrl'] as String? ?? '',
               isAdmin: data['isAdmin'] as bool? ?? false,
-              roles: List<String>.from(data['roles'] as List? ?? const []),
+              roles: userRoles,
+              capabilities: resolveCapabilities(userRoles, roleCatalog),
               cpf: data['cpf'] as String? ?? '',
               hasBirthdate: data['birthdate'] != null,
               phone: data['phone'] as String? ?? '',

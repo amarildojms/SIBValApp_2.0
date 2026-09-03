@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/leader_schedule_repository.dart';
+import '../data/role_repository.dart';
 import '../data/user_repository.dart';
+import '../models/app_role.dart';
 import '../models/app_user.dart';
 import '../models/leader_schedule.dart';
 import '../theme/app_theme.dart';
@@ -230,6 +232,7 @@ class _LeaderPickerSheetState extends ConsumerState<_LeaderPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);
+    final roleCatalog = ref.watch(rolesProvider).asData?.value ?? const <AppRole>[];
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -275,7 +278,7 @@ class _LeaderPickerSheetState extends ConsumerState<_LeaderPickerSheet> {
                             .where(
                               (u) =>
                                   u.status == UserStatus.approved &&
-                                  (u.isAdmin || u.roles.contains('dirigentes')),
+                                  userHasCapability(u.isAdmin, u.roles, Capability.manageServiceOrders, roleCatalog),
                             )
                             .toList()
                           ..sort((a, b) => a.name.compareTo(b.name));

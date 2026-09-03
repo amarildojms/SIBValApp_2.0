@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/recurring_event_flyer_repository.dart';
 import '../models/recurring_event_flyer.dart';
 import '../theme/app_theme.dart';
+import '../util/photo_picker.dart';
 import '../util/scroll_to_save.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -190,14 +190,9 @@ class _FlyerFormSheetState extends ConsumerState<_FlyerFormSheet> {
   }
 
   Future<void> _pickFlyer() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
-      setState(() => _pickedFlyer = File(picked.path));
+    final cropped = await pickAndCropBannerPhoto();
+    if (cropped != null) {
+      setState(() => _pickedFlyer = cropped);
     }
   }
 

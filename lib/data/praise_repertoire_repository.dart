@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../models/app_role.dart';
 import '../models/app_user.dart';
 import '../models/praise_repertoire.dart';
+import 'role_repository.dart' show resolveCapabilities;
 
 /// Sem equivalente no app nativo — feature nova (28/08/2026, pedido do
 /// usuário). Ver doc comment de `PraiseSong`/`WeeklyRepertoire`
@@ -151,12 +153,16 @@ class PraiseLouvorMembersRepository {
   /// atual e só grava o que de fato mudou (adiciona quem tem o papel e não
   /// está lá, atualiza nome se mudou, remove quem não tem mais o papel mas
   /// ainda está no espelho), evitando um `set` redundante a cada chamada.
-  Future<void> backfillFromUsers(List<AppUser> users) async {
+  Future<void> backfillFromUsers(List<AppUser> users, List<AppRole> roles) async {
     final snapshot = await _doc.get();
     final current = (snapshot.data()?['names'] as Map<String, dynamic>?) ?? const {};
     final updates = <String, dynamic>{};
     for (final user in users) {
-      final shouldBeMember = user.roles.contains(UserRole.louvor);
+      // Sem bypass de admin de propósito — este espelho reflete quem tem a
+      // capacidade via papel de verdade (mesmo comportamento de antes desta
+      // mudança, quando checava `roles.contains('louvor')` direto), não
+      // "quem consegue ver por ser admin".
+      final shouldBeMember = resolveCapabilities(user.roles, roles).contains(Capability.viewPraiseOrder);
       final currentName = current[user.uid];
       if (shouldBeMember) {
         if (currentName != user.name) updates[user.uid] = user.name;

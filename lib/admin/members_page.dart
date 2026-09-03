@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../data/member_repository.dart';
 import '../data/ministry_repository.dart';
@@ -16,6 +15,7 @@ import '../util/cache_busted_image.dart';
 import '../util/church_membership_options.dart';
 import '../util/cpf_phone_input.dart';
 import '../util/masked_input.dart';
+import '../util/photo_picker.dart';
 import '../widgets/address_fields.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -251,14 +251,9 @@ class _MemberDialogState extends ConsumerState<_MemberDialog> {
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 82,
-    );
-    if (picked != null) {
-      setState(() => _pickedPhoto = File(picked.path));
+    final cropped = await pickAndCropProfilePhoto();
+    if (cropped != null) {
+      setState(() => _pickedPhoto = cropped);
     }
   }
 

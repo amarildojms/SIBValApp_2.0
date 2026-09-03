@@ -3374,6 +3374,130 @@ visualizações Agenda/Mês e os blocos de compromisso em si não imprimem
 horário como texto solto (só a posição vertical/altura do bloco já
 comunica isso), então não precisaram de ajuste.
 
+**Papéis/permissões viraram configuráveis (03/09/2026, pedido do usuário) —
+sem equivalente no nativo, mudança estrutural:** antes cada papel
+(Secretaria, Mídia, Intercessão, Eventos, Publicações, Introdução,
+Dirigentes, Pastor, Louvor) e o que ele concedia eram hardcoded em
+`UserRole` (`lib/models/app_user.dart`, removido) + nos getters `canX` de
+`CurrentUserProfile` (`lib/data/user_repository.dart`) + numa função própria
+por papel em `SIBValApp2/firestore.rules` — criar um papel novo ou mudar o
+que um papel concede exigia código novo e um deploy de regras. Decidido com
+o usuário via `AskUserQuestion` (duas perguntas: escopo e se as regras do
+Firestore deveriam acompanhar) — escolhido "papéis dinâmicos, permissões
+fixas" (a lista de capacidades possíveis continua exigindo código, só a
+associação papel→capacidades virou dado) + reescrever `firestore.rules`
+também (não só a UI).
+
+- **Catálogo fixo de capacidades** — `Capability`
+  (`lib/models/app_role.dart`), 12 no total, cada uma espelhando um getter
+  `canX` que já existia: `view_prayer_requests`, `manage_birthdays`,
+  `manage_eventos`, `manage_gallery`, `manage_publications`,
+  `register_visitors`, `view_visitor_summaries`, `view_visitor_details`,
+  `manage_service_orders`, `view_praise_order`, `manage_leader_schedule`,
+  `view_leader_schedule`.
+- **`AppRole`** (`id`, `label`, `capabilities`) em `roles/{roleId}` —
+  gerenciado pelo admin em `ManageRolesPage` (`lib/admin/manage_roles_page.dart`,
+  novo tile "Gerenciar Papéis" em `SettingsManagementPage`): criar papel
+  (id aleatório, `RoleRepository.newRoleId`), renomear, excluir, e marcar
+  quais das 12 capacidades cada papel concede via checkbox. `defaultAppRoles`
+  semeia os 9 papéis pré-existentes com as mesmas capacidades que já tinham
+  hardcoded — **ids mantidos de propósito** (`secretaria`, `midia`,
+  `intercessao`, `eventos`, `publicacoes`, `introducao`, `dirigentes`,
+  `pastor`, `louvor`) pra `users.roles` já gravado em produção e o sync
+  automático por ministério (`functions/index.js: syncMemberMinistryRoles`,
+  concede/revoga `introducao`/`dirigentes` — continua hardcoded a esses ids
+  específicos, não foi tocado) continuarem funcionando sem backfill. Seed
+  roda uma vez (`RoleRepository.seedDefaultsIfEmpty`, chamado no `initState`
+  de `ManageUsersPage` e de `ManageRolesPage`) só se a coleção `roles`
+  estiver vazia.
+- **Índice invertido `capabilityRoles/{capabilityId}.roleIds`** — nunca lido
+  pelo cliente, só existe pra `hasCapability(cap)` (nova função em
+  `firestore.rules`) conseguir checar "algum dos papéis do usuário concede
+  X" com um único `get()`, já que regras do Firestore não iteram um array
+  fazendo um `get()` por item. Mantido em paralelo a `roles` pelo mesmo
+  `RoleRepository.saveRole`/`deleteRole` (um `WriteBatch` só, por role save/
+  delete: 1 escrita em `roles` + até 12 em `capabilityRoles`,
+  `arrayUnion`/`arrayRemove`).
+- **`CurrentUserProfile`** ganhou `Set<String> capabilities` — resolvido em
+  `currentUserProfileProvider` combinando `users/{uid}.roles` com o catálogo
+  (`ref.watch(rolesProvider)` dentro do próprio builder do `StreamProvider`:
+  reexecuta e re-assina `.snapshots()` do usuário sempre que o catálogo de
+  papéis mudar — cache local garante que a nova assinatura já emite na hora,
+  sem perder o cold start rápido documentado ali desde 29/08/2026). Os 12
+  getters `canX` continuam com o mesmo nome/assinatura de sempre
+  (`isAdmin || capabilities.contains(Capability.x)`) — **nenhum call site
+  fora de `user_repository.dart` precisou mudar** (main_shell.dart, tiles do
+  menu Mais, etc.). Erro ao ler `rolesProvider` (ex.: permission-denied
+  antes do deploy das regras novas) cai pro catálogo vazio em vez de
+  derrubar o perfil inteiro.
+- **3 call sites que checavam `roles.contains('dirigentes')` literal**
+  (fora de `CurrentUserProfile`, pra filtrar candidatos numa lista de
+  `AppUser`) viraram `userHasCapability(...)`/`resolveCapabilities(...)`
+  (`lib/data/role_repository.dart`) contra o catálogo carregado via
+  `ref.watch(rolesProvider)`: `LeaderScheduleFormPage`/`ServiceOrderListPage`
+  (candidatos a "Dirigente" nos pickers de escala/transferência de
+  propriedade) e `PraiseRepertoireRepository.backfillFromUsers` (espelho de
+  solistas do Ministério de Louvor — sem bypass de admin de propósito, é
+  "quem tem a capacidade via papel", não "quem consegue ver por ser admin").
+- **`firestore.rules`** — nova `hasCapability(cap)`; `isSecretaria()`/
+  `isMidia()`/`isIntercessao()`/`isEventos()`/`isPublicacoes()`/
+  `isIntroducao()`/`isLouvor()` viraram wrappers de uma capacidade só (nomes
+  mantidos, call sites inalterados). `isDirigentes()`/`isPastor()` foram
+  **removidas** (cada uma cobria várias capacidades distintas que só
+  coincidiam por estarem no mesmo papel hardcoded) — os ~9 pontos que as
+  usavam (`visitors`, `visitorSummaries`, `serviceOrders`,
+  `serviceOrderExtraMoments`, `leaderSchedules`, `praiseSongs`,
+  `weeklyRepertoires`, `cifras`) chamam `hasCapability(...)` direto com a
+  capacidade certa pro contexto. Novo `match /roles/{roleId}` (leitura
+  qualquer autenticado, escrita admin) e `match /capabilityRoles/{capabilityId}`
+  (sem `allow read` — só uso interno via `get()`/`exists()`, escrita admin).
+  **Só editei o código-fonte — não fiz `firebase deploy`**, mesma cautela de
+  sempre (ver `[[feedback_deploy_requires_explicit_ask]]`); até o deploy,
+  qualquer capacidade concedida por um papel *diferente* dos 9 originais (ou
+  removida de um dos 9 originais) só é respeitada pela UI do app, não pelas
+  regras em produção — e criar/editar/excluir um papel também falha com
+  permission-denied até lá, já que `roles`/`capabilityRoles` não existem
+  ainda nas regras publicadas.
+
+**Corte/reenquadramento de foto generalizado pra todos os locais de inserção
+de foto (03/09/2026, pedido do usuário):** antes só a foto de perfil
+(`register_page.dart`/`complete_google_profile_page.dart`/
+`edit_profile_page.dart`) passava pela tela de corte do `image_cropper`
+(`pickAndCropProfilePhoto`, `lib/util/photo_picker.dart`) — os demais locais
+só chamavam `ImagePicker().pickImage` direto, sem chance de reenquadrar
+antes de enviar.
+
+`pickAndCropPhoto` (novo, genérico) virou a base compartilhada — recebe
+`cropStyle`/`aspectRatio`/`toolbarTitle` — com dois atalhos:
+`pickAndCropProfilePhoto()` (círculo 1:1, comportamento idêntico a antes) e
+`pickAndCropBannerPhoto()` (retângulo 16:9, novo). Aplicado em:
+
+- `members_page.dart` (foto do membro, Rol de Membros) — círculo 1:1, mesmo
+  enquadramento da foto de perfil (mesmo `CircleAvatar`).
+- `event_form_page.dart` (flyer de evento), `recurring_event_flyer_repository_page.dart`
+  (Repositório de Flyers), `notice_form_page.dart` (Quadro de Avisos) e
+  `post_form_page.dart` (post manual do Mural) — retângulo 16:9, mesma
+  proporção que essas telas já recomendavam via texto ("Proporção
+  recomendada: 16:9") mas não impunham de fato antes.
+
+**Fora do escopo, decisão confirmada com o usuário via `AskUserQuestion`:**
+a Galeria de fotos (`album_photos_page.dart`, `ImagePicker().pickMultiImage`)
+**não** ganhou corte — é o único fluxo de várias fotos de uma vez (ex.: 20-30
+fotos de um evento), e cortar uma por uma antes de enviar atrapalharia
+justamente o caso comum desse fluxo. Continua subindo as fotos exatamente
+como vêm da galeria.
+
+**"Papéis" renomeado pra "Perfis de Acesso" na UI (03/09/2026, pedido do
+usuário, confirmado funcionando após o teste da rodada anterior):** só o
+texto visível — título da tela ("Gerenciar Papéis" → "Gerenciar Perfis de
+Acesso"), tile no menu Configurações e Gerenciamento, textos de ajuda,
+botão/diálogo de criar/editar/excluir (`manage_roles_page.dart`) e o aviso
+de catálogo vazio em `manage_users_page.dart`. **Nomes de classe/arquivo/
+coleção não mudaram** — `ManageRolesPage`, `AppRole`, `RoleRepository`,
+`roles`/`capabilityRoles` no Firestore continuam com os mesmos nomes de
+antes; é só rótulo de exibição, sem migração de dado nem novo deploy
+necessário.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

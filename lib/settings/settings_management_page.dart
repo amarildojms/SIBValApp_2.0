@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../admin/event_email_senders_page.dart';
 import '../admin/manage_ministries_page.dart';
+import '../admin/manage_roles_page.dart';
 import '../admin/manage_users_page.dart';
 import '../admin/members_page.dart';
 import '../admin/recurring_event_flyer_repository_page.dart';
@@ -65,6 +66,13 @@ class SettingsManagementPage extends ConsumerWidget {
           badgeCount: pendingCount,
           onTap: () => Navigator.of(context)
               .push(MaterialPageRoute(builder: (_) => const ManageUsersPage())),
+        ),
+      if (isAdmin)
+        MoreTile(
+          icon: Icons.rule_folder_outlined,
+          label: 'Gerenciar Perfis de Acesso',
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const ManageRolesPage())),
         ),
       if (isAdmin)
         MoreTile(

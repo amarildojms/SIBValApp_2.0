@@ -102,29 +102,10 @@ abstract final class UserStatus {
   static const rejected = 'rejected';
 }
 
-abstract final class UserRole {
-  static const secretaria = 'secretaria';
-  static const midia = 'midia';
-  static const intercessao = 'intercessao';
-  static const eventos = 'eventos';
-  static const publicacoes = 'publicacoes';
-
-  // NOVO (24/08/2026): área Introdução — ver lib/models/visitor.dart.
-  // Renomeado de "recepcao" pra "introducao" (pedido do usuário, mesma sessão
-  // da sincronização automática de papéis por ministério, ver
-  // functions/index.js: onMemberMinistryRoleSync).
-  static const introducao = 'introducao';
-  static const dirigentes = 'dirigentes';
-  static const pastor = 'pastor';
-
-  // NOVO (28/08/2026): Ministério de Louvor — quem tem esse papel vê a Ordem
-  // de Culto numa visão própria (`ServiceOrderPraiseViewPage`), com tom das
-  // músicas e link pra cifra, 1h antes do horário liberado pros Dirigentes.
-  static const louvor = 'louvor';
-
-  // NOTA (28/08/2026): quem edita cifras NÃO é um papel — o usuário pediu
-  // explicitamente pra ser uma seleção individual do admin, não um chip
-  // aqui (existiu como papel "cifrista" por uma rodada, revertido). Ver
-  // `CifraEditorsRepository`/`settings/cifraEditors` em
-  // `lib/data/cifra_repository.dart`.
-}
+// `UserRole` (catálogo hardcoded de papéis) foi removido em 03/09/2026 —
+// papéis viraram configuráveis pelo admin (`ManageRolesPage`), gravados em
+// `roles/{roleId}`. Ver `lib/models/app_role.dart` (`AppRole`,
+// `defaultAppRoles` — mesmos ids que existiam aqui, semeados na 1ª visita a
+// `ManageUsersPage`/`ManageRolesPage`) e `lib/data/role_repository.dart`.
+// `AppUser.roles` continua sendo só uma lista de ids de papel — o que cada
+// id concede agora é dado, não código.
