@@ -113,6 +113,14 @@ class CurrentUserProfile {
   bool get canManageLeaderSchedule => isAdmin || capabilities.contains(Capability.manageLeaderSchedule);
   bool get canViewLeaderSchedule => isAdmin || capabilities.contains(Capability.viewLeaderSchedule);
 
+  // NOVO (04/09/2026): Instrumentista — distinto do papel Louvor
+  // (`canViewPraiseOrder`, acesso ao Ministério de Louvor inteiro). Só
+  // controla se a Ordem de Culto abre a cifra (em vez da letra) ao tocar
+  // numa música do momento "Louvor" — pedido do usuário: "quem tiver perfil
+  // instrumentista, verá as cifra... todos os outros usuários verão a
+  // letra".
+  bool get isInstrumentista => isAdmin || capabilities.contains(Capability.instrumentista);
+
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {

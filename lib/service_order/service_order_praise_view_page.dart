@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../data/hymnal_repository.dart';
 import '../data/praise_repertoire_repository.dart';
 import '../data/service_order_repository.dart';
+import '../data/user_repository.dart';
 import '../hymnal/hymn_detail_page.dart';
 import '../models/hymn.dart';
 import '../models/praise_repertoire.dart';
@@ -14,6 +15,7 @@ import '../models/notification.dart';
 import '../models/service_order.dart';
 import '../notifications/notification_read_sync.dart';
 import '../praise/cifra_view_page.dart';
+import '../praise/praise_lyrics_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
 import 'service_order_countdown.dart';
@@ -44,10 +46,14 @@ import 'service_order_preview_page.dart';
 /// A lista de momentos somente-leitura (`ServiceOrderReadOnlyBody`, abaixo)
 /// foi extraída pra cá pra ser reaproveitada também por
 /// `ServiceOrderMemberViewPage` (28/08/2026, pedido do usuário — visão dos
-/// demais membros/visitantes, "igual à do Louvor, porém sem acesso às
-/// cifras") — `showPraiseDetails: false` esconde o tom e desliga o toque nos
-/// momentos "Louvor" (só nome/cantor, sem link pra `CifraViewPage`); as
-/// demais navegações (bíblia/hino) continuam iguais nos dois casos.
+/// demais membros/visitantes) — `showPraiseDetails: false` só esconde o tom;
+/// as demais navegações (bíblia/hino) continuam iguais nos dois casos.
+/// ALTERADO (04/09/2026, pedido do usuário): tocar numa música do momento
+/// "Louvor" deixou de depender do papel Louvor (`showPraiseDetails`) — quem
+/// tem o novo perfil **Instrumentista** (`CurrentUserProfile.isInstrumentista`)
+/// abre a cifra em qualquer uma das duas visões; os demais abrem a letra
+/// salva (`PraiseSong.lyrics`) quando existir, sem link nenhum se não
+/// houver.
 ///
 /// **Mesmo visual de status do modo apresentação do dirigente** (02/09/2026,
 /// pedido do usuário: "todo o visual que fizemos na ordem de culto na visão
@@ -374,6 +380,18 @@ class _ServiceOrderReadOnlyBodyState
     );
   }
 
+  void _openLyrics(PraiseSong song) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => PraiseLyricsPage(
+          songName: song.name,
+          songArtist: song.artist,
+          lyrics: song.lyrics,
+        ),
+      ),
+    );
+  }
+
   List<_DetailRow> _detailRowsFor(
     ServiceOrderItem item,
     ServiceOrder order,
@@ -446,25 +464,31 @@ class _ServiceOrderReadOnlyBodyState
     } else if (item.type != null) {
       final slot = praiseSlotLabelFor(item.type!);
       if (slot != null && repertoire != null) {
+        // Instrumentista vê cifra, todo o resto vê a letra quando houver
+        // (04/09/2026, pedido do usuário) — tom continua exclusivo de quem
+        // vê "com detalhes" (`showPraiseDetails`, hoje só a própria tela do
+        // Louvor), regra não alterada por este pedido.
+        final isInstrumentista =
+            ref.read(currentUserProfileProvider).asData?.value?.isInstrumentista ?? false;
+        final catalog = ref.read(praiseSongsProvider).asData?.value ?? const [];
         for (final assignment in repertoire.forSlot(slot)) {
           final base = assignment.songArtist.isEmpty
               ? assignment.songName
               : '${assignment.songName} — ${assignment.songArtist}';
-          // Tom só pro Louvor (28/08/2026, pedido do usuário) — visão de
-          // membro comum (`showPraiseDetails: false`) vê só nome/cantor, sem
-          // tom e sem toque pra `CifraViewPage`.
           final label =
               widget.showPraiseDetails && assignment.toneDisplay.isNotEmpty
               ? '$base (Tom: ${assignment.toneDisplay})'
               : base;
-          rows.add(
-            _DetailRow(
-              label: label,
-              onTap: widget.showPraiseDetails
-                  ? () => _openCifra(assignment.songId, assignment.songName)
-                  : null,
-            ),
-          );
+          VoidCallback? onTap;
+          if (isInstrumentista) {
+            onTap = () => _openCifra(assignment.songId, assignment.songName);
+          } else {
+            final catalogSong = catalog.where((s) => s.id == assignment.songId).firstOrNull;
+            if (catalogSong != null && catalogSong.hasLyrics) {
+              onTap = () => _openLyrics(catalogSong);
+            }
+          }
+          rows.add(_DetailRow(label: label, onTap: onTap));
         }
       }
     }
@@ -529,9 +553,9 @@ class _DetailRow {
   const _DetailRow({required this.label, this.onTap});
   final String label;
 
-  /// `null` quando a linha não navega pra lugar nenhum (28/08/2026 —
-  /// momento "Louvor" na visão de membro comum, `showPraiseDetails: false`,
-  /// mostra só o texto sem virar link).
+  /// `null` quando a linha não navega pra lugar nenhum — no momento
+  /// "Louvor" (04/09/2026, pedido do usuário) isso agora só acontece pra
+  /// quem não é Instrumentista e a música não tem letra salva.
   final VoidCallback? onTap;
 }
 

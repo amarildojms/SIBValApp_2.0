@@ -16,6 +16,7 @@ import '../models/service_order.dart';
 import '../models/service_order_extra_moment.dart';
 import '../theme/app_theme.dart';
 import '../util/scroll_to_save.dart';
+import '../util/time_picker_24h.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'service_order_reorder_page.dart';
@@ -1329,7 +1330,7 @@ class _TimeField extends StatelessWidget {
   final ValueChanged<TimeOfDay?> onChanged;
 
   Future<void> _open(BuildContext context) async {
-    final picked = await showTimePicker(
+    final picked = await showTimePicker24h(
       context: context,
       initialTime: value ?? const TimeOfDay(hour: 19, minute: 0),
     );

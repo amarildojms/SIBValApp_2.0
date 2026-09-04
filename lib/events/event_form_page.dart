@@ -7,10 +7,13 @@ import 'package:intl/intl.dart';
 import '../data/event_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../models/event.dart';
+import '../models/recurring_event.dart' show EventDuration, eventDurationLabel;
 import '../theme/app_theme.dart';
 import '../util/photo_picker.dart';
 import '../util/scroll_to_save.dart';
+import '../util/time_picker_24h.dart';
 import '../widgets/date_field.dart';
+import '../widgets/event_audience_area_field.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'event_category_utils.dart';
 
@@ -42,9 +45,16 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
   File? _pickedFlyer;
   String _existingFlyerUrl = '';
 
+  String _audienceType = EventAudience.wholeChurch;
+  List<String> _targetMinistryIds = const [];
+  List<String> _targetMinistryNames = const [];
+  String _churchArea = '';
+  int _durationMinutes = 120;
+
   Event? _editingEvent;
   bool _loadingEvent = false;
   bool _saving = false;
+  bool _dirty = false;
 
   static final _timeFormat = DateFormat('HH:mm', 'pt_BR');
 
@@ -53,7 +63,11 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
   @override
   void initState() {
     super.initState();
-    if (_isEditing) _load();
+    if (_isEditing) {
+      _load();
+    } else {
+      _attachDirtyListeners();
+    }
   }
 
   @override
@@ -64,6 +78,45 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     _registrationLinkController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // Listeners só são anexados depois que `_load()` já preencheu os campos
+  // (ou de cara, se for criação) — senão o próprio preenchimento inicial
+  // (`.text = event.title` etc.) já dispararia `_markDirty` e o aviso de
+  // "sair sem salvar?" apareceria mesmo sem o usuário ter mexido em nada
+  // (mesmo cuidado já usado em `introduction_page.dart`/
+  // `service_order_form_page.dart`).
+  void _attachDirtyListeners() {
+    _titleController.addListener(_markDirty);
+    _descriptionController.addListener(_markDirty);
+    _locationController.addListener(_markDirty);
+    _registrationLinkController.addListener(_markDirty);
+  }
+
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_dirty) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair sem salvar?'),
+        content: const Text('As alterações feitas serão perdidas.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Continuar editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sair sem salvar'),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
   }
 
   Future<void> _load() async {
@@ -83,19 +136,31 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
         _category = event.category;
         _requiresRegistration = event.requiresRegistration;
         _registrationLinkController.text = event.registrationLink;
+        _audienceType = event.audienceType;
+        _targetMinistryIds = event.targetMinistryIds;
+        _targetMinistryNames = event.targetMinistryNames;
+        _churchArea = event.churchArea;
+        _durationMinutes = event.effectiveDurationMinutes;
       });
     }
+    _attachDirtyListeners();
     setState(() => _loadingEvent = false);
   }
 
   Future<void> _pickFlyer() async {
     final cropped = await pickAndCropBannerPhoto();
-    if (cropped != null) setState(() => _pickedFlyer = cropped);
+    if (cropped != null) setState(() {
+      _pickedFlyer = cropped;
+      _dirty = true;
+    });
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _selectedTime ?? TimeOfDay.now());
-    if (picked != null) setState(() => _selectedTime = picked);
+    final picked = await showTimePicker24h(context: context, initialTime: _selectedTime ?? TimeOfDay.now());
+    if (picked != null) setState(() {
+      _selectedTime = picked;
+      _dirty = true;
+    });
   }
 
   int? get _dateTimeMillis {
@@ -113,6 +178,8 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
         _dateTimeMillis != null &&
         (_category?.isNotEmpty ?? false) &&
         hasFlyer &&
+        _churchArea.isNotEmpty &&
+        !(_audienceType == EventAudience.specificMinistries && _targetMinistryIds.isEmpty) &&
         !(_requiresRegistration && _registrationLinkController.text.trim().isEmpty);
   }
 
@@ -144,12 +211,17 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
       category: _category,
       requiresRegistration: _requiresRegistration,
       registrationLink: _registrationLinkController.text.trim(),
+      audienceType: _audienceType,
+      targetMinistryIds: _targetMinistryIds,
+      targetMinistryNames: _targetMinistryNames,
+      churchArea: _churchArea,
+      durationMinutes: _durationMinutes,
     );
   }
 
   Future<void> _save() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria, flyer, destinado a e área da igreja.');
       return;
     }
     setState(() => _saving = true);
@@ -162,7 +234,16 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
         final uid = ref.read(currentUidProvider) ?? '';
         await repo.create(_buildEvent(), _pickedFlyer, uid);
       }
+      // 03/09/2026, 3ª rodada, pedido do usuário: "Ao editar/adicionar/
+      // excluir um evento... deve atualizar no calendário em tempo real" —
+      // `eventsProvider` é `FutureProvider` (não refaz sozinho); invalida
+      // aqui em vez de esperar a tela ser reaberta. `calendarEventsProvider`
+      // já é `Stream` (Agenda reflete na hora), mas invalidar também não tem
+      // custo e cobre qualquer borda de timing.
+      ref.invalidate(eventsProvider);
+      ref.invalidate(calendarEventsProvider);
       if (!mounted) return;
+      _dirty = false;
       await _showResultDialog(
         title: _isEditing ? 'Evento atualizado!' : 'Evento salvo!',
         message: _isEditing ? 'As alterações foram salvas com sucesso.' : 'O evento foi publicado com sucesso.',
@@ -177,14 +258,18 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
 
   Future<void> _approve() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, data, hora, categoria e flyer.');
+      _showSnack('Preencha título, descrição, local, data, hora, categoria, flyer, destinado a e área da igreja.');
       return;
     }
     setState(() => _saving = true);
     _scrollController.scrollToSaveButton();
     try {
       await ref.read(eventRepositoryProvider).updateAndApprove(_buildEvent(), _pickedFlyer);
+      ref.invalidate(eventsProvider);
+      ref.invalidate(calendarEventsProvider);
+      ref.invalidate(eventPendingProvider);
       if (!mounted) return;
+      _dirty = false;
       await _showResultDialog(title: 'Evento atualizado!', message: 'As alterações foram salvas com sucesso.');
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -220,7 +305,11 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
     _scrollController.scrollToSaveButton();
     try {
       await ref.read(eventRepositoryProvider).delete(_editingEvent!);
+      ref.invalidate(eventsProvider);
+      ref.invalidate(calendarEventsProvider);
+      ref.invalidate(eventPendingProvider);
       if (!mounted) return;
+      _dirty = false;
       await _showResultDialog(
         title: reject ? 'Rejeitar' : 'Excluir',
         message: reject ? 'O evento pendente foi rejeitado e removido.' : 'O evento foi excluído.',
@@ -257,7 +346,13 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
         ? 'Editar Evento'
         : 'Novo Evento';
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (await _confirmDiscard() && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
         bottom: true,
@@ -293,6 +388,37 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
                           decoration: const InputDecoration(labelText: 'Local'),
                         ),
                         const SizedBox(height: 12),
+                        EventAudienceAreaFields(
+                          audienceType: _audienceType,
+                          ministryIds: _targetMinistryIds,
+                          churchArea: _churchArea,
+                          onChanged: (audienceType, ministryIds, ministryNames, churchArea) {
+                            setState(() {
+                              _audienceType = audienceType;
+                              _targetMinistryIds = ministryIds;
+                              _targetMinistryNames = ministryNames;
+                              _churchArea = churchArea;
+                              _dirty = true;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: _durationMinutes,
+                          decoration: const InputDecoration(labelText: 'Duração'),
+                          items: [
+                            for (final minutes in EventDuration.presetsMinutes)
+                              DropdownMenuItem(
+                                value: minutes,
+                                child: Text(eventDurationLabel(minutes)),
+                              ),
+                          ],
+                          onChanged: (value) => setState(() {
+                            _durationMinutes = value ?? _durationMinutes;
+                            _dirty = true;
+                          }),
+                        ),
+                        const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: _category,
                           decoration: const InputDecoration(labelText: 'Categoria'),
@@ -300,7 +426,10 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
                             for (final entry in eventCategoryLabels)
                               DropdownMenuItem(value: entry.$1, child: Text(entry.$2)),
                           ],
-                          onChanged: (value) => setState(() => _category = value),
+                          onChanged: (value) => setState(() {
+                            _category = value;
+                            _dirty = true;
+                          }),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -311,7 +440,10 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
                                 value: _selectedDate,
                                 firstDate: DateTime(DateTime.now().year - 1),
                                 lastDate: DateTime(DateTime.now().year + 5),
-                                onChanged: (date) => setState(() => _selectedDate = date),
+                                onChanged: (date) => setState(() {
+                                  _selectedDate = date;
+                                  _dirty = true;
+                                }),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -344,7 +476,10 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
                             ),
                             Switch(
                               value: _requiresRegistration,
-                              onChanged: (value) => setState(() => _requiresRegistration = value),
+                              onChanged: (value) => setState(() {
+                                _requiresRegistration = value;
+                                _dirty = true;
+                              }),
                             ),
                           ],
                         ),
@@ -365,6 +500,7 @@ class _EventFormPageState extends ConsumerState<EventFormPage> {
               ),
             ),
         ),
+      ),
     );
   }
 

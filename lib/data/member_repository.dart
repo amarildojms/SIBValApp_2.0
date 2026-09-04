@@ -49,6 +49,9 @@ class MemberRepository {
   CollectionReference<Map<String, dynamic>> get _members =>
       _firestore.collection('members');
 
+  DocumentReference<Map<String, dynamic>> get _agendaLeadersDoc =>
+      _firestore.collection('settings').doc('agendaLeaders');
+
   Future<List<Member>> getAll() async {
     final snapshot = await _members.orderBy('name').get();
     return snapshot.docs.map(Member.fromFirestore).toList();
@@ -309,6 +312,24 @@ class MemberRepository {
       }
       for (final id in oldLeaderIds.difference(newLeaderIds)) {
         await _ministries.removeLeader(id, member.linkedUid);
+      }
+
+      // Espelho global "é líder de algum ministério" (03/09/2026, Agenda) —
+      // `settings/agendaLeaders.uids` alimenta `isAnyAgendaLeader()` em
+      // `firestore.rules`, que não pode iterar `members` pra checar isso
+      // (mesmo motivo de `Ministry.leaderUids` acima, só que sem amarrar a
+      // um ministério específico: qualquer líder pode agendar compromisso
+      // pra qualquer ministério/toda a igreja agora).
+      final wasAnyLeader = oldLeaderIds.isNotEmpty;
+      final isAnyLeaderNow = newLeaderIds.isNotEmpty;
+      if (isAnyLeaderNow && !wasAnyLeader) {
+        await _agendaLeadersDoc.set({
+          'uids': FieldValue.arrayUnion([member.linkedUid]),
+        }, SetOptions(merge: true));
+      } else if (!isAnyLeaderNow && wasAnyLeader) {
+        await _agendaLeadersDoc.set({
+          'uids': FieldValue.arrayRemove([member.linkedUid]),
+        }, SetOptions(merge: true));
       }
     }
   }

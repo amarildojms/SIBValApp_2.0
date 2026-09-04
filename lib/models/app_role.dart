@@ -25,6 +25,15 @@ abstract final class Capability {
   static const manageLeaderSchedule = 'manage_leader_schedule';
   static const viewLeaderSchedule = 'view_leader_schedule';
 
+  /// Instrumentista (04/09/2026, pedido do usuário) — distinto do papel
+  /// Louvor (`viewPraiseOrder`, acesso ao Ministério de Louvor inteiro):
+  /// controla só se a Ordem de Culto abre a cifra (em vez da letra) ao tocar
+  /// numa música do momento "Louvor" — ver
+  /// `CurrentUserProfile.isInstrumentista`,
+  /// `ServiceOrderReadOnlyBody._detailRowsFor` e
+  /// `ServiceOrderLivePage._subActionsFor`.
+  static const instrumentista = 'instrumentista';
+
   /// Ordem de exibição em `ManageRolesPage`.
   static const all = <(String id, String label)>[
     (viewPrayerRequests, 'Ver pedidos de oração'),
@@ -39,6 +48,7 @@ abstract final class Capability {
     (viewPraiseOrder, 'Ver Ordem de Culto (Ministério de Louvor)'),
     (manageLeaderSchedule, 'Gerenciar Escala de Dirigentes'),
     (viewLeaderSchedule, 'Ver Escala de Dirigentes'),
+    (instrumentista, 'Ver cifra na Ordem de Culto (Instrumentista)'),
   ];
 
   static String labelFor(String id) =>
@@ -107,4 +117,10 @@ const defaultAppRoles = <AppRole>[
     ],
   ),
   AppRole(id: 'louvor', label: 'Louvor', capabilities: [Capability.viewPraiseOrder]),
+  // "Instrumentista" (04/09/2026, pedido do usuário) NÃO entra aqui de
+  // propósito — [defaultAppRoles] só semeia numa instalação nova, e a
+  // coleção `roles` desta base já não está mais vazia (não tem efeito
+  // nenhum acrescentar aqui). Pra ganhar este papel em produção, o admin
+  // cria "Instrumentista" manualmente em "Gerenciar Perfis de Acesso"
+  // (`ManageRolesPage`) e marca a capacidade [Capability.instrumentista].
 ];

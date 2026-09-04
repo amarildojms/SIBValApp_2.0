@@ -12,6 +12,7 @@ import '../models/contribution_info.dart';
 import '../models/notice.dart';
 import '../theme/app_theme.dart';
 import '../util/photo_picker.dart';
+import '../util/time_picker_24h.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -121,7 +122,7 @@ class _NoticeFormPageState extends ConsumerState<NoticeFormPage> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _selectedTime ?? TimeOfDay.now());
+    final picked = await showTimePicker24h(context: context, initialTime: _selectedTime ?? TimeOfDay.now());
     if (picked != null) {
       setState(() {
         _selectedTime = picked;

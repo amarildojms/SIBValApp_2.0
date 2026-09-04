@@ -21,12 +21,22 @@ class AgendaLocationRepository {
         .map((s) => s.docs.map(AgendaLocation.fromFirestore).toList());
   }
 
-  Future<void> create(String name) {
-    return _locations.add({'name': name.trim()});
+  Future<void> create(String name, {bool blocksEntireVenue = false}) {
+    return _locations.add({
+      'name': name.trim(),
+      'blocksEntireVenue': blocksEntireVenue,
+    });
   }
 
-  Future<void> rename(String id, String name) {
-    return _locations.doc(id).update({'name': name.trim()});
+  Future<void> update(
+    String id,
+    String name, {
+    required bool blocksEntireVenue,
+  }) {
+    return _locations.doc(id).update({
+      'name': name.trim(),
+      'blocksEntireVenue': blocksEntireVenue,
+    });
   }
 
   Future<void> delete(String id) {

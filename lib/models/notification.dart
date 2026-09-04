@@ -76,6 +76,42 @@ abstract final class NotificationType {
   /// aberto vê um diálogo de verdade em vez do banner do sistema (ver
   /// `navigatorKey`).
   static const serviceOrderFinalized = 'service_order_finalized';
+
+  /// Novo compromisso da Agenda aguardando decisão — audiência `user`, um por
+  /// aprovador (03/09/2026, pedido do usuário: fila de aprovação antes de
+  /// efetivar no calendário).
+  static const agendaEntryPending = 'agenda_entry_pending';
+
+  /// Compromisso aprovado — pro criador, `audience: user`.
+  static const agendaEntryApproved = 'agenda_entry_approved';
+
+  /// Compromisso rejeitado — pro criador, `audience: user`, corpo inclui a
+  /// justificativa informada pelo aprovador.
+  static const agendaEntryRejected = 'agenda_entry_rejected';
+
+  /// Compromisso aprovado, depois cancelado pelo aprovador (03/09/2026, 2ª
+  /// rodada, pedido do usuário: "Somente o aprovador pode cancelar/
+  /// remanejar... Quem solicitou o agendamento deve ser notificado") — pro
+  /// criador.
+  static const agendaEntryCancelled = 'agenda_entry_cancelled';
+
+  /// Aprovador remanejou direto (escolheu a nova data/horário) — pro
+  /// criador.
+  static const agendaEntryRescheduled = 'agenda_entry_rescheduled';
+
+  /// Aprovador pediu pro criador escolher outra data (corpo inclui a
+  /// mensagem) — pro criador.
+  static const agendaEntryRescheduleRequested = 'agenda_entry_reschedule_requested';
+
+  /// Nova série recorrente da Agenda aguardando aprovação — pro aprovador.
+  static const recurringAgendaEntryPending = 'recurring_agenda_entry_pending';
+
+  /// Série recorrente aprovada — pro criador.
+  static const recurringAgendaEntryApproved = 'recurring_agenda_entry_approved';
+
+  /// Série recorrente rejeitada (corpo inclui a justificativa) — pro
+  /// criador.
+  static const recurringAgendaEntryRejected = 'recurring_agenda_entry_rejected';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem

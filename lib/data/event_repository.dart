@@ -37,6 +37,25 @@ class EventRepository {
     return snapshot.docs.map(Event.fromFirestore).toList();
   }
 
+  /// Pra Agenda/"Esta Semana" — sem o corte de "só futuro" de
+  /// [getPublishedUpcoming] (03/09/2026, 2ª rodada, pedido do usuário: um
+  /// evento que já passou continua visível no calendário, só sai da aba
+  /// "Eventos"), mas com um piso de segurança de 1 ano atrás — mesma janela
+  /// da nova retenção de `deleteExpiredEvents`
+  /// (`SIBValApp2/functions/index.js`), evita carregar histórico ilimitado.
+  /// Tempo real, mesmo padrão de `agendaEntriesProvider`.
+  Stream<List<Event>> watchForCalendar() {
+    final oneYearAgo = DateTime.now()
+        .subtract(const Duration(days: 365))
+        .millisecondsSinceEpoch;
+    return _events
+        .where('status', isEqualTo: EventStatus.published)
+        .where('dateTimeMillis', isGreaterThanOrEqualTo: oneYearAgo)
+        .orderBy('dateTimeMillis')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Event.fromFirestore).toList());
+  }
+
   Future<List<Event>> getPending() async {
     final snapshot = await _events
         .where('status', isEqualTo: EventStatus.pending)
@@ -86,6 +105,11 @@ class EventRepository {
       'createdBy': createdBy,
       'createdAt': FieldValue.serverTimestamp(),
       'postedToFeed': false,
+      'audienceType': event.audienceType,
+      'targetMinistryIds': event.targetMinistryIds,
+      'targetMinistryNames': event.targetMinistryNames,
+      'churchArea': event.churchArea,
+      'durationMinutes': event.durationMinutes,
     });
   }
 
@@ -117,6 +141,11 @@ class EventRepository {
       'registrationLink': event.registrationLink,
       'flyerUrl': flyerUrl,
       'flyerStoragePath': flyerStoragePath,
+      'audienceType': event.audienceType,
+      'targetMinistryIds': event.targetMinistryIds,
+      'targetMinistryNames': event.targetMinistryNames,
+      'churchArea': event.churchArea,
+      'durationMinutes': event.durationMinutes,
       ...extraFields,
     });
   }
@@ -147,6 +176,12 @@ final eventsProvider = FutureProvider.autoDispose<List<Event>>((ref) {
 
 final eventPendingProvider = StreamProvider.autoDispose<List<Event>>((ref) {
   return ref.watch(eventRepositoryProvider).watchPending();
+});
+
+/// Eventos publicados pra Agenda/"Esta Semana" — passados e futuros (dentro
+/// da janela de retenção), ver `EventRepository.watchForCalendar`.
+final calendarEventsProvider = StreamProvider.autoDispose<List<Event>>((ref) {
+  return ref.watch(eventRepositoryProvider).watchForCalendar();
 });
 
 enum EventsTab { pontual, recorrente }

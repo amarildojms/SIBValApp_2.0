@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../admin/manage_users_page.dart';
+import '../agenda/agenda_approval_page.dart';
 import '../birthdays/birthdays_page.dart';
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
@@ -66,6 +67,16 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       // regra do toque numa ordem em `ServiceOrderListPage`, ver
       // `service_order_navigation.dart`.
       if (targetId.isNotEmpty) openServiceOrder(context, targetId);
+    case NotificationType.agendaEntryPending:
+    case NotificationType.agendaEntryApproved:
+    case NotificationType.agendaEntryRejected:
+    case NotificationType.agendaEntryCancelled:
+    case NotificationType.agendaEntryRescheduled:
+    case NotificationType.agendaEntryRescheduleRequested:
+    case NotificationType.recurringAgendaEntryPending:
+    case NotificationType.recurringAgendaEntryApproved:
+    case NotificationType.recurringAgendaEntryRejected:
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AgendaApprovalPage()));
     case NotificationType.serviceOrderFinalized:
       // Sem tela própria — quem tocar (ex.: veio pelo banner do sistema,
       // app fechado) só volta pro Início. Quem está com o app aberto no

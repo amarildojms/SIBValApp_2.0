@@ -9,27 +9,25 @@ import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
 import '../models/agenda_entry.dart';
 import '../theme/app_theme.dart';
+import '../util/agenda_area.dart';
+import '../util/time_picker_24h.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
 /// Cadastro/edição de compromisso da Agenda (03/09/2026) — só chega aqui quem
-/// tem pelo menos um ministério em [manageableMinistryIds] (líder do
-/// ministério, ou admin — checado por `AgendaPage`). Se [editing] vier
-/// preenchido, edita esse compromisso em vez de criar um novo.
+/// lidera pelo menos um ministério (qualquer um, não precisa ser o
+/// ministério-alvo, ver `AgendaPage`) ou é admin. Todo compromisso salvo aqui
+/// (criação ou edição) entra/volta pra fila de aprovação
+/// (`AgendaRepository.create`/`update` sempre gravam `status: pending`) —
+/// só depois de aprovado é que ocupa o calendário de verdade.
 ///
 /// [initialDate] pré-preenche Data (e Início/Término, quando o valor traz
 /// hora de verdade) a partir do que já estava selecionado no calendário ao
-/// tocar em "Novo Compromisso" (03/09/2026, pedido do usuário) — ignorado em
-/// modo edição, onde a data/hora vem sempre do compromisso existente.
+/// tocar em "Novo Compromisso" — ignorado em modo edição, onde a data/hora
+/// vem sempre do compromisso existente.
 class AgendaEntryFormPage extends ConsumerStatefulWidget {
-  const AgendaEntryFormPage({
-    super.key,
-    required this.manageableMinistryIds,
-    this.editing,
-    this.initialDate,
-  });
+  const AgendaEntryFormPage({super.key, this.editing, this.initialDate});
 
-  final Set<String> manageableMinistryIds;
   final AgendaEntry? editing;
   final DateTime? initialDate;
 
@@ -42,11 +40,14 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  String? _ministryId;
+  String _audienceType = AgendaAudience.ministries;
+  final Set<String> _selectedMinistryIds = {};
   String? _location;
-  DateTime? _date;
+  DateTime? _startDate;
+  DateTime? _endDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+  bool _multiDay = false;
   bool _dirty = false;
   bool _saving = false;
 
@@ -62,21 +63,31 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
       _titleController.text = editing.title;
       _descriptionController.text = editing.description;
       _location = editing.location.isEmpty ? null : editing.location;
-      _ministryId = editing.ministryId;
-      _date = DateTime(
+      _audienceType = editing.audienceType;
+      _selectedMinistryIds.addAll(editing.ministryIds);
+      _startDate = DateTime(
         editing.startDateTime.year,
         editing.startDateTime.month,
         editing.startDateTime.day,
       );
+      _endDate = DateTime(
+        editing.endDateTime.year,
+        editing.endDateTime.month,
+        editing.endDateTime.day,
+      );
+      _multiDay = _endDate != _startDate;
       _startTime = TimeOfDay.fromDateTime(editing.startDateTime);
       _endTime = TimeOfDay.fromDateTime(editing.endDateTime);
     } else {
-      if (widget.manageableMinistryIds.length == 1) {
-        _ministryId = widget.manageableMinistryIds.first;
-      }
+      // Pré-seleciona os ministérios que o criador lidera, só como
+      // conveniência (03/09/2026: qualquer líder pode escolher qualquer
+      // ministério/toda a igreja agora — isso não restringe nada, é só o
+      // ponto de partida).
+      _selectedMinistryIds.addAll(ref.read(myLedMinistryIdsProvider));
       final initial = widget.initialDate;
       if (initial != null) {
-        _date = DateTime(initial.year, initial.month, initial.day);
+        _startDate = DateTime(initial.year, initial.month, initial.day);
+        _endDate = _startDate;
         // Só puxa horário quando a seleção do calendário já trazia hora de
         // verdade (toque em Dia/Semana) — meia-noite exata é o que o
         // Syncfusion também usa pra "só a data" (toque em Mês, ou a faixa
@@ -131,52 +142,83 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
+  Future<void> _pickMinistries(List<Ministry> allMinistries) async {
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _MinistryPickerDialog(
+        ministries: allMinistries,
+        initiallySelected: _selectedMinistryIds,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedMinistryIds
+          ..clear()
+          ..addAll(result);
+        _dirty = true;
+      });
+    }
+  }
+
   Future<void> _save() async {
     final title = _titleController.text.trim();
     final location = _location ?? '';
-    if (_ministryId == null) {
-      _showError('Selecione o ministério.');
-      return;
-    }
     if (title.isEmpty) {
       _showError('Informe um título.');
+      return;
+    }
+    if (_audienceType == AgendaAudience.ministries && _selectedMinistryIds.isEmpty) {
+      _showError('Selecione pelo menos um ministério, ou marque "Toda a igreja".');
       return;
     }
     if (location.isEmpty) {
       _showError('Selecione o local/área.');
       return;
     }
-    final start = _combine(_date, _startTime);
-    final end = _combine(_date, _endTime);
+    final start = _combine(_startDate, _startTime);
+    final end = _combine(_multiDay ? _endDate : _startDate, _endTime);
     if (start == null || end == null) {
       _showError('Informe data, horário de início e de término.');
       return;
     }
     if (!end.isAfter(start)) {
-      _showError('O horário de término precisa ser depois do início.');
+      _showError('O horário/data de término precisa ser depois do início.');
       return;
     }
 
-    final allEntries = ref.read(agendaEntriesProvider).asData?.value ?? const [];
+    final catalogLocations = ref.read(agendaLocationsProvider).asData?.value ?? const [];
+    final occupants = ref.read(agendaConflictItemsProvider);
     final conflicts = findAgendaConflicts(
-      allEntries,
+      occupants,
       location: location,
       start: start,
       end: end,
+      wholeVenue: wholeVenueLocationNames(catalogLocations),
       excludeId: widget.editing?.id,
     );
     if (conflicts.isNotEmpty) {
-      final proceed = await _confirmConflict(conflicts.first);
+      final conflict = conflicts.first;
+      final profileForMask = ref.read(currentUserProfileProvider).asData?.value;
+      final visibleIds = {
+        ...ref.read(myLedMinistryIdsProvider),
+        ...ref.read(myMemberMinistryIdsProvider),
+      };
+      final masked = conflict.isMaskedFor(
+        isAdmin: profileForMask?.isAdmin ?? false,
+        isApprover: ref.read(isAgendaApproverProvider),
+        visibleIds: visibleIds,
+      );
+      final proceed = await _confirmConflict(conflict, masked: masked);
       if (proceed != true) return;
     }
 
     final ministries = ref.read(ministriesProvider).asData?.value ?? const [];
-    final ministryName = ministries
-        .firstWhere(
-          (m) => m.id == _ministryId,
-          orElse: () => ministries.first,
-        )
-        .name;
+    final ministryNames = _audienceType == AgendaAudience.wholeChurch
+        ? const <String>[]
+        : [
+            for (final id in _selectedMinistryIds)
+              ministries.firstWhere((m) => m.id == id, orElse: () => ministries.first).name,
+          ];
     final uid = ref.read(currentUidProvider) ?? '';
     final profile = ref.read(currentUserProfileProvider).asData?.value;
 
@@ -184,8 +226,11 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
     try {
       final entry = AgendaEntry(
         id: widget.editing?.id ?? '',
-        ministryId: _ministryId!,
-        ministryName: ministryName,
+        audienceType: _audienceType,
+        ministryIds: _audienceType == AgendaAudience.wholeChurch
+            ? const []
+            : _selectedMinistryIds.toList(),
+        ministryNames: ministryNames,
         title: title,
         description: _descriptionController.text.trim(),
         location: location,
@@ -202,21 +247,36 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
       }
       if (!mounted) return;
       _dirty = false;
-      Navigator.of(context).pop();
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Enviado para aprovação'),
+          content: const Text(
+            'O compromisso foi enviado para aprovação. Assim que for aprovado ou '
+            'rejeitado, você recebe uma notificação.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK')),
+          ],
+        ),
+      );
+      if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<bool?> _confirmConflict(AgendaEntry conflict) {
+  Future<bool?> _confirmConflict(AgendaCalendarItem conflict, {required bool masked}) {
+    final label = masked ? 'Restrito' : conflict.title;
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Conflito de horário'),
         content: Text(
-          '${conflict.ministryName} já reservou "${conflict.location}" nesse '
-          'horário (${_timeFormat.format(conflict.startDateTime)} às '
-          '${_timeFormat.format(conflict.endDateTime)}). Deseja continuar mesmo assim?',
+          '${conflict.isEvent ? 'O evento' : 'Já existe um compromisso'} "$label" '
+          'ocupa "${conflict.location}" nesse horário '
+          '(${_timeFormat.format(conflict.start)} às ${_timeFormat.format(conflict.end)}). '
+          'Deseja continuar mesmo assim?',
         ),
         actions: [
           TextButton(
@@ -239,20 +299,8 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
   @override
   Widget build(BuildContext context) {
     final allMinistries = ref.watch(ministriesProvider).asData?.value ?? const [];
-    final manageable = allMinistries
-        .where((m) => widget.manageableMinistryIds.contains(m.id))
-        .toList();
-    final catalogLocations = (ref.watch(agendaLocationsProvider).asData?.value ?? const [])
-        .map((l) => l.name)
-        .toList();
-    // Defensivo: se o local salvo neste compromisso (edição) foi renomeado ou
-    // excluído do catálogo depois, mantém ele na lista mesmo assim — senão o
-    // `DropdownButtonFormField` quebra com um valor fora dos `items`.
-    final locationItems = {
-      ...catalogLocations,
-      if (_location != null) _location!,
-    }.toList()
-      ..sort();
+    final catalogLocations = ref.watch(agendaLocationsProvider).asData?.value ?? const [];
+    final locationItems = locationItemsFor(catalogLocations, extra: _location);
 
     return PopScope(
       canPop: !_dirty,
@@ -272,19 +320,59 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
               children: [
                 ScreenTitle(_isEditing ? 'Editar compromisso' : 'Novo compromisso'),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _ministryId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Ministério'),
-                  items: [
-                    for (final m in manageable)
-                      DropdownMenuItem(value: m.id, child: Text(m.name)),
+                Text('Destinado a', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Ministério(s) específico(s)'),
+                        selected: _audienceType == AgendaAudience.ministries,
+                        onSelected: (_) => setState(() {
+                          _audienceType = AgendaAudience.ministries;
+                          _dirty = true;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Toda a igreja'),
+                        selected: _audienceType == AgendaAudience.wholeChurch,
+                        onSelected: (_) => setState(() {
+                          _audienceType = AgendaAudience.wholeChurch;
+                          _dirty = true;
+                        }),
+                      ),
+                    ),
                   ],
-                  onChanged: (value) => setState(() {
-                    _ministryId = value;
-                    _dirty = true;
-                  }),
                 ),
+                if (_audienceType == AgendaAudience.ministries) ...[
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: allMinistries.isEmpty ? null : () => _pickMinistries(allMinistries),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Selecionar ministérios',
+                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                        hintText: allMinistries.isEmpty ? 'Nenhum ministério cadastrado' : null,
+                      ),
+                      child: Text(
+                        allMinistries
+                            .where((m) => _selectedMinistryIds.contains(m.id))
+                            .map((m) => m.name)
+                            .join(', '),
+                        style: TextStyle(color: context.textPrimary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Aparece como "Restrito" pra quem não participa dos ministérios '
+                    'acima, e só notifica quem participa (03/09/2026, pedido do usuário).',
+                    style: TextStyle(color: context.textSecondary, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _titleController,
@@ -298,32 +386,55 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
                 DropdownButtonFormField<String>(
                   initialValue: _location,
                   isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Local/Área',
-                    hintText: locationItems.isEmpty ? 'Nenhum local cadastrado' : null,
-                  ),
+                  decoration: const InputDecoration(labelText: 'Local/Área'),
                   items: [
                     for (final name in locationItems)
                       DropdownMenuItem(value: name, child: Text(name)),
                   ],
-                  onChanged: locationItems.isEmpty
-                      ? null
-                      : (value) => setState(() {
-                          _location = value;
-                          _dirty = true;
-                        }),
-                ),
-                const SizedBox(height: 16),
-                DateField(
-                  label: 'Data',
-                  value: _date,
-                  firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                  lastDate: DateTime(DateTime.now().year + 2),
-                  onChanged: (date) => setState(() {
-                    _date = date;
+                  onChanged: (value) => setState(() {
+                    _location = value;
                     _dirty = true;
                   }),
                 ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Vários dias'),
+                  value: _multiDay,
+                  onChanged: (value) => setState(() {
+                    _multiDay = value ?? false;
+                    if (!_multiDay) _endDate = _startDate;
+                    _dirty = true;
+                  }),
+                ),
+                DateField(
+                  label: _multiDay ? 'De' : 'Data',
+                  value: _startDate,
+                  firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                  lastDate: DateTime(DateTime.now().year + 2),
+                  onChanged: (date) => setState(() {
+                    _startDate = date;
+                    if (!_multiDay ||
+                        (_endDate != null && date != null && _endDate!.isBefore(date))) {
+                      _endDate = date;
+                    }
+                    _dirty = true;
+                  }),
+                ),
+                if (_multiDay) ...[
+                  const SizedBox(height: 16),
+                  DateField(
+                    label: 'Até',
+                    value: _endDate,
+                    firstDate: _startDate ?? DateTime.now(),
+                    lastDate: DateTime(DateTime.now().year + 2),
+                    onChanged: (date) => setState(() {
+                      _endDate = date;
+                      _dirty = true;
+                    }),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -333,9 +444,9 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
                         value: _startTime,
                         onChanged: (time) => setState(() {
                           _startTime = time;
-                          // Preenche o término com +1h por padrão (03/09/2026,
-                          // pedido do usuário) — o campo continua editável
-                          // depois, esta escolha só serve de ponto de partida.
+                          // Preenche o término com +1h por padrão — o campo
+                          // continua editável depois, esta escolha só serve
+                          // de ponto de partida.
                           if (time != null) {
                             _endTime = TimeOfDay(
                               hour: (time.hour + 1) % 24,
@@ -378,13 +489,63 @@ class _AgendaEntryFormPageState extends ConsumerState<AgendaEntryFormPage> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Salvar'),
+                      : const Text('Enviar para aprovação'),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Mesmo padrão de `_MinistryPickerDialog` em `message_form_page.dart`/
+/// `members_page.dart` — checklist em diálogo, sem restringir a lista aos
+/// ministérios liderados (03/09/2026: qualquer líder pode escolher qualquer
+/// ministério).
+class _MinistryPickerDialog extends StatefulWidget {
+  const _MinistryPickerDialog({required this.ministries, required this.initiallySelected});
+
+  final List<Ministry> ministries;
+  final Set<String> initiallySelected;
+
+  @override
+  State<_MinistryPickerDialog> createState() => _MinistryPickerDialogState();
+}
+
+class _MinistryPickerDialogState extends State<_MinistryPickerDialog> {
+  late final _selected = {...widget.initiallySelected};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Selecionar ministérios'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final ministry in widget.ministries)
+              CheckboxListTile(
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _selected.contains(ministry.id),
+                title: Text(ministry.name),
+                onChanged: (checked) => setState(() {
+                  if (checked ?? false) {
+                    _selected.add(ministry.id);
+                  } else {
+                    _selected.remove(ministry.id);
+                  }
+                }),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.of(context).pop(_selected), child: const Text('Confirmar')),
+      ],
     );
   }
 }
@@ -400,7 +561,7 @@ class _TimeField extends StatelessWidget {
   final ValueChanged<TimeOfDay?> onChanged;
 
   Future<void> _open(BuildContext context) async {
-    final picked = await showTimePicker(
+    final picked = await showTimePicker24h(
       context: context,
       initialTime: value ?? const TimeOfDay(hour: 19, minute: 0),
     );
@@ -424,4 +585,3 @@ class _TimeField extends StatelessWidget {
     );
   }
 }
-

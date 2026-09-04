@@ -4,6 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../data/agenda_repository.dart'
+    show
+        AgendaCalendarItem,
+        agendaCalendarItemsProvider,
+        isAgendaApproverProvider,
+        myLedMinistryIdsProvider,
+        myMemberMinistryIdsProvider;
 import '../data/devotional_repository.dart';
 import '../data/event_repository.dart';
 import '../data/home_quick_tiles_repository.dart';
@@ -1175,34 +1182,50 @@ class _WeekAndNoticesRow extends StatelessWidget {
   }
 }
 
-/// "Esta Semana" — eventos publicados (`eventsProvider`) que caem nos
-/// próximos 7 dias (hoje incluso), agrupados por dia civil (fuso
-/// America/Sao_Paulo). Mostra "Nenhum evento essa semana." quando não há
-/// nenhum, em vez de sumir (ver doc comment de `_WeekAndNoticesRow`).
+/// "Esta Semana" — o que está aprovado no calendário da Agenda
+/// (`agendaCalendarItemsProvider`: compromissos aprovados + eventos
+/// publicados, 03/09/2026, 2ª rodada, pedido do usuário: "A alimentação do
+/// card ESTA SEMANA passa a ser de acordo com o que tem aprovado no
+/// calendário" — confirmado mostrar tudo, sem filtrar por ministério, mesmo
+/// alcance público que Eventos já tinha) que cai nos próximos 7 dias (hoje
+/// incluso), agrupado por dia civil (fuso America/Sao_Paulo). Mostra
+/// "Nenhum evento essa semana." quando não há nenhum, em vez de sumir (ver
+/// doc comment de `_WeekAndNoticesRow`).
 class _ThisWeekCard extends ConsumerWidget {
   const _ThisWeekCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventsAsync = ref.watch(eventsProvider);
-    final events = eventsAsync.asData?.value ?? const <Event>[];
+    final items = ref.watch(agendaCalendarItemsProvider);
+    // "Restrito" (03/09/2026, 3ª rodada) — "Esta Semana" mostra tudo que
+    // está aprovado, sem filtrar por ministério (confirmado com o usuário),
+    // mas um item fechado (não admin/aprovador/participante) precisa mascarar
+    // o título igual já acontece no calendário da Agenda (`agenda_page.dart`)
+    // — ver `AgendaCalendarItem.isMaskedFor`.
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    final isAdmin = profile?.isAdmin ?? false;
+    final isApprover = ref.watch(isAgendaApproverProvider);
+    final visibleIds = {
+      ...ref.watch(myLedMinistryIdsProvider),
+      ...ref.watch(myMemberMinistryIdsProvider),
+    };
+    bool isMasked(AgendaCalendarItem item) =>
+        item.isMaskedFor(isAdmin: isAdmin, isApprover: isApprover, visibleIds: visibleIds);
     final now = toSaoPauloTimeNow();
     final today = DateTime(now.year, now.month, now.day);
     final weekEnd = today.add(const Duration(days: 7));
 
     final thisWeek =
-        events.where((e) {
-          final d = e.dateTimeSaoPaulo;
-          final day = DateTime(d.year, d.month, d.day);
+        items.where((i) {
+          final day = DateTime(i.start.year, i.start.month, i.start.day);
           return !day.isBefore(today) && day.isBefore(weekEnd);
         }).toList()
-          ..sort((a, b) => a.dateTimeMillis.compareTo(b.dateTimeMillis));
+          ..sort((a, b) => a.start.compareTo(b.start));
 
-    final groups = <DateTime, List<Event>>{};
-    for (final e in thisWeek) {
-      final d = e.dateTimeSaoPaulo;
-      final day = DateTime(d.year, d.month, d.day);
-      groups.putIfAbsent(day, () => []).add(e);
+    final groups = <DateTime, List<AgendaCalendarItem>>{};
+    for (final i in thisWeek) {
+      final day = DateTime(i.start.year, i.start.month, i.start.day);
+      groups.putIfAbsent(day, () => []).add(i);
     }
     final days = groups.keys.toList()..sort();
 
@@ -1233,7 +1256,7 @@ class _ThisWeekCard extends ConsumerWidget {
                     )
                   else
                     for (final day in days)
-                      _WeekDayGroup(day: day, events: groups[day]!),
+                      _WeekDayGroup(day: day, items: groups[day]!, isMasked: isMasked),
                   InkWell(
                     onTap: () =>
                         ref.read(mainShellTabIndexProvider.notifier).state =
@@ -1273,10 +1296,11 @@ class _ThisWeekCard extends ConsumerWidget {
 }
 
 class _WeekDayGroup extends StatelessWidget {
-  const _WeekDayGroup({required this.day, required this.events});
+  const _WeekDayGroup({required this.day, required this.items, required this.isMasked});
 
   final DateTime day;
-  final List<Event> events;
+  final List<AgendaCalendarItem> items;
+  final bool Function(AgendaCalendarItem) isMasked;
 
   static final _weekdayFormat = DateFormat('EEE', 'pt_BR');
   static final _timeFormat = DateFormat('HH:mm', 'pt_BR');
@@ -1320,11 +1344,12 @@ class _WeekDayGroup extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final event in events)
+                for (final item in items)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 3),
                     child: Text(
-                      '${_timeFormat.format(event.dateTimeSaoPaulo)} ${event.title}',
+                      '${_timeFormat.format(item.start)} '
+                      '${isMasked(item) ? 'Restrito' : item.title}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

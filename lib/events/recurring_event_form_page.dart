@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../data/event_repository.dart' show eventsProvider, calendarEventsProvider;
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/recurring_event_repository.dart';
+import '../models/event.dart' show Event, EventAudience;
 import '../models/recurring_event.dart';
 import '../models/recurring_event_flyer.dart' show RecurringEventCategory, recurringEventFlyerCategoryLabel;
 import '../theme/app_theme.dart';
 import '../util/scroll_to_save.dart';
+import '../util/time_picker_24h.dart';
+import '../widgets/event_audience_area_field.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'recurring_event_utils.dart';
 
@@ -37,9 +41,16 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
   int _reminderLeadMinutes = 360;
   bool _active = true;
 
+  String _audienceType = EventAudience.wholeChurch;
+  List<String> _targetMinistryIds = const [];
+  List<String> _targetMinistryNames = const [];
+  String _churchArea = '';
+  int _durationMinutes = 120;
+
   RecurringEvent? _editingEvent;
   bool _loadingEvent = false;
   bool _saving = false;
+  bool _dirty = false;
 
   static final _timeFormat = DateFormat('HH:mm', 'pt_BR');
 
@@ -48,7 +59,11 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
   @override
   void initState() {
     super.initState();
-    if (_isEditing) _load();
+    if (_isEditing) {
+      _load();
+    } else {
+      _attachDirtyListeners();
+    }
   }
 
   @override
@@ -58,6 +73,41 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
     _locationController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // Ver doc comment equivalente em `event_form_page.dart` — listeners só
+  // depois de `_load()` já ter preenchido os campos, senão o próprio
+  // preenchimento dispararia o aviso de "sair sem salvar?" à toa.
+  void _attachDirtyListeners() {
+    _titleController.addListener(_markDirty);
+    _descriptionController.addListener(_markDirty);
+    _locationController.addListener(_markDirty);
+  }
+
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_dirty) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair sem salvar?'),
+        content: const Text('As alterações feitas serão perdidas.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Continuar editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sair sem salvar'),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
   }
 
   Future<void> _load() async {
@@ -75,14 +125,23 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
         _time = TimeOfDay(hour: event.hour, minute: event.minute);
         _reminderLeadMinutes = event.reminderLeadMinutes;
         _active = event.active;
+        _audienceType = event.audienceType;
+        _targetMinistryIds = event.targetMinistryIds;
+        _targetMinistryNames = event.targetMinistryNames;
+        _churchArea = event.churchArea;
+        _durationMinutes = event.durationMinutes ?? Event.defaultDurationMinutes;
       });
     }
+    _attachDirtyListeners();
     setState(() => _loadingEvent = false);
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.now());
-    if (picked != null) setState(() => _time = picked);
+    final picked = await showTimePicker24h(context: context, initialTime: _time ?? TimeOfDay.now());
+    if (picked != null) setState(() {
+      _time = picked;
+      _dirty = true;
+    });
   }
 
   bool _validate() {
@@ -91,12 +150,14 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
         _locationController.text.trim().isNotEmpty &&
         (_category?.isNotEmpty ?? false) &&
         _weekday != null &&
-        _time != null;
+        _time != null &&
+        _churchArea.isNotEmpty &&
+        !(_audienceType == EventAudience.specificMinistries && _targetMinistryIds.isEmpty);
   }
 
   Future<void> _save() async {
     if (!_validate()) {
-      _showSnack('Preencha título, descrição, local, categoria, dia da semana e horário.');
+      _showSnack('Preencha título, descrição, local, categoria, dia da semana, horário, destinado a e área da igreja.');
       return;
     }
     if (_isEditing) {
@@ -145,10 +206,23 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
           minute: _time!.minute,
           reminderLeadMinutes: _reminderLeadMinutes,
           active: _active,
+          audienceType: _audienceType,
+          targetMinistryIds: _targetMinistryIds,
+          targetMinistryNames: _targetMinistryNames,
+          churchArea: _churchArea,
+          durationMinutes: _durationMinutes,
         );
         final deactivating = existing.active && !updated.active;
         if (scope == _EditScope.series) {
           await repo.update(updated);
+          // NOVO (03/09/2026, correção de bug real: EBD/Culto de Louvor
+          // continuavam com a duração antiga de 5h mesmo depois de editar
+          // "Toda a série") — `update()` só grava no molde, a mudança só
+          // valeria a partir da geração da próxima semana; a ocorrência já
+          // publicada (a que aparece agora na Agenda) ficava presa nos
+          // dados antigos até lá. Sincroniza a instância atual também,
+          // best-effort (sem instância publicada ainda, não faz nada).
+          if (!deactivating) await repo.applyEditToUpcomingInstance(updated);
           if (deactivating) await repo.cancelNextOccurrenceOnly(existing.id);
         } else {
           final applied = await repo.applyEditToUpcomingInstance(updated);
@@ -178,10 +252,22 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
           active: true,
           createdBy: '',
           createdAt: null,
+          audienceType: _audienceType,
+          targetMinistryIds: _targetMinistryIds,
+          targetMinistryNames: _targetMinistryNames,
+          churchArea: _churchArea,
+          durationMinutes: _durationMinutes,
         );
         await repo.create(newEvent, uid);
       }
-      if (mounted) Navigator.of(context).pop();
+      // 03/09/2026, 3ª rodada, pedido do usuário: reflexo em tempo real —
+      // ver mesma nota em `event_form_page.dart`.
+      ref.invalidate(recurringEventsProvider);
+      ref.invalidate(eventsProvider);
+      ref.invalidate(calendarEventsProvider);
+      if (!mounted) return;
+      _dirty = false;
+      Navigator.of(context).pop();
     } catch (e) {
       _showSnack('Falha ao salvar: $e');
     } finally {
@@ -210,7 +296,12 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
     _scrollController.scrollToSaveButton();
     try {
       await ref.read(recurringEventRepositoryProvider).delete(_editingEvent!);
-      if (mounted) Navigator.of(context).pop();
+      ref.invalidate(recurringEventsProvider);
+      ref.invalidate(eventsProvider);
+      ref.invalidate(calendarEventsProvider);
+      if (!mounted) return;
+      _dirty = false;
+      Navigator.of(context).pop();
     } catch (e) {
       _showSnack('Falha ao excluir: $e');
     } finally {
@@ -226,7 +317,13 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
   Widget build(BuildContext context) {
     final title = _isEditing ? 'Editar evento recorrente' : 'Novo evento recorrente';
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (await _confirmDiscard() && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
         bottom: true,
@@ -260,6 +357,37 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
                           decoration: const InputDecoration(labelText: 'Local'),
                         ),
                         const SizedBox(height: 12),
+                        EventAudienceAreaFields(
+                          audienceType: _audienceType,
+                          ministryIds: _targetMinistryIds,
+                          churchArea: _churchArea,
+                          onChanged: (audienceType, ministryIds, ministryNames, churchArea) {
+                            setState(() {
+                              _audienceType = audienceType;
+                              _targetMinistryIds = ministryIds;
+                              _targetMinistryNames = ministryNames;
+                              _churchArea = churchArea;
+                              _dirty = true;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: _durationMinutes,
+                          decoration: const InputDecoration(labelText: 'Duração'),
+                          items: [
+                            for (final minutes in EventDuration.presetsMinutes)
+                              DropdownMenuItem(
+                                value: minutes,
+                                child: Text(eventDurationLabel(minutes)),
+                              ),
+                          ],
+                          onChanged: (value) => setState(() {
+                            _durationMinutes = value ?? _durationMinutes;
+                            _dirty = true;
+                          }),
+                        ),
+                        const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: _category,
                           decoration: const InputDecoration(labelText: 'Categoria'),
@@ -267,7 +395,10 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
                             for (final category in RecurringEventCategory.all)
                               DropdownMenuItem(value: category, child: Text(recurringEventFlyerCategoryLabel(category))),
                           ],
-                          onChanged: (value) => setState(() => _category = value),
+                          onChanged: (value) => setState(() {
+                            _category = value;
+                            _dirty = true;
+                          }),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<int>(
@@ -277,7 +408,10 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
                             for (final entry in weekdayLabels)
                               DropdownMenuItem(value: entry.$1, child: Text(entry.$2)),
                           ],
-                          onChanged: (value) => setState(() => _weekday = value),
+                          onChanged: (value) => setState(() {
+                            _weekday = value;
+                            _dirty = true;
+                          }),
                         ),
                         const SizedBox(height: 12),
                         InkWell(
@@ -303,14 +437,23 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
                             for (final entry in reminderLeadLabels)
                               DropdownMenuItem(value: entry.$1, child: Text(entry.$2)),
                           ],
-                          onChanged: (value) => setState(() => _reminderLeadMinutes = value ?? _reminderLeadMinutes),
+                          onChanged: (value) => setState(() {
+                            _reminderLeadMinutes = value ?? _reminderLeadMinutes;
+                            _dirty = true;
+                          }),
                         ),
                         if (_isEditing) ...[
                           const SizedBox(height: 12),
                           Row(
                             children: [
                               Expanded(child: Text('Ativo', style: TextStyle(color: context.textPrimary))),
-                              Switch(value: _active, onChanged: (value) => setState(() => _active = value)),
+                              Switch(
+                                value: _active,
+                                onChanged: (value) => setState(() {
+                                  _active = value;
+                                  _dirty = true;
+                                }),
+                              ),
                             ],
                           ),
                         ],
@@ -342,6 +485,7 @@ class _RecurringEventFormPageState extends ConsumerState<RecurringEventFormPage>
               ),
             ),
         ),
+      ),
     );
   }
 }

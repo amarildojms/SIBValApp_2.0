@@ -9,6 +9,7 @@ import '../data/user_repository.dart';
 import '../models/app_user.dart';
 import '../theme/app_theme.dart';
 import '../util/scroll_to_save.dart';
+import '../util/time_picker_24h.dart';
 import '../widgets/date_field.dart';
 import '../widgets/sibval_app_bar.dart';
 
@@ -57,7 +58,7 @@ class _MessageFormPageState extends ConsumerState<MessageFormPage> {
 
   Future<void> _pickMeetingTime() async {
     final now = DateTime.now();
-    final picked = await showTimePicker(context: context, initialTime: _meetingTime ?? TimeOfDay.fromDateTime(now));
+    final picked = await showTimePicker24h(context: context, initialTime: _meetingTime ?? TimeOfDay.fromDateTime(now));
     if (picked != null) setState(() => _meetingTime = picked);
   }
 

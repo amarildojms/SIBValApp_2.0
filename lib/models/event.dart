@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../util/agenda_area.dart';
+
 /// Espelha app/src/main/java/com/sibval/app/data/model/Event.kt — mesma
 /// coleção `events` no Firestore.
 class Event {
@@ -19,6 +21,37 @@ class Event {
   final String createdBy;
   final DateTime? createdAt;
 
+  /// A quem o evento é destinado — `EventAudience.wholeChurch` (padrão, mesmo
+  /// comportamento público de sempre) ou `.specificMinistries` (com
+  /// [targetMinistryIds] preenchido). 03/09/2026, pedido do usuário —
+  /// controla a exibição destacada dentro da Agenda
+  /// (`lib/agenda/agenda_page.dart`), não a aba pública "Eventos". ALTERADO
+  /// (mesma data, 4ª rodada): "Igreja e comunidade" foi retirado — só restam
+  /// as duas opções — e o flag `isOpen` avulso foi removido: Aberto/Restrito
+  /// deixou de ser uma escolha própria e passou a ser derivado direto daqui
+  /// (`.specificMinistries` = Restrito, `.wholeChurch` = Aberto), ver
+  /// `AgendaCalendarItem.hasMinistryAudience`.
+  final String audienceType;
+  final List<String> targetMinistryIds;
+  final List<String> targetMinistryNames;
+
+  /// Área da igreja usada pelo evento (catálogo `agendaLocations` + os dois
+  /// valores reservados de `lib/util/agenda_area.dart`) — vazio quando ainda
+  /// não informado (eventos anteriores a esta mudança). 03/09/2026, pedido do
+  /// usuário: "enviados automaticamente para o calendário".
+  final String churchArea;
+
+  /// Duração em minutos (03/09/2026, 2ª rodada, pedido do usuário: "Eventos
+  /// deve ganhar também o campo Duração, assim ele irá para o calendário
+  /// respeitando a duração") — `null` num evento salvo antes desta mudança,
+  /// cai pro palpite de 5h já usado (ver [defaultDurationMinutes]), só pra
+  /// não quebrar dado existente.
+  final int? durationMinutes;
+
+  static const defaultDurationMinutes = 300;
+
+  int get effectiveDurationMinutes => durationMinutes ?? defaultDurationMinutes;
+
   const Event({
     required this.id,
     required this.title,
@@ -35,12 +68,28 @@ class Event {
     required this.source,
     required this.createdBy,
     required this.createdAt,
+    this.audienceType = EventAudience.wholeChurch,
+    this.targetMinistryIds = const [],
+    this.targetMinistryNames = const [],
+    this.churchArea = '',
+    this.durationMinutes,
   });
+
+  /// `true` se este evento ocupa/bloqueia a Agenda — precisa de uma área
+  /// informada e diferente de "Fora da Igreja" (evento fora da igreja não
+  /// disputa espaço físico). Vazio (evento anterior a esta mudança, sem o
+  /// campo preenchido) é tratado como não-bloqueante, não como "toda a
+  /// igreja".
+  bool get blocksCalendar =>
+      churchArea.isNotEmpty && churchArea != kOutsideChurchArea;
 
   DateTime get dateTimeUtc =>
       DateTime.fromMillisecondsSinceEpoch(dateTimeMillis, isUtc: true);
 
   DateTime get dateTimeSaoPaulo => toSaoPauloTime(dateTimeUtc);
+
+  DateTime get endDateTimeSaoPaulo =>
+      dateTimeSaoPaulo.add(Duration(minutes: effectiveDurationMinutes));
 
   /// Verdadeiro assim que chega o horário de início do evento (fuso
   /// America/Sao_Paulo) — não diz sozinho até quando a tag "Iniciado" fica
@@ -58,6 +107,11 @@ class Event {
     bool? requiresRegistration,
     String? registrationLink,
     String? status,
+    String? audienceType,
+    List<String>? targetMinistryIds,
+    List<String>? targetMinistryNames,
+    String? churchArea,
+    int? durationMinutes,
   }) {
     return Event(
       id: id,
@@ -75,6 +129,11 @@ class Event {
       source: source,
       createdBy: createdBy,
       createdAt: createdAt,
+      audienceType: audienceType ?? this.audienceType,
+      targetMinistryIds: targetMinistryIds ?? this.targetMinistryIds,
+      targetMinistryNames: targetMinistryNames ?? this.targetMinistryNames,
+      churchArea: churchArea ?? this.churchArea,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
     );
   }
 
@@ -97,8 +156,30 @@ class Event {
       source: data['source'] as String? ?? EventSource.manual,
       createdBy: data['createdBy'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      audienceType: data['audienceType'] as String? ?? EventAudience.wholeChurch,
+      targetMinistryIds: List<String>.from(
+        data['targetMinistryIds'] as List? ?? const [],
+      ),
+      targetMinistryNames: List<String>.from(
+        data['targetMinistryNames'] as List? ?? const [],
+      ),
+      churchArea: data['churchArea'] as String? ?? '',
+      durationMinutes: (data['durationMinutes'] as num?)?.toInt(),
     );
   }
+}
+
+/// A quem um Evento é destinado (03/09/2026, pedido do usuário) — controla só
+/// a exibição destacada dentro da Agenda, a aba pública "Eventos" continua
+/// mostrando todo evento publicado independente disso. "Igreja e comunidade"
+/// (`churchAndCommunity`) existiu entre a 3ª e a 4ª rodada da mesma data e foi
+/// retirado a pedido do usuário — um evento antigo salvo com esse valor cai
+/// no comportamento de "Aberto" (mesma regra de qualquer valor que não seja
+/// [specificMinistries], ver `AgendaCalendarItem.hasMinistryAudience`), sem
+/// precisar de migração.
+abstract final class EventAudience {
+  static const specificMinistries = 'specificMinistries';
+  static const wholeChurch = 'wholeChurch';
 }
 
 abstract final class EventStatus {

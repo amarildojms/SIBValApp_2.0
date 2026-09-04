@@ -16,6 +16,7 @@ import '../models/service_order.dart';
 import '../models/visitor.dart';
 import '../notifications/notification_read_sync.dart';
 import '../praise/cifra_view_page.dart';
+import '../praise/praise_lyrics_page.dart';
 import '../theme/app_theme.dart';
 import 'service_order_bible_text_page.dart';
 import 'service_order_countdown.dart';
@@ -64,15 +65,19 @@ const _doneGreen = Color(0xFF43A047);
 /// **Momentos "Louvor"** mostram as músicas escaladas no repertório semanal
 /// da semana do culto (`PraiseRepertoireRepository.getForDate`,
 /// `praiseSlotLabelFor`), se houver — Ministério de Louvor
-/// (`praise_repertoire.dart`). **29/08/2026, pedido do usuário**: quando o
-/// dono da ordem também tem o papel Louvor (`canViewPraiseOrder`), tocar no
-/// momento abre a cifra da música escalada (`CifraViewPage`), mesmo destino
-/// que `ServiceOrderPraiseViewPage` já dava a quem só tem o papel Louvor
-/// (sem ser dono) — reaproveita o mesmo mecanismo de sub-ação de
-/// "Leitura bíblica"/hino (abre de verdade, marca concluído só ao voltar);
-/// com mais de uma música escalada no mesmo momento, cada uma vira uma
-/// sub-ação própria. Sem esse papel, o momento continua só marcando
-/// concluído no toque, sem abrir nada.
+/// (`praise_repertoire.dart`). **04/09/2026, pedido do usuário** ("quem tiver
+/// perfil instrumentista, verá as cifra... todos os outros usuários verão a
+/// letra"): tocar numa música abre a cifra (`CifraViewPage`) quando o dono
+/// tem o perfil **Instrumentista** (`CurrentUserProfile.isInstrumentista`,
+/// distinto do papel Louvor — `canViewPraiseOrder`, que hoje só decide se o
+/// dono acessa `ServiceOrderPraiseViewPage`/tom durante o culto) — mesmo
+/// destino que `ServiceOrderPraiseViewPage` já dá pra quem só é
+/// Instrumentista, sem ser dono. Sem esse perfil, abre a letra salva
+/// (`PraiseSong.lyrics`, `PraiseLyricsPage`) quando a música tiver; sem cifra
+/// aplicável nem letra, o momento continua só marcando concluído no toque.
+/// Reaproveita o mesmo mecanismo de sub-ação de "Leitura bíblica"/hino (abre
+/// de verdade, marca concluído só ao voltar); com mais de uma música
+/// escalada no mesmo momento, cada uma vira uma sub-ação própria.
 ///
 /// Ao concluir todos os momentos, aparece "Finalizar Culto" no rodapé —
 /// marca `ServiceOrder.isFinalized` e volta pra lista.
@@ -308,36 +313,59 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
         ),
       ];
     }
-    // Momento "Louvor" com o dono também no papel Louvor (29/08/2026, pedido
-    // do usuário) — tocar abre a cifra da música escalada, em vez de só
-    // marcar concluído. Sem repertório/música escalada pro momento, ou sem o
-    // papel, cai no comportamento padrão (`const []`, abaixo).
+    // Momento "Louvor" (04/09/2026, pedido do usuário: "quem tiver perfil
+    // instrumentista, verá as cifra ao tocar nas músicas do momento de
+    // louvor. Todos os outros usuários verão a letra da música quando
+    // houver") — antes só quem tinha o papel Louvor (`canViewPraiseOrder`)
+    // via cifra; agora é por música, pra qualquer dono da ordem: quem é
+    // Instrumentista abre a cifra, os demais abrem a letra salva
+    // (`PraiseSong.lyrics`, catálogo mestre) quando existir; sem cifra
+    // aplicável nem letra, o momento cai no comportamento padrão (`const
+    // []`, marca concluído só). Sem repertório/música escalada pro momento,
+    // idem.
     if (item.type != null) {
-      final canViewPraise =
-          ref.read(currentUserProfileProvider).asData?.value?.canViewPraiseOrder ??
-          false;
-      final slot = canViewPraise ? praiseSlotLabelFor(item.type!) : null;
+      final slot = praiseSlotLabelFor(item.type!);
       final songs = slot == null
           ? const <PraiseAssignment>[]
           : (_repertoire?.forSlot(slot) ?? const []);
       if (songs.isNotEmpty) {
-        return [
-          for (var i = 0; i < songs.length; i++)
-            _SubAction(
+        final isInstrumentista =
+            ref.read(currentUserProfileProvider).asData?.value?.isInstrumentista ?? false;
+        final catalog = ref.read(praiseSongsProvider).asData?.value ?? const [];
+        final subs = <_SubAction>[];
+        for (var i = 0; i < songs.length; i++) {
+          final song = songs[i];
+          final label = song.songArtist.isEmpty ? song.songName : '${song.songName} — ${song.songArtist}';
+          if (isInstrumentista) {
+            subs.add(_SubAction(
               key: '$baseKey:cifra$i',
-              label: songs[i].songArtist.isEmpty
-                  ? songs[i].songName
-                  : '${songs[i].songName} — ${songs[i].songArtist}',
+              label: label,
               open: (ctx) => Navigator.of(ctx).push<void>(
                 MaterialPageRoute(
-                  builder: (_) => CifraViewPage(
-                    songId: songs[i].songId,
-                    songName: songs[i].songName,
+                  builder: (_) => CifraViewPage(songId: song.songId, songName: song.songName),
+                ),
+              ),
+            ));
+            continue;
+          }
+          final catalogSong = catalog.where((s) => s.id == song.songId).firstOrNull;
+          if (catalogSong != null && catalogSong.hasLyrics) {
+            subs.add(_SubAction(
+              key: '$baseKey:letra$i',
+              label: label,
+              open: (ctx) => Navigator.of(ctx).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => PraiseLyricsPage(
+                    songName: catalogSong.name,
+                    songArtist: catalogSong.artist,
+                    lyrics: catalogSong.lyrics,
                   ),
                 ),
               ),
-            ),
-        ];
+            ));
+          }
+        }
+        if (subs.isNotEmpty) return subs;
       }
     }
     return const [];

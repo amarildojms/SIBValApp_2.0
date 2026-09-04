@@ -4,39 +4,41 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import '../data/agenda_repository.dart';
-import '../data/ministry_repository.dart';
+import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
+import '../events/event_detail_page.dart';
 import '../models/agenda_entry.dart';
+import '../models/event.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'agenda_approval_page.dart';
+import 'agenda_approvers_management_page.dart';
 import 'agenda_entry_form_page.dart';
 import 'agenda_location_management_page.dart';
+import 'agenda_reschedule_sheet.dart';
+import 'agenda_view_preference.dart';
+import 'recurring_agenda_entry_form_page.dart';
 
 /// Agenda dos ministérios (03/09/2026, pedido do usuário, sem equivalente no
-/// nativo) — líderes de cada ministério (`myLedMinistryIdsProvider`, ver
-/// `MemberRepository.isLeaderCargo`) marcam ensaios/reuniões/eventos pro
-/// próprio ministério; os demais membros do ministério (liderados,
-/// `myMemberMinistryIdsProvider`) só visualizam. Admin vê tudo e também pode
-/// **criar** um compromisso em qualquer ministério — revisão do mesmo dia:
-/// a 1ª versão restringia a criação só a quem lidera (mesmo admin), mas o
-/// usuário pediu a exceção de volta ao notar que, testando como admin sem
-/// liderar nenhum ministério, o botão de inserir sumia; editar/excluir já
-/// era liberado pro admin desde a 1ª versão.
+/// nativo) — líderes de **qualquer** ministério (`myLedMinistryIdsProvider`,
+/// ver `MemberRepository.isLeaderCargo`) marcam compromissos (avulsos ou
+/// recorrentes) para um ou mais ministérios, ou para toda a igreja; todo
+/// compromisso passa por aprovação (`AgendaApprovalPage`) antes de aparecer
+/// aqui de verdade — só `status == approved` bloqueia o calendário e é
+/// exibido. Eventos publicados (`lib/models/event.dart`,
+/// `calendarEventsProvider`) entram automaticamente na mesma visualização,
+/// sem uma segunda aprovação — inclusive já vencidos (03/09/2026, 2ª
+/// rodada, pedido do usuário: evento passado só some da aba "Eventos", não
+/// do calendário).
 ///
-/// Layout revisado em 03/09/2026 (mesmo dia, pedido do usuário: "algo
-/// parecido com" a agenda do app Outlook) — troca de Dia/Semana/Mês por
-/// `SegmentedButton` deu lugar a um seletor de visualização em menu (Agenda/
-/// Dia/Semana/Mês, [_AgendaViewMode]) mais uma faixa de semana navegável por
-/// toque ([_WeekStrip], só na visualização Agenda) acima do `SfCalendar` —
-/// mesmo motor de calendário de antes, só reconfigurado por modo
-/// (`CalendarView.schedule` para Agenda, `CalendarView.day` para Dia,
-/// `CalendarView.week` para Semana, `CalendarView.month` para Mês). O
+/// Layout inspirado no Outlook mobile — seletor de visualização em menu
+/// (Agenda/Dia/Semana/Mês, `AgendaViewMode`, lembrado entre sessões via
+/// `agendaViewModeProvider`) mais uma faixa de semana navegável por toque
+/// ([_WeekStrip], só na visualização Agenda) acima do `SfCalendar`. O
 /// cabeçalho nativo do `SfCalendar` (`headerHeight: 0`) fica oculto — o
 /// título "Agenda" (com o mês/ano em exibição logo abaixo, atualizado via
 /// `onViewChanged`) e o seletor de visualização já cobrem esse papel; troca
-/// de mês/dia continua possível por gesto de arrastar, como no Outlook.
-/// "3 Dias" (opção inicial) virou "Semana" no mesmo dia, a pedido do
-/// usuário.
+/// de mês/dia continua possível por gesto de arrastar.
 class AgendaPage extends ConsumerStatefulWidget {
   const AgendaPage({super.key});
 
@@ -44,19 +46,7 @@ class AgendaPage extends ConsumerStatefulWidget {
   ConsumerState<AgendaPage> createState() => _AgendaPageState();
 }
 
-enum _AgendaViewMode {
-  agenda('Agenda', Icons.view_agenda_outlined),
-  day('Dia', Icons.view_day_outlined),
-  week('Semana', Icons.view_week_outlined),
-  month('Mês', Icons.calendar_view_month_outlined);
-
-  const _AgendaViewMode(this.label, this.icon);
-  final String label;
-  final IconData icon;
-}
-
 class _AgendaPageState extends ConsumerState<AgendaPage> {
-  _AgendaViewMode _mode = _AgendaViewMode.agenda;
   DateTime _selectedDate = DateTime.now();
   late String _visibleMonthLabel;
   late final CalendarController _calendarController;
@@ -79,15 +69,15 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
     return label.isEmpty ? label : label[0].toUpperCase() + label.substring(1);
   }
 
-  CalendarView get _syncfusionView {
-    switch (_mode) {
-      case _AgendaViewMode.agenda:
+  static CalendarView _syncfusionViewFor(AgendaViewMode mode) {
+    switch (mode) {
+      case AgendaViewMode.agenda:
         return CalendarView.schedule;
-      case _AgendaViewMode.day:
+      case AgendaViewMode.day:
         return CalendarView.day;
-      case _AgendaViewMode.week:
+      case AgendaViewMode.week:
         return CalendarView.week;
-      case _AgendaViewMode.month:
+      case AgendaViewMode.month:
         return CalendarView.month;
     }
   }
@@ -98,33 +88,17 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
       _visibleMonthLabel = _formatMonthLabel(date);
     });
     _calendarController.displayDate = date;
-    // Mantém `selectedDate` em sincronia com a faixa de semana (03/09/2026,
-    // pedido do usuário: "ao inserir novo compromisso, a data já deve puxar
-    // o dia/hora que estiver selecionado no calendário") — o Syncfusion já
-    // atualiza `selectedDate` sozinho quando o usuário toca uma célula/
-    // horário em Dia/Semana/Mês (com hora real nas duas primeiras); a faixa
-    // de semana (só na visualização Agenda) é a única seleção que o app
-    // controla por fora, então precisa espelhar aqui pra virar a mesma
-    // fonte única de verdade (`_calendarController.selectedDate`) lida pelo
-    // FAB "Novo Compromisso".
     _calendarController.selectedDate = date;
   }
 
-  // Cabeçalho mostra o mês/ano em exibição no calendário (pedido do
-  // usuário) — atualizado sempre que o usuário navega por gesto (arrastar
-  // entre meses/dias, ou rolar a lista da Agenda), não só ao tocar num dia
-  // na faixa de semana.
+  // Cabeçalho mostra o mês/ano em exibição no calendário — atualizado sempre
+  // que o usuário navega por gesto (arrastar entre meses/dias, ou rolar a
+  // lista da Agenda), não só ao tocar num dia na faixa de semana.
   //
-  // Causa raiz de um crash real encontrado nesta mesma sessão
-  // ("Failed assertion: '_elements.contains(element)': is not true",
-  // reproduzido ao alternar Agenda/Dia/Semana/Mês repetidamente): o
+  // `addPostFrameCallback` adia a atualização pro fim do frame atual — o
   // Syncfusion chama `onViewChanged` de dentro do próprio `initState()` de um
-  // widget interno (`_CustomCalendarScrollViewState`), ou seja, em plena
-  // fase de build da árvore — um `setState` síncrono aqui disparava "setState
-  // ou markNeedsBuild chamado durante o build", que por sua vez deixava a
-  // árvore de elementos num estado inconsistente e derrubava o app pouco
-  // depois. `addPostFrameCallback` adia a atualização pro fim do frame atual,
-  // depois que o build em andamento termina.
+  // widget interno, em plena fase de build; um `setState` síncrono aqui já
+  // causou um crash real nesta base.
   void _onCalendarViewChanged(ViewChangedDetails details) {
     if (details.visibleDates.isEmpty) return;
     final middle = details.visibleDates[details.visibleDates.length ~/ 2];
@@ -136,76 +110,103 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
     });
   }
 
-  // O CalendarController guarda seu próprio `view` internamente (só usa
-  // `SfCalendar.view` pra inicializar na primeira montagem — depois disso, o
-  // widget ignora silenciosamente qualquer mudança em `view:`) — sem isto,
-  // trocar de modo atualiza o ícone/rádio do menu mas o calendário exibido
-  // continua preso na primeira visualização.
-  //
-  // NÃO adicionar `key: ValueKey(_mode)` no `SfCalendar` pra "garantir" a
-  // troca de configurações (timeSlotViewSettings etc.) — já tentado e
-  // revertido (03/09/2026): forçar remontagem completa toda vez que
-  // `_calendarController.view` já muda a view muda sozinho colide com os
-  // `GlobalKey`s internos do Syncfusion e derruba o app com
-  // `Failed assertion: '_elements.contains(element)': is not true` ao
-  // alternar entre Agenda/Dia/Semana/Mês algumas vezes. Sem a key, o
-  // `SfCalendarState.didUpdateWidget` já compara e aplica sozinho qualquer
-  // mudança nas configurações (confirmado lendo o código-fonte do pacote).
-  void _setMode(_AgendaViewMode mode) {
-    setState(() => _mode = mode);
-    _calendarController.view = _syncfusionView;
+  // O CalendarController guarda seu próprio `view` internamente e só usa
+  // `SfCalendar.view` pra inicializar na primeira montagem — sem isto, trocar
+  // de modo atualiza o ícone/rádio do menu mas o calendário exibido continua
+  // preso na primeira visualização. Também é o único jeito de refletir a
+  // visualização lembrada (`agendaViewModeProvider`), que carrega de forma
+  // assíncrona (`SharedPreferences`) depois do primeiro frame — ver
+  // `ref.listen` em `build()`. NÃO adicionar `key: ValueKey(mode)` no
+  // `SfCalendar` — já tentado e revertido, colide com os `GlobalKey`s
+  // internos do Syncfusion e derruba o app.
+  void _setMode(AgendaViewMode mode) {
+    ref.read(agendaViewModeProvider.notifier).set(mode);
+  }
+
+  Future<void> _showNewEntryChooser(DateTime initialDate) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.event_outlined),
+              title: const Text('Compromisso único'),
+              onTap: () => Navigator.of(sheetContext).pop('single'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.repeat),
+              title: const Text('Compromisso recorrente'),
+              onTap: () => Navigator.of(sheetContext).pop('recurring'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'single') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => AgendaEntryFormPage(initialDate: initialDate)),
+      );
+    } else if (choice == 'recurring') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const RecurringAgendaEntryFormPage()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final mode = ref.watch(agendaViewModeProvider);
+    ref.listen<AgendaViewMode>(agendaViewModeProvider, (previous, next) {
+      _calendarController.view = _syncfusionViewFor(next);
+    });
+
     final profile = ref.watch(currentUserProfileProvider).asData?.value;
     final isAdmin = profile?.isAdmin ?? false;
-    final ministries = ref.watch(ministriesProvider).asData?.value ?? const [];
     final ledIds = ref.watch(myLedMinistryIdsProvider);
     final memberIds = ref.watch(myMemberMinistryIdsProvider);
-    final entriesAsync = ref.watch(agendaEntriesProvider);
+    final visibleIds = {...memberIds, ...ledIds};
+    final items = ref.watch(agendaCalendarItemsProvider);
+    final isApprover = ref.watch(isAgendaApproverProvider);
+    // Só é lido quando `isApprover` (o ícone de "Solicitações" nem aparece
+    // pra quem não aprova, ver mais abaixo) — a fila de aprovação.
+    final requestsBadge =
+        isApprover ? ref.watch(pendingAgendaApprovalProvider).length : 0;
 
-    // Criação de compromisso novo: quem lidera aquele ministério, ou admin
-    // (bypass restaurado em 03/09/2026 — sem ele, um admin que não lidera
-    // nenhum ministério não via o botão de inserir).
-    final creatableIds = isAdmin ? ministries.map((m) => m.id).toSet() : ledIds;
-    // Editar/excluir um compromisso já existente: líder daquele ministério
-    // ou admin (oversight/gerenciamento, mantido).
-    final manageableIds = isAdmin
-        ? ministries.map((m) => m.id).toSet()
-        : ledIds;
-    final visibleIds = isAdmin
-        ? ministries.map((m) => m.id).toSet()
-        : {...memberIds, ...ledIds};
+    // Criar compromisso: quem lidera pelo menos um ministério, ou admin —
+    // não precisa mais liderar o ministério-alvo, só passa a exigir
+    // aprovação depois.
+    final canCreate = isAdmin || ledIds.isNotEmpty;
+
+    // Todo item aparece no calendário — o que muda é só o quanto dele fica
+    // visível: "Restrito" (sem título/descrição/local reais) pra quem não é
+    // admin/aprovador/participante dos ministérios envolvidos num item
+    // fechado (03/09/2026, 3ª rodada, pedido do usuário — antes um item de
+    // ministério específico sumia por completo pra quem estava de fora,
+    // agora ele continua ocupando o horário visivelmente, só sem revelar do
+    // que se trata). Ver `AgendaCalendarItem.isMaskedFor`.
+    bool isMasked(AgendaCalendarItem item) => item.isMaskedFor(
+      isAdmin: isAdmin,
+      isApprover: isApprover,
+      visibleIds: visibleIds,
+    );
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
-      floatingActionButton: creatableIds.isEmpty
+      floatingActionButton: !canCreate
           ? null
           : FloatingActionButton(
               heroTag: 'agenda_fab',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => AgendaEntryFormPage(
-                    manageableMinistryIds: creatableIds,
-                    // Dia/hora que estiver selecionado no calendário no
-                    // momento (03/09/2026, pedido do usuário) —
-                    // `_calendarController.selectedDate` é a fonte única de
-                    // verdade (ver `_goToDate`): tem hora real quando vem de
-                    // um toque em Dia/Semana, só a data quando vem de Mês ou
-                    // da faixa de semana da Agenda. Cai pro dia em exibição
-                    // (`_selectedDate`) se nada foi tocado ainda.
-                    initialDate:
-                        _calendarController.selectedDate ?? _selectedDate,
-                  ),
-                ),
+              onPressed: () => _showNewEntryChooser(
+                // Dia/hora que estiver selecionado no calendário no
+                // momento — `_calendarController.selectedDate` é a fonte
+                // única de verdade (ver `_goToDate`).
+                _calendarController.selectedDate ?? _selectedDate,
               ),
               child: const _NewAgendaEntryIcon(),
             ),
-      // `SafeArea` no rodapé (03/09/2026, corrige conteúdo escondido atrás
-      // da barra/botões de navegação do sistema, relatado pelo usuário) —
-      // mesmo padrão já usado no resto do app (ex.: `manage_ministries_page.dart`),
-      // só que esta tela (adicionada em 03/09/2026) tinha ficado de fora.
       body: SafeArea(
         bottom: true,
         top: false,
@@ -246,7 +247,40 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
                       ),
                     ),
                   ),
-                  if (isAdmin)
+                  IconButton(
+                    tooltip: 'Legenda',
+                    icon: const Icon(Icons.info_outline),
+                    onPressed: () => _showLegend(context),
+                  ),
+                  // Ícone (e a tela de aprovação por trás dele) só aparece
+                  // pra quem de fato aprova (03/09/2026, 3ª rodada, pedido
+                  // do usuário: "Para quem não for aprovador, não mostre
+                  // nem o ícone de aprovação"). Quem não é aprovador
+                  // continua sabendo do desfecho da própria solicitação
+                  // pela notificação (que já abre `AgendaApprovalPage`
+                  // direto, sem depender deste ícone).
+                  if (isApprover)
+                    IconButton(
+                      tooltip: 'Solicitações',
+                      icon: Badge(
+                        isLabelVisible: requestsBadge > 0,
+                        label: Text('$requestsBadge'),
+                        child: const Icon(Icons.fact_check_outlined),
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AgendaApprovalPage()),
+                      ),
+                    ),
+                  if (isAdmin) ...[
+                    IconButton(
+                      tooltip: 'Configurar aprovadores',
+                      icon: const Icon(Icons.verified_user_outlined),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AgendaApproversManagementPage(),
+                        ),
+                      ),
+                    ),
                     IconButton(
                       tooltip: 'Configurar locais',
                       icon: const Icon(Icons.place_outlined),
@@ -256,129 +290,134 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
                         ),
                       ),
                     ),
-                  _ViewModeMenuButton(mode: _mode, onChanged: _setMode),
+                  ],
+                  _ViewModeMenuButton(mode: mode, onChanged: _setMode),
                 ],
               ),
             ),
-            if (_mode == _AgendaViewMode.agenda)
+            if (mode == AgendaViewMode.agenda)
               _WeekStrip(selectedDate: _selectedDate, onSelect: _goToDate),
             Expanded(
-              child: visibleIds.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'Você não participa de nenhum ministério ainda.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: context.textSecondary),
-                        ),
+              child: SfCalendar(
+                view: _syncfusionViewFor(mode),
+                controller: _calendarController,
+                firstDayOfWeek: 7,
+                headerHeight: 0,
+                dataSource: _AgendaDataSource(items, isMasked),
+                // Padrão 24h no texto do compromisso na visão Agenda
+                // (schedule) — sem isso o Syncfusion usa o formato padrão
+                // dele ('hh:mm a', 12h com AM/PM) pra essa visão específica,
+                // diferente da régua de horário Dia/Semana (`timeFormat`
+                // acima), que já tinha sido corrigida antes (03/09/2026,
+                // pedido do usuário: "os compromissos ainda aparecem com
+                // padrão 12 horas").
+                appointmentTimeTextFormat: 'HH:mm',
+                todayHighlightColor: SibValColors.goldAccent,
+                onViewChanged: _onCalendarViewChanged,
+                // Widget de verdade pro cabeçalho de mês da visualização
+                // Agenda, no lugar do texto desenhado no canvas por
+                // `MonthHeaderSettings.textAlign` — esse `textAlign: center`
+                // sozinho só centralizava verticalmente na prática (relatado
+                // pelo usuário, 03/09/2026, 3ª rodada); um `Center` de
+                // verdade garante os dois eixos.
+                scheduleViewMonthHeaderBuilder: (context, details) {
+                  return Container(
+                    width: details.bounds.width,
+                    height: details.bounds.height,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    child: Text(
+                      _formatMonthLabel(details.date),
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                    )
-                  : entriesAsync.when(
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (error, _) => Center(
-                        child: Text(
-                          'Falha ao carregar: $error',
-                          style: TextStyle(color: context.textPrimary),
-                        ),
-                      ),
-                      data: (all) {
-                        final entries = all
-                            .where((e) => visibleIds.contains(e.ministryId))
-                            .toList();
-                        return SfCalendar(
-                          view: _syncfusionView,
-                          controller: _calendarController,
-                          firstDayOfWeek: 7,
-                          headerHeight: 0,
-                          dataSource: _AgendaDataSource(entries),
-                          todayHighlightColor: SibValColors.goldAccent,
-                          onViewChanged: _onCalendarViewChanged,
-                          viewHeaderStyle: ViewHeaderStyle(
-                            dayTextStyle: TextStyle(
-                              color: context.textSecondary,
-                            ),
-                            dateTextStyle: TextStyle(
-                              color: context.textPrimary,
-                            ),
-                          ),
-                          timeSlotViewSettings: TimeSlotViewSettings(
-                            // Sem dias "não úteis" (padrão do pacote marca
-                            // sáb./dom.) — pra uma igreja é o contrário, o fim
-                            // de semana costuma ser quando mais acontece.
-                            nonWorkingDays: const [],
-                            // Formato 24h na régua de horários (Dia/Semana) —
-                            // padrão do pacote é 'h a' (ex. "1 AM"), pedido do
-                            // usuário foi trocar pra 24h.
-                            timeFormat: 'HH:mm',
-                            timeTextStyle: TextStyle(
-                              color: context.textSecondary,
-                            ),
-                          ),
-                          monthViewSettings: MonthViewSettings(
-                            showAgenda: false,
-                            appointmentDisplayMode:
-                                MonthAppointmentDisplayMode.appointment,
-                            monthCellStyle: MonthCellStyle(
-                              textStyle: TextStyle(color: context.textPrimary),
-                              trailingDatesTextStyle: TextStyle(
-                                color: context.textSecondary.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
-                              leadingDatesTextStyle: TextStyle(
-                                color: context.textSecondary.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                          scheduleViewSettings: ScheduleViewSettings(
-                            hideEmptyScheduleWeek: true,
-                            monthHeaderSettings: MonthHeaderSettings(
-                              height: 44,
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                              monthTextStyle: TextStyle(
-                                color: context.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            weekHeaderSettings: WeekHeaderSettings(
-                              weekTextStyle: TextStyle(
-                                color: context.textSecondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            placeholderTextStyle: TextStyle(
-                              color: context.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                          onTap: (details) {
-                            final appointment =
-                                details.appointments?.isNotEmpty == true
-                                ? details.appointments!.first
-                                : null;
-                            if (appointment is! Appointment) return;
-                            final entry = entries.firstWhere(
-                              (e) => e.id == appointment.id,
-                            );
-                            _showEntryDetail(
-                              context,
-                              entry,
-                              canManage: manageableIds.contains(
-                                entry.ministryId,
-                              ),
-                              manageableMinistryIds: manageableIds,
-                            );
-                          },
-                        );
-                      },
                     ),
+                  );
+                },
+                viewHeaderStyle: ViewHeaderStyle(
+                  dayTextStyle: TextStyle(
+                    color: context.textSecondary,
+                  ),
+                  dateTextStyle: TextStyle(
+                    color: context.textPrimary,
+                  ),
+                ),
+                timeSlotViewSettings: TimeSlotViewSettings(
+                  nonWorkingDays: const [],
+                  timeFormat: 'HH:mm',
+                  timeTextStyle: TextStyle(
+                    color: context.textSecondary,
+                  ),
+                ),
+                monthViewSettings: MonthViewSettings(
+                  showAgenda: false,
+                  appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
+                  monthCellStyle: MonthCellStyle(
+                    textStyle: TextStyle(color: context.textPrimary),
+                    trailingDatesTextStyle: TextStyle(
+                      color: context.textSecondary.withValues(alpha: 0.5),
+                    ),
+                    leadingDatesTextStyle: TextStyle(
+                      color: context.textSecondary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                scheduleViewSettings: ScheduleViewSettings(
+                  hideEmptyScheduleWeek: true,
+                  // Só a altura importa aqui — o conteúdo visual vem de
+                  // `scheduleViewMonthHeaderBuilder` acima.
+                  monthHeaderSettings: const MonthHeaderSettings(height: 44),
+                  weekHeaderSettings: WeekHeaderSettings(
+                    weekTextStyle: TextStyle(
+                      color: context.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  placeholderTextStyle: TextStyle(
+                    color: context.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                onTap: (details) {
+                  final appointment = details.appointments?.isNotEmpty == true
+                      ? details.appointments!.first
+                      : null;
+                  if (appointment is! Appointment) return;
+                  final id = appointment.id as String;
+                  final item = items.firstWhere((i) => '${i.isEvent}_${i.id}' == id);
+                  if (isMasked(item)) {
+                    _showRestrictedDetail(context, item);
+                    return;
+                  }
+                  // Ocorrência futura de uma série virtual (03/09/2026,
+                  // pedido do usuário) — ainda não existe documento em
+                  // Firestore pra ela (só nasce perto da data, ver
+                  // `generateInstanceForTemplate`/`generateAgendaInstanceForTemplate`),
+                  // então nada de Remanejar/Cancelar aqui — só uma prévia.
+                  // `appointment.startTime`/`.endTime` já são a data real
+                  // desta ocorrência específica (o Syncfusion recalcula por
+                  // ocorrência a partir do `recurrenceRule`), diferente de
+                  // `item.start`/`.end`, que só valem pra 1ª ocorrência da
+                  // série virtual.
+                  if (item.isVirtual) {
+                    _showVirtualOccurrenceDetail(
+                      context,
+                      item,
+                      start: appointment.startTime,
+                      end: appointment.endTime,
+                    );
+                    return;
+                  }
+                  if (item.isEvent) {
+                    _showEventDetail(context, item.event!);
+                  } else {
+                    final entry = item.entry!;
+                    _showEntryDetail(context, ref, entry, isApprover: isApprover);
+                  }
+                },
+              ),
             ),
           ],
         ),
@@ -387,12 +426,60 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
   }
 }
 
-/// Ícone do FAB "novo compromisso" — calendário com um sinal "+" no canto
-/// (pedido do usuário, 03/09/2026), mesmo padrão de ícone composto já usado
-/// em `main_shell.dart` (`SettingsMailIcon` etc.): dois `Icons` do Material
-/// empilhados via `Stack`, sem precisar de um asset novo. O círculo do "+"
-/// usa a própria cor de fundo do FAB (`SibValColors.goldAccent`) — cria um
-/// efeito de "recorte" em vez de um badge de cor diferente por cima.
+void _showLegend(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Legenda'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _legendRow(dialogContext, kPointEventColor, 'Evento pontual'),
+            _legendRow(dialogContext, kRecurringEventColor, 'Evento recorrente'),
+            _legendRow(dialogContext, kRecurringAgendaColor, 'Compromisso recorrente'),
+            _legendRow(dialogContext, kPointAgendaColor, 'Compromisso único'),
+            _legendRow(dialogContext, kNonBlockingColor, 'Não bloqueia a data/horário'),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('🔒', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Bloqueia a data/horário para outros compromissos/eventos',
+                    style: TextStyle(color: dialogContext.textPrimary, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Fechar')),
+      ],
+    ),
+  );
+}
+
+Widget _legendRow(BuildContext context, Color color, String label) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Container(width: 16, height: 16, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label, style: TextStyle(color: context.textPrimary, fontSize: 13))),
+      ],
+    ),
+  );
+}
+
+/// Ícone do FAB "novo compromisso" — calendário com um sinal "+" no canto,
+/// mesmo padrão de ícone composto já usado em `main_shell.dart`.
 class _NewAgendaEntryIcon extends StatelessWidget {
   const _NewAgendaEntryIcon();
 
@@ -430,17 +517,17 @@ class _NewAgendaEntryIcon extends StatelessWidget {
 class _ViewModeMenuButton extends StatelessWidget {
   const _ViewModeMenuButton({required this.mode, required this.onChanged});
 
-  final _AgendaViewMode mode;
-  final ValueChanged<_AgendaViewMode> onChanged;
+  final AgendaViewMode mode;
+  final ValueChanged<AgendaViewMode> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<_AgendaViewMode>(
+    return PopupMenuButton<AgendaViewMode>(
       tooltip: 'Alterar visualização',
       icon: Icon(mode.icon, color: context.textPrimary),
       onSelected: onChanged,
       itemBuilder: (context) => [
-        for (final option in _AgendaViewMode.values)
+        for (final option in AgendaViewMode.values)
           PopupMenuItem(
             value: option,
             child: Row(
@@ -466,11 +553,7 @@ class _ViewModeMenuButton extends StatelessWidget {
 }
 
 /// Faixa de semana navegável por toque, inspirada na tira de dias do
-/// Outlook mobile (só aparece na visualização Agenda) — cada semana é uma
-/// página de um `PageView` "infinito" (offset em torno de hoje), com o dia
-/// selecionado preenchido em dourado e o dia de hoje (quando não é o
-/// selecionado) com um contorno dourado. Tocar num dia chama [onSelect], que
-/// desloca o `CalendarController.displayDate` da agenda pra aquele dia.
+/// Outlook mobile (só aparece na visualização Agenda).
 class _WeekStrip extends StatefulWidget {
   const _WeekStrip({required this.selectedDate, required this.onSelect});
 
@@ -619,167 +702,369 @@ class _DayCell extends StatelessWidget {
 
 void _showEntryDetail(
   BuildContext context,
+  WidgetRef ref,
   AgendaEntry entry, {
-  required bool canManage,
-  required Set<String> manageableMinistryIds,
+  required bool isApprover,
 }) {
   final dateFormat = DateFormat('EEE, dd/MM', 'pt_BR');
   final timeFormat = DateFormat('HH:mm', 'pt_BR');
   showModalBottomSheet<void>(
     context: context,
-    // `SafeArea` (03/09/2026, relatado pelo usuário: popup também escondido
-    // atrás dos botões do sistema) — mesmo padrão já usado em outros
-    // `showModalBottomSheet` do app (ex.: menu de ordem de culto em
-    // `service_order_list_page.dart`).
     builder: (sheetContext) => SafeArea(
-      child: Consumer(
-        builder: (sheetContext, ref, _) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.title,
-                style: TextStyle(
-                  color: sheetContext.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              entry.title,
+              style: TextStyle(
+                color: sheetContext.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
               ),
-              const SizedBox(height: 4),
-              Text(
-                '${entry.ministryName} · ${dateFormat.format(entry.startDateTime)} · '
-                '${timeFormat.format(entry.startDateTime)} às ${timeFormat.format(entry.endDateTime)}',
-                style: TextStyle(
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${entry.displayAudience} · ${dateFormat.format(entry.startDateTime)} · '
+              '${timeFormat.format(entry.startDateTime)} às ${dateFormat.format(entry.endDateTime)} '
+              '${timeFormat.format(entry.endDateTime)}',
+              style: TextStyle(
+                color: sheetContext.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.place_outlined,
+                  size: 14,
                   color: sheetContext.textSecondary,
-                  fontSize: 13,
                 ),
-              ),
+                const SizedBox(width: 4),
+                Text(
+                  entry.location,
+                  style: TextStyle(
+                    color: sheetContext.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+            if (entry.recurringAgendaEntryId.isNotEmpty) ...[
               const SizedBox(height: 4),
+              Text(
+                'Ocorrência de série recorrente',
+                style: TextStyle(color: sheetContext.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+            ],
+            if (entry.description.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                entry.description,
+                style: TextStyle(color: sheetContext.textPrimary),
+              ),
+            ],
+            if (isApprover) ...[
+              const SizedBox(height: 16),
               Row(
                 children: [
-                  Icon(
-                    Icons.place_outlined,
-                    size: 14,
-                    color: sheetContext.textSecondary,
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        showAgendaRescheduleSheet(context, ref, entry);
+                      },
+                      icon: const Icon(Icons.edit_calendar_outlined),
+                      label: const Text('Remanejar'),
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    entry.location,
-                    style: TextStyle(
-                      color: sheetContext.textSecondary,
-                      fontSize: 13,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        // Justificativa obrigatória (03/09/2026, 3ª rodada,
+                        // pedido do usuário: "Ao remanejar ou cancelar um
+                        // agendamento, deve informar a justificativa").
+                        final controller = TextEditingController();
+                        final reason = await showDialog<String>(
+                          context: sheetContext,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('Cancelar compromisso'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Cancelar "${entry.title}"? O solicitante será notificado.'),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: controller,
+                                  autofocus: true,
+                                  maxLines: 3,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  decoration: const InputDecoration(labelText: 'Justificativa'),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(),
+                                child: const Text('Voltar'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  final text = controller.text.trim();
+                                  if (text.isEmpty) return;
+                                  Navigator.of(dialogContext).pop(text);
+                                },
+                                child: const Text('Cancelar compromisso'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (reason != null && reason.isNotEmpty) {
+                          final profile = ref.read(currentUserProfileProvider).asData?.value;
+                          final uid = ref.read(currentUidProvider) ?? '';
+                          await ref.read(agendaRepositoryProvider).cancel(
+                                entry.id,
+                                reason: reason,
+                                approverUid: uid,
+                                approverName: profile?.shortName ?? '',
+                              );
+                          if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                        }
+                      },
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancelar'),
                     ),
                   ),
                 ],
               ),
-              if (entry.description.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  entry.description,
-                  style: TextStyle(color: sheetContext.textPrimary),
-                ),
-              ],
-              if (canManage) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => AgendaEntryFormPage(
-                                manageableMinistryIds: {
-                                  ...manageableMinistryIds,
-                                  entry.ministryId,
-                                },
-                                editing: entry,
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Editar'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final confirmed = await showDialog<bool>(
-                            context: sheetContext,
-                            builder: (dialogContext) => AlertDialog(
-                              title: const Text('Excluir compromisso'),
-                              content: Text(
-                                'Excluir "${entry.title}"? Essa ação não pode ser desfeita.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(false),
-                                  child: const Text('Cancelar'),
-                                ),
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(true),
-                                  child: const Text('Excluir'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirmed == true) {
-                            await ref
-                                .read(agendaRepositoryProvider)
-                                .delete(entry.id);
-                            if (sheetContext.mounted)
-                              Navigator.of(sheetContext).pop();
-                          }
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Excluir'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 8),
             ],
-          ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     ),
   );
 }
 
-/// Cor determinística por ministério — só pra distinguir visualmente vários
-/// ministérios no mesmo calendário (útil sobretudo pro admin, que vê todos).
-const _kMinistryColors = [
-  Color(0xFFB68B00),
-  Color(0xFF3F6FBF),
-  Color(0xFF6B8E23),
-  Color(0xFFB0413E),
-  Color(0xFF7D5BA6),
-  Color(0xFF3E8E8E),
-];
+/// Detalhe de uma ocorrência futura de uma série virtual (03/09/2026,
+/// pedido do usuário: "os agendamentos recorrentes... já devem ficar
+/// marcados no calendário todas as datas a frente") — só uma prévia
+/// somente-leitura; a ocorrência de verdade (com aprovação/cancelamento
+/// possível) só nasce em Firestore perto da data real.
+void _showVirtualOccurrenceDetail(
+  BuildContext context,
+  AgendaCalendarItem item, {
+  required DateTime start,
+  required DateTime end,
+}) {
+  final dateFormat = DateFormat('EEE, dd/MM', 'pt_BR');
+  final timeFormat = DateFormat('HH:mm', 'pt_BR');
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.title,
+              style: TextStyle(color: sheetContext.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${dateFormat.format(start)} · ${timeFormat.format(start)} às ${timeFormat.format(end)}',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.place_outlined, size: 14, color: sheetContext.textSecondary),
+                const SizedBox(width: 4),
+                Text(item.location, style: TextStyle(color: sheetContext.textSecondary, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Próxima ocorrência da série recorrente "${item.title}" — ainda não gerada de '
+              'verdade; entra na Agenda automaticamente mais perto da data.',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 13, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
-Color _colorForMinistry(String ministryId) =>
-    _kMinistryColors[ministryId.hashCode.abs() % _kMinistryColors.length];
+/// Detalhe de um item "Restrito" (03/09/2026, 3ª rodada) — quem não é
+/// admin/aprovador/participante dos ministérios envolvidos só vê que o
+/// horário está ocupado, sem título/descrição/local reais.
+void _showRestrictedDetail(BuildContext context, AgendaCalendarItem item) {
+  final dateFormat = DateFormat('EEE, dd/MM', 'pt_BR');
+  final timeFormat = DateFormat('HH:mm', 'pt_BR');
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_outline, color: sheetContext.textPrimary),
+                const SizedBox(width: 8),
+                Text(
+                  'Restrito',
+                  style: TextStyle(
+                    color: sheetContext.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${dateFormat.format(item.start)} · ${timeFormat.format(item.start)} '
+              'às ${timeFormat.format(item.end)}',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Visível só pra quem participa dos ministérios envolvidos.',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Detalhe simplificado de um Evento dentro da Agenda — somente leitura;
+/// editar/excluir é sempre pela tela de Eventos, não daqui.
+void _showEventDetail(BuildContext context, Event event) {
+  final dateFormat = DateFormat('EEE, dd/MM', 'pt_BR');
+  final timeFormat = DateFormat('HH:mm', 'pt_BR');
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              event.title,
+              style: TextStyle(
+                color: sheetContext.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Evento · ${dateFormat.format(event.dateTimeSaoPaulo)} · '
+              '${timeFormat.format(event.dateTimeSaoPaulo)}',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 13),
+            ),
+            if (event.churchArea.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.place_outlined, size: 14, color: sheetContext.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(event.churchArea, style: TextStyle(color: sheetContext.textSecondary, fontSize: 13)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 4),
+            Text(
+              event.blocksCalendar
+                  ? 'Bloqueia esse horário no calendário.'
+                  : 'Não bloqueia esse horário no calendário.',
+              style: TextStyle(color: sheetContext.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => EventDetailPage(eventId: event.id)),
+                  );
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Ver evento'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Cores por categoria (03/09/2026, 2ª rodada, pedido do usuário: "Vamos
+/// classificar os agendamentos por cores" — sem usar dourado, que já é a
+/// cor do FAB). Item que não bloqueia a data/horário (evento com área "Fora
+/// da Igreja" ou sem área informada) usa [kNonBlockingColor] em vez da cor
+/// da categoria — o que importa ali é "não compete por espaço".
+const kPointEventColor = Color(0xFFB0413E);
+const kRecurringEventColor = Color(0xFF3E8E8E);
+const kRecurringAgendaColor = Color(0xFF7D5BA6);
+const kPointAgendaColor = Color(0xFF3F6FBF);
+const kNonBlockingColor = Color(0xFF6B7A85);
+
+Color _colorForItem(AgendaCalendarItem item) {
+  if (!item.blocksCalendar) return kNonBlockingColor;
+  switch (item.category) {
+    case AgendaItemCategory.pointEvent:
+      return kPointEventColor;
+    case AgendaItemCategory.recurringEvent:
+      return kRecurringEventColor;
+    case AgendaItemCategory.recurringAgenda:
+      return kRecurringAgendaColor;
+    case AgendaItemCategory.pointAgenda:
+      return kPointAgendaColor;
+  }
+}
+
+String _subjectFor(AgendaCalendarItem item, {required bool masked}) {
+  final lock = item.blocksCalendar ? '🔒 ' : '';
+  if (masked) return '${lock}Restrito';
+  final tag = item.isEvent ? '📅 ' : '';
+  return '$lock$tag${item.title}';
+}
 
 class _AgendaDataSource extends CalendarDataSource {
-  _AgendaDataSource(List<AgendaEntry> entries) {
+  _AgendaDataSource(List<AgendaCalendarItem> items, bool Function(AgendaCalendarItem) isMasked) {
     appointments = [
-      for (final e in entries)
+      for (final item in items)
         Appointment(
-          id: e.id,
-          startTime: e.startDateTime,
-          endTime: e.endDateTime,
-          subject: '${e.title} (${e.ministryName})',
-          location: e.location,
-          notes: e.description,
-          color: _colorForMinistry(e.ministryId),
+          id: '${item.isEvent}_${item.id}',
+          startTime: item.start,
+          endTime: item.end,
+          subject: _subjectFor(item, masked: isMasked(item)),
+          location: isMasked(item) ? '' : item.location,
+          color: _colorForItem(item),
+          // Item virtual de uma série recorrente ativa (03/09/2026, pedido
+          // do usuário) — o Syncfusion expande sozinho todas as ocorrências
+          // futuras a partir de `startTime`/`endTime` (a 1ª ocorrência
+          // ainda não materializada), sem precisar de um item por semana.
+          recurrenceRule: item.recurrenceRule,
+          recurrenceExceptionDates: item.recurrenceExceptionDates,
         ),
     ];
   }

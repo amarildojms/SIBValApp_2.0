@@ -41,6 +41,11 @@ class RecurringEventRepository {
       'active': event.active,
       'createdBy': createdBy,
       'createdAt': FieldValue.serverTimestamp(),
+      'audienceType': event.audienceType,
+      'targetMinistryIds': event.targetMinistryIds,
+      'targetMinistryNames': event.targetMinistryNames,
+      'churchArea': event.churchArea,
+      'durationMinutes': event.durationMinutes,
     });
   }
 
@@ -58,6 +63,11 @@ class RecurringEventRepository {
       'minute': event.minute,
       'reminderLeadMinutes': event.reminderLeadMinutes,
       'active': event.active,
+      'audienceType': event.audienceType,
+      'targetMinistryIds': event.targetMinistryIds,
+      'targetMinistryNames': event.targetMinistryNames,
+      'churchArea': event.churchArea,
+      'durationMinutes': event.durationMinutes,
     });
   }
 
@@ -72,6 +82,11 @@ class RecurringEventRepository {
       'description': event.description,
       'location': event.location,
       'category': event.category,
+      'audienceType': event.audienceType,
+      'targetMinistryIds': event.targetMinistryIds,
+      'targetMinistryNames': event.targetMinistryNames,
+      'churchArea': event.churchArea,
+      'durationMinutes': event.durationMinutes,
     });
     return true;
   }
