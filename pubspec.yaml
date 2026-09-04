@@ -18,16 +18,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 42, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (02/09/2026): reforma do Início —
-# virou um painel-resumo (saudação + versículo do dia, grade de acesso
-# rápido quadrada com Bíblia/Ordem de Culto/Oração/Mensagens + EBD/Agenda/
-# PGMs "Em breve", cards "Próximo na Igreja"/"Devocional de Hoje" com a
-# imagem padrão de Devocionais/"Minha EBD"/"Esta Semana"+"Avisos" lado a
-# lado); o feed de publicações (Mural) saiu do Início e virou uma tela
-# própria dentro de Mais; barra inferior reduzida pra Início/Devocionais/
-# Eventos/Contribua (Mural e Mais saíram dela).
-version: 1.7.2+44
+# Play Console antes de enviar; se for maior que 44, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (04/09/2026): aba Contribua ganhou
+# "Doe para Cestas Básicas" — doação via Pix ou doação de alimentos (lista
+# de itens necessários, intenção de doação válida por 7 dias, "Ver minhas
+# doações"), com acompanhamento da meta do mês.
+version: 1.7.2+45
 
 environment:
   sdk: ^3.13.0
