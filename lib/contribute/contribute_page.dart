@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/basket_donation_repository.dart';
 import '../data/contribution_repository.dart';
 import '../data/user_repository.dart';
+import '../models/basket_donation.dart';
 import '../models/contribution_info.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'basket_campaign_page.dart';
 import 'contribute_settings_page.dart';
 import 'pix_offer_page.dart';
 
@@ -31,7 +34,8 @@ class ContributePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final infoAsync = ref.watch(contributionInfoProvider);
-    final isAdmin = ref.watch(currentUserProfileProvider).asData?.value?.isAdmin ?? false;
+    final isAdmin =
+        ref.watch(currentUserProfileProvider).asData?.value?.isAdmin ?? false;
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -48,20 +52,30 @@ class ContributePage extends ConsumerWidget {
                   const Expanded(
                     child: Text(
                       'Contribua',
-                      style: TextStyle(color: SibValColors.goldAccent, fontWeight: FontWeight.bold, fontSize: 19),
+                      style: TextStyle(
+                        color: SibValColors.goldAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 19,
+                      ),
                     ),
                   ),
                   if (isAdmin)
                     TextButton.icon(
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              ContributeSettingsPage(initial: infoAsync.asData?.value ?? ContributionInfo.empty),
+                          builder: (_) => ContributeSettingsPage(
+                            initial:
+                                infoAsync.asData?.value ??
+                                ContributionInfo.empty,
+                          ),
                         ),
                       ),
                       icon: const Icon(Icons.settings_outlined, size: 18),
@@ -77,14 +91,20 @@ class ContributePage extends ConsumerWidget {
                   const _VerseCard(),
                   const SizedBox(height: 16),
                   infoAsync.when(
-                    loading: () => const Center(child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
-                    )),
-                    error: (error, _) => Center(
-                      child: Text('Falha ao carregar: $error', style: TextStyle(color: context.textPrimary)),
+                    loading: () => const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
-                    data: (info) => _ContributionContent(info: info, isAdmin: isAdmin),
+                    error: (error, _) => Center(
+                      child: Text(
+                        'Falha ao carregar: $error',
+                        style: TextStyle(color: context.textPrimary),
+                      ),
+                    ),
+                    data: (info) =>
+                        _ContributionContent(info: info, isAdmin: isAdmin),
                   ),
                 ],
               ),
@@ -106,7 +126,10 @@ class _VerseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: SibValColors.navyBlueLight, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: SibValColors.navyBlueLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -114,13 +137,22 @@ class _VerseCard extends StatelessWidget {
             '"Cada um contribua conforme determinou no coração, não com pesar nem '
             'por obrigação, pois Deus ama a quem dá com alegria."',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 15, height: 1.4, fontStyle: FontStyle.italic),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              height: 1.4,
+              fontStyle: FontStyle.italic,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
             '2 Coríntios 9:7',
             textAlign: TextAlign.center,
-            style: TextStyle(color: SibValColors.goldAccent, fontSize: 13, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: SibValColors.goldAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -136,9 +168,8 @@ class _VerseCard extends StatelessWidget {
 void _copyCnpjAsPixKey(BuildContext context, String cnpj) {
   final digitsOnly = cnpj.replaceAll(RegExp(r'\D'), '');
   Clipboard.setData(ClipboardData(text: digitsOnly));
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Chave Pix (CNPJ) copiada.')),
-  );
+  ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Chave Pix (CNPJ) copiada.')));
 }
 
 class _ContributionContent extends StatelessWidget {
@@ -169,7 +200,11 @@ class _ContributionContent extends StatelessWidget {
             info.churchName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: context.textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         if (info.cnpj.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -181,9 +216,19 @@ class _ContributionContent extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('CNPJ: ${info.cnpj}', style: TextStyle(color: context.textSecondary, fontSize: 13)),
+                  Text(
+                    'CNPJ: ${info.cnpj}',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(width: 6),
-                  Icon(Icons.copy_outlined, size: 15, color: context.textSecondary),
+                  Icon(
+                    Icons.copy_outlined,
+                    size: 15,
+                    color: context.textSecondary,
+                  ),
                 ],
               ),
             ),
@@ -194,6 +239,8 @@ class _ContributionContent extends StatelessWidget {
             const SizedBox(height: 16),
             _PixOfferCard(info: info, pix: pix),
           ],
+        const SizedBox(height: 16),
+        const _BasketCampaignCard(),
         for (final bank in info.bankAccounts) ...[
           const SizedBox(height: 12),
           _BankCard(bank: bank),
@@ -232,7 +279,11 @@ class _PixOfferCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              const Icon(Icons.volunteer_activism_outlined, color: SibValColors.goldAccent, size: 28),
+              const Icon(
+                Icons.volunteer_activism_outlined,
+                color: SibValColors.goldAccent,
+                size: 28,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -240,14 +291,140 @@ class _PixOfferCard extends StatelessWidget {
                   children: [
                     Text(
                       pix.displayTitle,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    const Text('Informe o valor e gere o Pix na hora', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const Text(
+                      'Informe o valor e gere o Pix na hora',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
               const Icon(Icons.chevron_right, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Card "Doe para Cestas Básicas" (04/09/2026) — abre [BasketCampaignPage].
+/// Ao contrário dos `_PixOfferCard` (um por [PixEntry] cadastrada), este
+/// tile é fixo — sempre aparece na Contribua, independente de configuração
+/// prévia (a própria `BasketCampaignPage` trata o caso "nada configurado
+/// ainda").
+/// Destacado dos demais `_PixOfferCard` (04/09/2026, pedido do usuário) —
+/// borda dourada + fundo com leve tingimento dourado (`Color.alphaBlend`
+/// sobre `navyBlueLight`, mesmo mecanismo de `_momentBox` da Ordem de Culto)
+/// e o ícone em círculo dourado com cor invertida (navy sobre dourado, em
+/// vez de dourado sobre navy) — chama mais atenção sem sair da paleta da
+/// marca.
+///
+/// Ganhou o resumo do "Acompanhamento da campanha" (04/09/2026, pedido do
+/// usuário — já existia dentro de `BasketCampaignPage`, aqui é a mesma
+/// informação, mais compacta, pra dar pra ver sem precisar abrir a tela)
+/// direto no card fixo da Contribua, quando a meta do mês está configurada
+/// (`BasketCampaignSettings.hasProgress`).
+class _BasketCampaignCard extends ConsumerWidget {
+  const _BasketCampaignCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final campaign =
+        ref.watch(basketCampaignProvider).asData?.value ??
+        BasketCampaignSettings.empty;
+    return Card(
+      color: Color.alphaBlend(
+        SibValColors.goldAccent.withValues(alpha: 0.16),
+        SibValColors.navyBlueLight,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: SibValColors.goldAccent, width: 1.5),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const BasketCampaignPage())),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: SibValColors.goldAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shopping_basket_outlined,
+                      color: SibValColors.navyBlue,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Doe para Cestas Básicas',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Contribua via Pix ou doe alimentos',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: SibValColors.goldAccent,
+                  ),
+                ],
+              ),
+              if (campaign.hasProgress) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1, color: Colors.white24),
+                ),
+                Text(
+                  '${campaign.collectedCount} de ${campaign.goalCount} cestas arrecadadas este mês',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: (campaign.collectedCount / campaign.goalCount)
+                        .clamp(0, 1)
+                        .toDouble(),
+                    minHeight: 6,
+                    backgroundColor: Colors.white24,
+                    color: SibValColors.goldAccent,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -264,15 +441,21 @@ class _BankCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
-      title: bank.label.isNotEmpty ? 'Conta Bancária — ${bank.label}' : 'Conta Bancária',
+      title: bank.label.isNotEmpty
+          ? 'Conta Bancária — ${bank.label}'
+          : 'Conta Bancária',
       icon: Icons.account_balance_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (bank.bankName.isNotEmpty) _InfoRow(label: 'Banco', value: bank.bankName),
-          if (bank.agency.isNotEmpty) _InfoRow(label: 'Agência', value: bank.agency),
-          if (bank.operation.isNotEmpty) _InfoRow(label: 'Operação', value: bank.operation),
-          if (bank.account.isNotEmpty) _InfoRow(label: 'Conta', value: bank.account),
+          if (bank.bankName.isNotEmpty)
+            _InfoRow(label: 'Banco', value: bank.bankName),
+          if (bank.agency.isNotEmpty)
+            _InfoRow(label: 'Agência', value: bank.agency),
+          if (bank.operation.isNotEmpty)
+            _InfoRow(label: 'Operação', value: bank.operation),
+          if (bank.account.isNotEmpty)
+            _InfoRow(label: 'Conta', value: bank.account),
         ],
       ),
     );
@@ -280,7 +463,11 @@ class _BankCard extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.icon, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
 
   final String title;
   final IconData icon;
@@ -303,7 +490,11 @@ class _SectionCard extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ],
@@ -331,9 +522,17 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 80,
-            child: Text(label, style: TextStyle(color: context.textSecondary, fontSize: 12)),
+            child: Text(
+              label,
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            ),
           ),
-          Expanded(child: Text(value, style: TextStyle(color: context.textPrimary, fontSize: 15))),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(color: context.textPrimary, fontSize: 15),
+            ),
+          ),
         ],
       ),
     );

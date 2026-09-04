@@ -121,6 +121,14 @@ class CurrentUserProfile {
   // letra".
   bool get isInstrumentista => isAdmin || capabilities.contains(Capability.instrumentista);
 
+  // NOVO (04/09/2026): "Doe para Cestas Básicas" (Contribua) — gerencia o
+  // catálogo de itens necessários e a configuração da campanha (chave Pix,
+  // meta/arrecadação do mês, texto de entrega). Só admin por enquanto —
+  // usuário mencionou "admin ou outro perfil que criaremos depois", mas não
+  // pediu uma capacidade dedicada ainda; getter isolado pra não precisar
+  // tocar nos call sites quando isso for pedido.
+  bool get canManageBasketCampaign => isAdmin;
+
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.
   String get shortName {

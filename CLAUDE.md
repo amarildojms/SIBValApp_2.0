@@ -3498,6 +3498,62 @@ coleção não mudaram** — `ManageRolesPage`, `AppRole`, `RoleRepository`,
 antes; é só rótulo de exibição, sem migração de dado nem novo deploy
 necessário.
 
+**"Doe para Cestas Básicas" (04/09/2026, pedido do usuário com base em
+prints de referência) — sem equivalente no nativo, nova subseção dentro da
+Contribua:** card fixo `_BasketCampaignCard` (`contribute_page.dart`, sempre
+visível, ao contrário dos `_PixOfferCard` que só existem um por `PixEntry`
+cadastrada) abre `BasketCampaignPage` (`lib/contribute/basket_campaign_page.dart`)
+com duas formas de contribuir — "Doar via Pix" (reaproveita `PixOfferPage`
+existente, chave própria em `BasketCampaignSettings.pixKey`, distinta das
+chaves da Contribua geral) e "Doar alimentos" — mais um card opcional de
+acompanhamento da campanha (arrecadadas/meta do mês, barra de progresso).
+
+Fluxo de doação de alimentos, em 4 telas
+(`lib/contribute/basket_donate_food_page.dart` →
+`basket_donation_form_page.dart` → `basket_donation_confirm_page.dart` →
+`basket_donation_success_page.dart`, mais `basket_my_donations_page.dart`
+pra "Ver minhas doações"): lista os itens que a igreja mais precisa
+(`basketFoodItemsProvider`, catálogo mantido pelo admin), usuário monta a
+lista do que pretende doar (itens do catálogo ou um "outro item" avulso,
+com stepper de quantidade) e confirma — isso grava uma "intenção de doação"
+(`basketDonations/{id}`, `BasketDonation`) válida por 7 dias
+([BasketDonation.isExpired]/`.isPending`, calculado no cliente a partir do
+relógio, sem Cloud Function de expiração de verdade — mesmo padrão de
+`Visitor.isFromToday`/`Post.isFromToday`). Se o usuário já tem uma doação
+pendente, `BasketDonateFoodPage` mostra o resumo dela com o atalho "Já
+entreguei minha doação" (`BasketDonationRepository.markDelivered`) no lugar
+do botão de iniciar uma nova.
+
+Modelos em `lib/models/basket_donation.dart`
+(`BasketFoodItem`/`BasketCampaignSettings`/`BasketDonation`/
+`BasketDonationItem`, mais o enum `BasketPriority` alta/média/baixa),
+repositórios em `lib/data/basket_donation_repository.dart`
+(`BasketCampaignRepository` — doc único `settings/basketCampaign`,
+mesmo padrão de `ContributionRepository`; `BasketFoodItemRepository` —
+CRUD simples em `basketFoodItems`; `BasketDonationRepository` — cria/lê/
+marca entregue em `basketDonations`, com `watchMine(uid)` filtrando só por
+`uid` e ordenando em memória por `createdAt`, mesmo padrão de índice
+evitável já usado em `sentMessagesProvider`/`AppMessage.isRecipient`).
+
+Configuração (`BasketCampaignSettingsPage`, engrenagem em
+`BasketCampaignPage`) — chave Pix, meta/arrecadação do mês, texto de "onde e
+quando entregar", e o CRUD do catálogo de itens necessários (nome, unidade,
+prioridade, quantidade necessária). Gate de permissão:
+`CurrentUserProfile.canManageBasketCampaign`, hoje só `isAdmin` — usuário
+mencionou "admin ou outro perfil que criaremos depois", mas não pediu uma
+capacidade dedicada ainda; getter isolado de propósito pra não precisar
+tocar nos call sites quando isso for pedido.
+
+`SIBValApp2/firestore.rules`: `settings/{docId}` ganhou `basketCampaign` na
+mesma exceção de leitura pública de `contribution` (visitante sem login
+também vê); novos `match /basketFoodItems` (leitura pública, escrita só
+admin) e `match /basketDonations` (cada um só cria/lê/atualiza a própria
+doação — `uid` bate com quem está logado —, admin lê/atualiza qualquer uma;
+`update` restrito aos campos `delivered`/`deliveredAt`, os únicos que
+`markDelivered` de fato grava). **Só editei o código-fonte das regras — não
+fiz `firebase deploy`**, mesma cautela de sempre — até o deploy, ler/criar
+itens ou doações falha com permission-denied em produção.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
