@@ -19,8 +19,7 @@ class BasketDonationSuccessPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final campaign =
-        ref.watch(basketCampaignProvider).asData?.value ??
-        BasketCampaignSettings.empty;
+        ref.watch(donationCampaignProvider(donation.campaignId)).asData?.value;
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -101,7 +100,7 @@ class BasketDonationSuccessPage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            BasketDeliveryInfoCard(deliveryInfo: campaign.deliveryInfo),
+            BasketDeliveryInfoCard(deliveryInfo: campaign?.deliveryInfo ?? ''),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),

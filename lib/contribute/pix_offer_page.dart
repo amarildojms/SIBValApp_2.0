@@ -28,6 +28,7 @@ class PixOfferPage extends StatefulWidget {
     required this.churchName,
     required this.city,
     required this.pixKey,
+    this.onGenerated,
   });
 
   /// Texto exibido no título da tela e usado como mensagem de referência do
@@ -37,6 +38,14 @@ class PixOfferPage extends StatefulWidget {
   final String churchName;
   final String city;
   final String pixKey;
+
+  /// Chamado com o valor informado assim que o código é gerado com sucesso
+  /// (04/09/2026, pedido do usuário) — `null` em todo call site que não
+  /// precisa reagir a isso (default, sem mudança de comportamento). Usado
+  /// por `BasketCampaignPage` pra registrar a "intenção de doação" Pix
+  /// (`BasketDonation.type == pix`) visível à Diaconia/Tesouraria assim que
+  /// o doador gera o código — não espera nenhuma confirmação de pagamento.
+  final void Function(double amount)? onGenerated;
 
   @override
   State<PixOfferPage> createState() => _PixOfferPageState();
@@ -95,6 +104,7 @@ class _PixOfferPageState extends State<PixOfferPage> {
         _generatedCode = code;
         _error = null;
       });
+      widget.onGenerated?.call(_amount);
     } catch (e) {
       setState(() {
         _error = 'Não foi possível gerar o código: $e';

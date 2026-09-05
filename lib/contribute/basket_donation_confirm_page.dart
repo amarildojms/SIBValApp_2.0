@@ -10,12 +10,20 @@ import '../widgets/sibval_app_bar.dart';
 import 'basket_donation_success_page.dart';
 import 'basket_widgets.dart';
 
-/// "Confirmar doação" (04/09/2026) — última etapa antes de registrar a
-/// intenção de doação no Firestore ([BasketDonationRepository.create]).
+/// "Confirmar doação" (04/09/2026) — última etapa antes de registrar (ou
+/// atualizar, se [editing] vier preenchido) a intenção de doação no
+/// Firestore.
 class BasketDonationConfirmPage extends ConsumerStatefulWidget {
-  const BasketDonationConfirmPage({super.key, required this.items});
+  const BasketDonationConfirmPage({
+    super.key,
+    required this.campaignId,
+    required this.items,
+    this.editing,
+  });
 
+  final String campaignId;
   final List<BasketDonationItem> items;
+  final BasketDonation? editing;
 
   @override
   ConsumerState<BasketDonationConfirmPage> createState() =>
@@ -32,9 +40,23 @@ class _BasketDonationConfirmPageState
     final profile = ref.read(currentUserProfileProvider).asData?.value;
     setState(() => _saving = true);
     try {
-      final donation = await ref
-          .read(basketDonationRepositoryProvider)
-          .create(uid: uid, userName: profile?.name ?? '', items: widget.items);
+      final editing = widget.editing;
+      if (editing != null) {
+        await ref
+            .read(basketDonationRepositoryProvider)
+            .updateItems(editing.id, widget.items);
+        if (!mounted) return;
+        Navigator.of(context)
+          ..pop()
+          ..pop();
+        return;
+      }
+      final donation = await ref.read(basketDonationRepositoryProvider).createFood(
+            campaignId: widget.campaignId,
+            uid: uid,
+            userName: profile?.name ?? '',
+            items: widget.items,
+          );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -53,8 +75,7 @@ class _BasketDonationConfirmPageState
   @override
   Widget build(BuildContext context) {
     final campaign =
-        ref.watch(basketCampaignProvider).asData?.value ??
-        BasketCampaignSettings.empty;
+        ref.watch(donationCampaignProvider(widget.campaignId)).asData?.value;
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
       body: SafeArea(
@@ -145,7 +166,7 @@ class _BasketDonationConfirmPageState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  BasketDeliveryInfoCard(deliveryInfo: campaign.deliveryInfo),
+                  BasketDeliveryInfoCard(deliveryInfo: campaign?.deliveryInfo ?? ''),
                   const SizedBox(height: 16),
                   Card(
                     child: Padding(
@@ -196,7 +217,9 @@ class _BasketDonationConfirmPageState
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Confirmar que vou doar'),
+                        : Text(widget.editing == null
+                            ? 'Confirmar que vou doar'
+                            : 'Salvar alterações'),
                   ),
                 ],
               ),

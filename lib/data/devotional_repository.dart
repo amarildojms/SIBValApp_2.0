@@ -114,6 +114,38 @@ class DevotionalRepository {
   Future<void> delete(String id) {
     return _devotionals.doc(id).delete();
   }
+
+  /// "Copiar para outra data" (04/09/2026, pedido do usuário) — duplica
+  /// título/texto/autor/texto-base de [sourceId] num documento novo com
+  /// [newDate], sem mexer no original. `readBy` sempre nasce vazio (ninguém
+  /// leu a cópia ainda). Devolve o id do novo documento, pra quem chamou
+  /// poder abrir `DevotionalFormPage(editing: ...)` em seguida pra ajustes
+  /// finos antes de considerar pronta.
+  Future<String> copyTo({
+    required String sourceId,
+    required DateTime newDate,
+  }) async {
+    final source = await getById(sourceId);
+    if (source == null) {
+      throw StateError('Devocional de origem não encontrada.');
+    }
+    final doc = _devotionals.doc();
+    await doc.set({
+      'title': source.title,
+      'dateKey': dateKeyOf(newDate),
+      'dateMillis': newDate.millisecondsSinceEpoch,
+      'text': source.text,
+      'author': source.author,
+      'readBy': <String>[],
+      'baseBookId': source.baseBookId,
+      'baseBookName': source.baseBookName,
+      'baseChapter': source.baseChapter,
+      'baseVerseStart': source.baseVerseStart,
+      'baseVerseEnd': source.baseVerseEnd,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return doc.id;
+  }
 }
 
 final devotionalRepositoryProvider = Provider<DevotionalRepository>((ref) {

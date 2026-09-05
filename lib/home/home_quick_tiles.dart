@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../agenda/agenda_page.dart';
 import '../bible/bible_book_list_page.dart';
 import '../birthdays/birthdays_page.dart';
+import '../contribute/basket_diaconia_dashboard_page.dart';
+import '../data/basket_donation_repository.dart';
 import '../data/cifra_repository.dart';
 import '../data/message_repository.dart';
 import '../data/post_repository.dart' show currentUidProvider;
 import '../data/prayer_repository.dart' show pendingPrayerCountProvider;
 import '../data/service_order_repository.dart';
 import '../data/user_repository.dart';
+import '../models/basket_donation.dart';
 import '../gallery/album_list_page.dart';
 import '../hymnal/hymnals_page.dart';
 import '../introduction/introduction_page.dart';
@@ -108,6 +111,21 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
       (profile?.canViewVisitorSummaries ?? false) ||
       (profile?.canViewVisitorDetails ?? false);
   final canManageNoticeBoard = profile?.canManagePublications ?? false;
+  final canManageBasketDonations = profile?.canManageBasketDonations ?? false;
+  final canConfirmBasketPix = profile?.canConfirmBasketPix ?? false;
+  final canReviewBasketDonations = canManageBasketDonations || canConfirmBasketPix;
+  // Badge com o total de doações pendentes (04/09/2026, pedido do usuário)
+  // — Diaconia vê alimento+Pix; quem só é Tesouraria (sem Diaconia) só vê a
+  // fila de Pix, mesmo recorte de seções que `BasketDiaconiaDashboardPage`
+  // já usa.
+  final pendingBasketDonations = canReviewBasketDonations
+      ? ref.watch(pendingBasketDonationsProvider).asData?.value ?? const []
+      : const <BasketDonation>[];
+  final pendingBasketCount = canManageBasketDonations
+      ? pendingBasketDonations.length
+      : pendingBasketDonations
+          .where((d) => d.type == BasketDonationType.pix)
+          .length;
   final canAccessPraise =
       (profile?.canViewPraiseOrder ?? false) || ref.watch(canEditCifrasProvider);
 
@@ -250,6 +268,19 @@ List<HomeQuickTileDef> buildHomeQuickTileDefs(WidgetRef ref) {
         onTap: (ctx) => Navigator.of(
           ctx,
         ).push(MaterialPageRoute(builder: (_) => const NoticeManagementPage())),
+      ),
+    if (canReviewBasketDonations)
+      HomeQuickTileDef(
+        id: 'basketDonations',
+        label: 'Doações Pendentes',
+        icon: Icons.inventory_2_outlined,
+        // Diaconia (`canManageBasketDonations`) e/ou Tesouraria
+        // (`canConfirmBasketPix`) — 04/09/2026, pedido do usuário. Badge com
+        // o total pendente (mesmo pedido).
+        badgeCount: pendingBasketCount,
+        onTap: (ctx) => Navigator.of(ctx).push(
+          MaterialPageRoute(builder: (_) => const BasketDiaconiaDashboardPage()),
+        ),
       ),
   ];
 }

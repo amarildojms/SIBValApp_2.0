@@ -34,6 +34,20 @@ abstract final class Capability {
   /// `ServiceOrderLivePage._subActionsFor`.
   static const instrumentista = 'instrumentista';
 
+  /// Diaconia (04/09/2026, pedido do usuário) — recebe/confirma doações de
+  /// alimento e Pix da campanha "Doe para Cestas Básicas" (e demais
+  /// campanhas configuráveis) — painel `BasketDiaconiaDashboardPage`, marca
+  /// entrega de alimento e também pode confirmar Pix (mesma ação que
+  /// Tesouraria). Também gerencia o catálogo/configuração de uma campanha já
+  /// existente — ver `CurrentUserProfile.canManageBasketDonations`.
+  static const manageBasketDonations = 'manage_basket_donations';
+
+  /// Tesouraria (04/09/2026, pedido do usuário) — confirma que uma doação
+  /// via Pix de fato caiu na conta do banco; mesma ação de confirmação que
+  /// Diaconia também pode fazer (não é uma aprovação em duas etapas
+  /// obrigatórias) — ver `CurrentUserProfile.canConfirmBasketPix`.
+  static const confirmBasketPix = 'confirm_basket_pix';
+
   /// Ordem de exibição em `ManageRolesPage`.
   static const all = <(String id, String label)>[
     (viewPrayerRequests, 'Ver pedidos de oração'),
@@ -49,6 +63,8 @@ abstract final class Capability {
     (manageLeaderSchedule, 'Gerenciar Escala de Dirigentes'),
     (viewLeaderSchedule, 'Ver Escala de Dirigentes'),
     (instrumentista, 'Ver cifra na Ordem de Culto (Instrumentista)'),
+    (manageBasketDonations, 'Receber/confirmar doações de cestas (Diaconia)'),
+    (confirmBasketPix, 'Confirmar Pix recebido de doações (Tesouraria)'),
   ];
 
   static String labelFor(String id) =>

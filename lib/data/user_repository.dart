@@ -121,13 +121,36 @@ class CurrentUserProfile {
   // letra".
   bool get isInstrumentista => isAdmin || capabilities.contains(Capability.instrumentista);
 
-  // NOVO (04/09/2026): "Doe para Cestas Básicas" (Contribua) — gerencia o
-  // catálogo de itens necessários e a configuração da campanha (chave Pix,
-  // meta/arrecadação do mês, texto de entrega). Só admin por enquanto —
-  // usuário mencionou "admin ou outro perfil que criaremos depois", mas não
-  // pediu uma capacidade dedicada ainda; getter isolado pra não precisar
-  // tocar nos call sites quando isso for pedido.
-  bool get canManageBasketCampaign => isAdmin;
+  // NOVO (04/09/2026): "Doe para Cestas Básicas"/demais campanhas de doação
+  // (Contribua) — Diaconia (`manage_basket_donations`) vê o painel de
+  // doações pendentes/histórico (`BasketDiaconiaDashboardPage`) e marca
+  // alimento como entregue ou confirma Pix; Tesouraria (`confirm_basket_pix`)
+  // só confirma Pix (mesma ação que Diaconia também pode fazer).
+  //
+  // **04/09/2026, mesma sessão, correção do usuário**: "Todas estas
+  // permissões de diácono e tesoureiro devem ser somente para estes
+  // papéis (admin não ter)" — ao contrário de todo outro getter `canX`
+  // desta classe (sempre `isAdmin || ...`), estes dois NÃO têm o bypass de
+  // admin de propósito. Um admin sem o papel Diaconia/Tesouraria não vê o
+  // painel de doações pendentes, não marca entrega, não confirma Pix, não
+  // recebe as notificações `basket_review_food`/`basket_review_pix` — é
+  // uma separação de responsabilidades deliberada, não um esquecimento.
+  bool get canManageBasketDonations =>
+      capabilities.contains(Capability.manageBasketDonations);
+  bool get canConfirmBasketPix =>
+      capabilities.contains(Capability.confirmBasketPix);
+
+  /// Criar uma campanha nova, ou finalizá-la, continua exclusivo do admin —
+  /// é uma decisão estrutural, não a operação de "receber/confirmar doação"
+  /// que é exclusiva de Diaconia/Tesouraria acima.
+  bool get canCreateDonationCampaigns => isAdmin;
+
+  /// Configurar uma campanha já existente (chave Pix, meta, catálogo/receita
+  /// da cesta) — diferente de `canManageBasketDonations` acima, este SIM
+  /// inclui admin: configurar não é "receber/confirmar doação", é
+  /// administração da campanha em si.
+  bool get canConfigureDonationCampaigns =>
+      isAdmin || capabilities.contains(Capability.manageBasketDonations);
 
   /// Espelha MoreViewModel.kt shortName(): primeiro + último nome, ou o
   /// e-mail se não houver nome cadastrado.

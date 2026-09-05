@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/basket_donation_repository.dart';
 import '../data/contribution_repository.dart';
+import '../data/post_repository.dart' show currentUidProvider;
 import '../data/user_repository.dart';
-import '../models/basket_donation.dart';
 import '../models/contribution_info.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -13,28 +13,35 @@ import 'basket_donate_food_page.dart';
 import 'pix_offer_page.dart';
 
 /// "Doação de Cestas Básicas" (04/09/2026, sem equivalente no nativo) —
-/// aberta a partir do card "Doe para Cestas Básicas" na Contribua
-/// (`contribute_page.dart`). Duas formas de contribuir: Pix (reaproveita
+/// aberta a partir de um dos cards "Doe para..." na Contribua
+/// (`contribute_page.dart`, um por campanha ativa desde a generalização
+/// multi-campanha). Duas formas de contribuir: Pix (reaproveita
 /// `PixOfferPage`, mesmo mecanismo dos demais cards da Contribua, com a
-/// chave cadastrada em `BasketCampaignSettings.pixKey`) ou alimentos
+/// chave cadastrada em `DonationCampaign.pixKey` — ao gerar o código, já
+/// registra a intenção de doação visível à Diaconia/Tesouraria) ou alimentos
 /// (`BasketDonateFoodPage`).
 class BasketCampaignPage extends ConsumerWidget {
-  const BasketCampaignPage({super.key});
+  const BasketCampaignPage({super.key, required this.campaignId});
+
+  final String campaignId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final campaignAsync = ref.watch(basketCampaignProvider);
+    final campaignAsync = ref.watch(donationCampaignProvider(campaignId));
     final infoAsync = ref.watch(contributionInfoProvider);
-    final canManage =
-        ref
-            .watch(currentUserProfileProvider)
-            .asData
-            ?.value
-            ?.canManageBasketCampaign ??
-        false;
-    final campaign =
-        campaignAsync.asData?.value ?? BasketCampaignSettings.empty;
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    // Configurar a campanha (engrenagem) é admin OU Diaconia
+    // (`canConfigureDonationCampaigns`) — diferente de
+    // `canManageBasketDonations` (só Diaconia, sem admin), que é exclusivo
+    // de receber/confirmar doação (04/09/2026, pedido do usuário).
+    final canManage = profile?.canConfigureDonationCampaigns ?? false;
+    final campaign = campaignAsync.asData?.value;
     final info = infoAsync.asData?.value ?? ContributionInfo.empty;
+    if (campaign == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -48,10 +55,10 @@ class BasketCampaignPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Doação de Cestas Básicas',
-                      style: TextStyle(
+                      'Doação de ${campaign.name}',
+                      style: const TextStyle(
                         color: SibValColors.goldAccent,
                         fontWeight: FontWeight.bold,
                         fontSize: 19,
@@ -97,7 +104,7 @@ class BasketCampaignPage extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Doe para Cestas Básicas',
+                              'Doe para ${campaign.name}',
                               style: TextStyle(
                                 color: context.textPrimary,
                                 fontWeight: FontWeight.bold,
@@ -142,10 +149,29 @@ class BasketCampaignPage extends ConsumerWidget {
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => PixOfferPage(
-                                  description: 'Doação para Cestas Básicas',
+                                  description: 'Doação para ${campaign.name}',
                                   churchName: info.churchName,
                                   city: info.city,
                                   pixKey: campaign.pixKey,
+                                  onGenerated: (amount) {
+                                    final uid = ref.read(currentUidProvider);
+                                    if (uid == null) return;
+                                    ref
+                                        .read(basketDonationRepositoryProvider)
+                                        .createPix(
+                                          campaignId: campaignId,
+                                          uid: uid,
+                                          userName: profile?.name ?? '',
+                                          amount: amount,
+                                        );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Doação registrada — será contabilizada assim que o Pix for confirmado.',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -158,7 +184,8 @@ class BasketCampaignPage extends ConsumerWidget {
                                 'Doe alimentos e ajude famílias diretamente.',
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const BasketDonateFoodPage(),
+                                builder: (_) =>
+                                    BasketDonateFoodPage(campaignId: campaignId),
                               ),
                             ),
                           ),

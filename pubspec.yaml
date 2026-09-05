@@ -18,12 +18,16 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # of the product and file versions while build-number is used as the build suffix.
 # build-number (depois do "+") precisa ser maior que o maior versionCode já
 # publicado para com.sibval.app na Play Console — confirme o valor real na
-# Play Console antes de enviar; se for maior que 44, ajuste aqui e gere o
-# AAB de novo. Novidade desta versão (04/09/2026): aba Contribua ganhou
-# "Doe para Cestas Básicas" — doação via Pix ou doação de alimentos (lista
-# de itens necessários, intenção de doação válida por 7 dias, "Ver minhas
-# doações"), com acompanhamento da meta do mês.
-version: 1.7.2+45
+# Play Console antes de enviar; se for maior que 45, ajuste aqui e gere o
+# AAB de novo. Novidade desta versão (05/09/2026): "Doe para Cestas
+# Básicas" generalizado em campanhas de doação configuráveis
+# (Configurações e Gerenciamento → Campanhas de Doação, dentro da
+# Contribua), com papéis Diaconia/Tesouraria (recebem/confirmam doação de
+# alimento e Pix, exclusivos desses papéis — admin não tem por padrão),
+# histórico de doações por campanha, badge de pendentes, opção de
+# finalizar campanha, e um atalho de "Dízimos e Ofertas" dentro da Ordem
+# de Culto pra quem não está dirigindo.
+version: 1.7.2+46
 
 environment:
   sdk: ^3.13.0

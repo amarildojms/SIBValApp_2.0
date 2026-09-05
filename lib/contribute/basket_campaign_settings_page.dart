@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/basket_donation_repository.dart';
+import '../data/user_repository.dart';
 import '../models/basket_donation.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
+import 'basket_donation_history_page.dart';
 import 'basket_widgets.dart';
 
 /// Opção escolhida no diálogo de "alterações não salvas" ao tentar voltar
@@ -13,14 +15,23 @@ import 'basket_widgets.dart';
 /// padrão de `contribute_settings_page.dart`.
 enum _LeaveAction { cancel, discard, save }
 
-/// Configuração da campanha "Doe para Cestas Básicas" (04/09/2026) — chave
-/// Pix, meta/arrecadação do mês, texto de "onde e quando entregar" e o
-/// catálogo de itens necessários. Só chega aqui quem tem
-/// `canManageBasketCampaign` (gate na engrenagem de `BasketCampaignPage`).
+/// Configuração de uma campanha de doação de alimentos (04/09/2026) — chave
+/// Pix, meta do mês, valor de 1 cesta via Pix, texto de "onde e quando
+/// entregar" e o catálogo de itens necessários (cada um com a "quantidade
+/// por cesta" que forma a receita). Só chega aqui quem tem
+/// `canManageBasketDonations` (Diaconia ou admin) — gate na engrenagem de
+/// `BasketCampaignPage` e no toque numa campanha em
+/// `DonationCampaignsAdminPage`.
+///
+/// **04/09/2026, generalização multi-campanha**: recebe a
+/// [DonationCampaign] inteira (era `BasketCampaignSettings`, singleton).
+/// "Arrecadadas este mês" e a "quantidade necessária" de cada item deixaram
+/// de ser digitadas à mão — são calculadas a partir da meta e do que já foi
+/// recebido (`BasketDonationRepository.markFoodDelivered`/`.confirmPix`).
 class BasketCampaignSettingsPage extends ConsumerStatefulWidget {
   const BasketCampaignSettingsPage({super.key, required this.initial});
 
-  final BasketCampaignSettings initial;
+  final DonationCampaign initial;
 
   @override
   ConsumerState<BasketCampaignSettingsPage> createState() =>
@@ -35,9 +46,9 @@ class _BasketCampaignSettingsPageState
   late final _goalController = TextEditingController(
     text: widget.initial.goalCount > 0 ? '${widget.initial.goalCount}' : '',
   );
-  late final _collectedController = TextEditingController(
-    text: widget.initial.collectedCount > 0
-        ? '${widget.initial.collectedCount}'
+  late final _basketValueController = TextEditingController(
+    text: widget.initial.valuePerBasket > 0
+        ? widget.initial.valuePerBasket.toStringAsFixed(2)
         : '',
   );
   late final _deliveryController = TextEditingController(
@@ -46,7 +57,7 @@ class _BasketCampaignSettingsPageState
 
   bool _saving = false;
 
-  /// `true` assim que qualquer dos 4 campos de texto muda — os itens do
+  /// `true` assim que qualquer dos campos de texto muda — os itens do
   /// catálogo (`_showItemDialog`/`_confirmDeleteItem`) já gravam direto no
   /// Firestore ao confirmar, então não passam por este flag. Mesmo padrão de
   /// `contribute_settings_page.dart`.
@@ -60,7 +71,7 @@ class _BasketCampaignSettingsPageState
   void dispose() {
     _pixKeyController.dispose();
     _goalController.dispose();
-    _collectedController.dispose();
+    _basketValueController.dispose();
     _deliveryController.dispose();
     super.dispose();
   }
@@ -68,13 +79,14 @@ class _BasketCampaignSettingsPageState
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final settings = BasketCampaignSettings(
+      final updated = widget.initial.copyWith(
         pixKey: _pixKeyController.text.trim(),
         goalCount: int.tryParse(_goalController.text.trim()) ?? 0,
-        collectedCount: int.tryParse(_collectedController.text.trim()) ?? 0,
+        valuePerBasket:
+            double.tryParse(_basketValueController.text.trim().replaceAll(',', '.')) ?? 0,
         deliveryInfo: _deliveryController.text.trim(),
       );
-      await ref.read(basketCampaignRepositoryProvider).update(settings);
+      await ref.read(donationCampaignRepositoryProvider).update(updated);
       if (!mounted) return;
       setState(() => _dirty = false);
       ScaffoldMessenger.of(context)
@@ -135,7 +147,9 @@ class _BasketCampaignSettingsPageState
       text: existing?.unit ?? 'pacotes',
     );
     final quantityController = TextEditingController(
-      text: existing != null ? '${existing.neededQuantity}' : '',
+      text: existing != null && existing.quantityPerBasket > 0
+          ? '${existing.quantityPerBasket}'
+          : '',
     );
     var priority = existing?.priority ?? BasketPriority.media;
 
@@ -169,7 +183,8 @@ class _BasketCampaignSettingsPageState
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'Quantidade necessária',
+                    labelText: 'Quantidade por cesta',
+                    helperText: 'Quanto entra em 1 cesta completa (0 = não entra na receita)',
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -207,26 +222,35 @@ class _BasketCampaignSettingsPageState
     final unit = unitController.text.trim().isEmpty
         ? 'unidades'
         : unitController.text.trim();
-    final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
+    final quantityPerBasket = int.tryParse(quantityController.text.trim()) ?? 0;
     final repo = ref.read(basketFoodItemRepositoryProvider);
-    if (existing == null) {
-      await repo.create(
-        name: name,
-        unit: unit,
-        priority: priority,
-        neededQuantity: quantity,
-      );
-    } else {
-      await repo.update(
-        BasketFoodItem(
-          id: existing.id,
+    // Diálogo já fechou (`Navigator.pop` acima) antes deste `try` — sem ele,
+    // uma falha aqui (04/09/2026, bug relatado pelo usuário) desaparecia em
+    // silêncio, sem nenhum aviso de que o item não foi salvo.
+    try {
+      if (existing == null) {
+        await repo.create(
+          campaignId: widget.initial.id,
           name: name,
           unit: unit,
           priority: priority,
-          neededQuantity: quantity,
-          order: existing.order,
-        ),
-      );
+          quantityPerBasket: quantityPerBasket,
+        );
+      } else {
+        await repo.update(
+          existing.copyWith(
+            name: name,
+            unit: unit,
+            priority: priority,
+            quantityPerBasket: quantityPerBasket,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Falha ao salvar item: $e')));
+      }
     }
   }
 
@@ -251,13 +275,30 @@ class _BasketCampaignSettingsPageState
       ),
     );
     if (confirmed == true) {
-      await ref.read(basketFoodItemRepositoryProvider).delete(item.id);
+      try {
+        await ref.read(basketFoodItemRepositoryProvider).delete(item.id);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Falha ao excluir: $e')));
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final itemsAsync = ref.watch(basketFoodItemsProvider);
+    final campaign =
+        ref.watch(donationCampaignProvider(widget.initial.id)).asData?.value ??
+        widget.initial;
+    final itemsAsync = ref.watch(basketFoodItemsProvider(widget.initial.id));
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    // Histórico é exclusivo de Diaconia/Tesouraria (04/09/2026, pedido do
+    // usuário: "visível ao diácono e tesoureiro") — os dois getters aqui já
+    // não incluem admin de propósito (ver `CurrentUserProfile`).
+    final canViewHistory =
+        (profile?.canManageBasketDonations ?? false) ||
+        (profile?.canConfirmBasketPix ?? false);
     return PopScope(
       canPop: !_dirty,
       onPopInvokedWithResult: (didPop, result) {
@@ -272,7 +313,25 @@ class _BasketCampaignSettingsPageState
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              const ScreenTitle('Configurar Cestas Básicas'),
+              Row(
+                children: [
+                  Expanded(
+                    child: ScreenTitle('Configurar ${widget.initial.name}'),
+                  ),
+                  if (canViewHistory)
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BasketDonationHistoryPage(
+                            campaignId: widget.initial.id,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Text('Histórico'),
+                    ),
+                ],
+              ),
               TextField(
                 controller: _pixKeyController,
                 onChanged: (_) => _markDirty(),
@@ -297,16 +356,21 @@ class _BasketCampaignSettingsPageState
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
-                      controller: _collectedController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      controller: _basketValueController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       onChanged: (_) => _markDirty(),
                       decoration: const InputDecoration(
-                        labelText: 'Arrecadadas este mês',
+                        labelText: 'Valor de 1 cesta (R\$, via Pix)',
                       ),
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Arrecadadas este mês: ${campaign.collectedCount} de ${campaign.goalCount} '
+                '(${campaign.foodBasketsCollected} por alimento, ${campaign.pixBasketsCollected} por Pix) — calculado automaticamente.',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -390,8 +454,21 @@ class _BasketCampaignSettingsPageState
                               children: [
                                 BasketPriorityBadge(priority: item.priority),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Precisa de ${item.neededQuantity} ${item.unit}',
+                                // `Expanded` (04/09/2026, corrige "RIGHT
+                                // OVERFLOWED BY N PIXELS" visto ao vivo no
+                                // celular) — sem isso, badge + texto + o
+                                // `IconButton` de excluir no `trailing`
+                                // podiam ultrapassar a largura do card;
+                                // agora o texto encolhe/corta com
+                                // reticências em vez de estourar.
+                                Expanded(
+                                  child: Text(
+                                    item.quantityPerBasket > 0
+                                        ? 'Precisamos de mais ${item.remainingNeeded(campaign.goalCount)} ${item.unit}'
+                                        : 'Fora da receita da cesta',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),

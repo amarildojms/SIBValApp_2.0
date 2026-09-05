@@ -112,6 +112,13 @@ abstract final class NotificationType {
   /// Série recorrente rejeitada (corpo inclui a justificativa) — pro
   /// criador.
   static const recurringAgendaEntryRejected = 'recurring_agenda_entry_rejected';
+
+  /// Nova doação (alimento ou Pix) pendente numa campanha de doação
+  /// (04/09/2026, pedido do usuário) — audiência `basket_review_food`
+  /// (alimento, só Diaconia) ou `basket_review_pix` (Pix, Diaconia e
+  /// Tesouraria), conforme `BasketDonation.type` — ver
+  /// `NotificationAudience.basketReviewFood`/`.basketReviewPix`.
+  static const basketDonationPending = 'basket_donation_pending';
 }
 
 /// [NotificationAudience.user] é individual — só aparece pra quem tem
@@ -127,4 +134,19 @@ abstract final class NotificationAudience {
   /// Admin ou papel Dirigentes — novo visitante cadastrado pela Introdução
   /// (24/08/2026, ver lib/models/visitor.dart).
   static const dirigentes = 'dirigentes';
+
+  /// Nova doação de **alimento** pendente — só quem tem
+  /// `manage_basket_donations` (Diaconia), NÃO Tesouraria (04/09/2026,
+  /// pedido explícito do usuário: "notificação de doação de alimento deve
+  /// ir somente para diácono"). Um papel dinâmico não tem id fixo, então
+  /// (diferente de `dirigentes`/`intercessao` acima) o casamento é só por
+  /// capacidade, ver `NotificationRepository`/
+  /// `CurrentUserProfile.canManageBasketDonations`.
+  static const basketReviewFood = 'basket_review_food';
+
+  /// Nova doação via **Pix** pendente — Diaconia (`manage_basket_donations`)
+  /// e Tesouraria (`confirm_basket_pix`) (04/09/2026, pedido explícito do
+  /// usuário: "notificação de doações via pix deve ir somente para diácono
+  /// e tesouraria").
+  static const basketReviewPix = 'basket_review_pix';
 }

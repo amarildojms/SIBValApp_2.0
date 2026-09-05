@@ -181,7 +181,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     return before == 0 ? raw : '$raw#$before';
   }
 
-  List<_SubAction> _subActionsFor(String baseKey, ServiceOrderItem item) {
+  List<_SubAction> _subActionsFor(
+    String baseKey,
+    ServiceOrderItem item,
+    List<PraiseSong> catalog,
+  ) {
     final order = widget.order;
     if (item.type == ServiceOrderMomentType.welcome) {
       // Sem sub-ação quando já sabemos que não há visitantes (28/08/2026,
@@ -331,7 +335,6 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
       if (songs.isNotEmpty) {
         final isInstrumentista =
             ref.read(currentUserProfileProvider).asData?.value?.isInstrumentista ?? false;
-        final catalog = ref.read(praiseSongsProvider).asData?.value ?? const [];
         final subs = <_SubAction>[];
         for (var i = 0; i < songs.length; i++) {
           final song = songs[i];
@@ -528,13 +531,16 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
   /// mesmo botão.
   void _onToggleDone(String key) => _setDone(key, !_done.contains(key));
 
-  ({int total, int done}) _progress(List<ServiceOrderItem> items) {
+  ({int total, int done}) _progress(
+    List<ServiceOrderItem> items,
+    List<PraiseSong> catalog,
+  ) {
     var total = 0;
     var done = 0;
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final baseKey = _baseKeyFor(i, item, items);
-      final subs = _subActionsFor(baseKey, item);
+      final subs = _subActionsFor(baseKey, item, catalog);
       final leaves = subs.isEmpty ? [baseKey] : subs.map((s) => s.key).toList();
       if (leaves.isEmpty) continue;
       total++;
@@ -602,7 +608,13 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
   Widget build(BuildContext context) {
     final order = widget.order;
     final items = order.momentOrder;
-    final progress = _progress(items);
+    // `ref.watch` (não `ref.read`) é o que importa aqui — `praiseSongsProvider`
+    // é `autoDispose` e nada mais o mantém vivo durante o modo culto/visão do
+    // Louvor; sem observá-lo, ele nunca chega a emitir os dados a tempo, e a
+    // música do momento "Louvor" nunca vira clicável pra quem não é
+    // Instrumentista (bug relatado pelo usuário, 04/09/2026).
+    final catalog = ref.watch(praiseSongsProvider).asData?.value ?? const [];
+    final progress = _progress(items, catalog);
     final allDone = progress.total > 0 && progress.done == progress.total;
 
     return PopScope(
@@ -664,13 +676,13 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                   itemBuilder: (context, index) {
                     final item = items[index];
                     final baseKey = _baseKeyFor(index, item, items);
-                    final subs = _subActionsFor(baseKey, item);
+                    final subs = _subActionsFor(baseKey, item, catalog);
                     final leaves = subs.isEmpty
                         ? [baseKey]
                         : subs.map((s) => s.key).toList();
                     final isItemDone =
                         leaves.isNotEmpty && leaves.every(_done.contains);
-                    final currentIndex = _currentItemIndex(items);
+                    final currentIndex = _currentItemIndex(items, catalog);
                     final isCurrent = !isItemDone && index == currentIndex;
 
                     if (item.type == ServiceOrderMomentType.tithesOffering ||
@@ -768,11 +780,11 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
     );
   }
 
-  int _currentItemIndex(List<ServiceOrderItem> items) {
+  int _currentItemIndex(List<ServiceOrderItem> items, List<PraiseSong> catalog) {
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final baseKey = _baseKeyFor(i, item, items);
-      final subs = _subActionsFor(baseKey, item);
+      final subs = _subActionsFor(baseKey, item, catalog);
       final leaves = subs.isEmpty ? [baseKey] : subs.map((s) => s.key).toList();
       if (leaves.isEmpty) continue;
       if (!leaves.every(_done.contains)) return i;

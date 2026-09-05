@@ -19,6 +19,8 @@ class NotificationRepository {
     bool canViewPrayerRequests = false,
     bool canViewVisitorSummaries = false,
     bool canViewVisitorDetails = false,
+    bool canManageBasketDonations = false,
+    bool canConfirmBasketPix = false,
     int limit = 50,
   }) async {
     final snapshot = await _notifications.orderBy('createdAt', descending: true).limit(limit).get();
@@ -28,6 +30,12 @@ class NotificationRepository {
           (n.audience == NotificationAudience.admin && isAdmin) ||
           (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
           (n.audience == NotificationAudience.dirigentes && (canViewVisitorSummaries || canViewVisitorDetails)) ||
+          // Alimento: só Diaconia. Pix: Diaconia OU Tesouraria (04/09/2026,
+          // pedido explícito do usuário — antes as duas caíam na mesma
+          // audiência e um Tesouraria-only via também a de alimento).
+          (n.audience == NotificationAudience.basketReviewFood && canManageBasketDonations) ||
+          (n.audience == NotificationAudience.basketReviewPix &&
+              (canManageBasketDonations || canConfirmBasketPix)) ||
           (n.audience == NotificationAudience.user && n.targetUid == uid);
     }).toList();
   }
@@ -41,6 +49,8 @@ class NotificationRepository {
     bool canViewPrayerRequests = false,
     bool canViewVisitorSummaries = false,
     bool canViewVisitorDetails = false,
+    bool canManageBasketDonations = false,
+    bool canConfirmBasketPix = false,
     int limit = 50,
   }) {
     return _notifications.orderBy('createdAt', descending: true).limit(limit).snapshots().map((snapshot) {
@@ -50,6 +60,9 @@ class NotificationRepository {
             (n.audience == NotificationAudience.admin && isAdmin) ||
             (n.audience == NotificationAudience.intercessao && canViewPrayerRequests) ||
             (n.audience == NotificationAudience.dirigentes && (canViewVisitorSummaries || canViewVisitorDetails)) ||
+            (n.audience == NotificationAudience.basketReviewFood && canManageBasketDonations) ||
+            (n.audience == NotificationAudience.basketReviewPix &&
+                (canManageBasketDonations || canConfirmBasketPix)) ||
             (n.audience == NotificationAudience.user && n.targetUid == uid);
       }).toList();
     });
@@ -110,5 +123,7 @@ final notificationsProvider = StreamProvider.autoDispose<List<AppNotification>>(
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,
         canViewVisitorSummaries: profile?.canViewVisitorSummaries ?? false,
         canViewVisitorDetails: profile?.canViewVisitorDetails ?? false,
+        canManageBasketDonations: profile?.canManageBasketDonations ?? false,
+        canConfirmBasketPix: profile?.canConfirmBasketPix ?? false,
       );
 });

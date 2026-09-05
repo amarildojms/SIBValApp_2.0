@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
 import 'basket_campaign_page.dart';
 import 'contribute_settings_page.dart';
+import 'donation_campaigns_admin_page.dart';
 import 'pix_offer_page.dart';
 
 /// Aba "Contribua" (21/08/2026, sem equivalente no nativo): versículo fixo,
@@ -59,27 +60,49 @@ class ContributePage extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  // Menu (canto superior direito, 04/09/2026, pedido do
+                  // usuário) — reúne "Configurar" (chaves Pix/contas
+                  // bancárias, `ContributeSettingsPage`, já existia como
+                  // botão solto) e "Config. Doações" (novo — configurar/
+                  // criar campanhas de doação, `DonationCampaignsAdminPage`,
+                  // movido pra cá de "Configurações e Gerenciamento", onde
+                  // vivia solto no meio de telas sem relação com a
+                  // Contribua). Os dois continuam admin-only, mesmo gate de
+                  // sempre.
                   if (isAdmin)
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ContributeSettingsPage(
-                            initial:
-                                infoAsync.asData?.value ??
-                                ContributionInfo.empty,
+                    PopupMenuButton<VoidCallback>(
+                      icon: const Icon(Icons.more_vert, color: SibValColors.goldAccent),
+                      onSelected: (action) => action(),
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ContributeSettingsPage(
+                                initial:
+                                    infoAsync.asData?.value ??
+                                    ContributionInfo.empty,
+                              ),
+                            ),
+                          ),
+                          child: const ListTile(
+                            leading: Icon(Icons.settings_outlined),
+                            title: Text('Configurar'),
+                            contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                      ),
-                      icon: const Icon(Icons.settings_outlined, size: 18),
-                      label: const Text('Configurar'),
+                        PopupMenuItem(
+                          value: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DonationCampaignsAdminPage(),
+                            ),
+                          ),
+                          child: const ListTile(
+                            leading: Icon(Icons.volunteer_activism_outlined),
+                            title: Text('Config. Doações'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -239,8 +262,7 @@ class _ContributionContent extends StatelessWidget {
             const SizedBox(height: 16),
             _PixOfferCard(info: info, pix: pix),
           ],
-        const SizedBox(height: 16),
-        const _BasketCampaignCard(),
+        _DonationCampaignCards(),
         for (final bank in info.bankAccounts) ...[
           const SizedBox(height: 12),
           _BankCard(bank: bank),
@@ -314,11 +336,30 @@ class _PixOfferCard extends StatelessWidget {
   }
 }
 
-/// Card "Doe para Cestas Básicas" (04/09/2026) — abre [BasketCampaignPage].
-/// Ao contrário dos `_PixOfferCard` (um por [PixEntry] cadastrada), este
-/// tile é fixo — sempre aparece na Contribua, independente de configuração
-/// prévia (a própria `BasketCampaignPage` trata o caso "nada configurado
-/// ainda").
+/// Um card por campanha de doação **ativa** (04/09/2026, generalização de
+/// "Doe para Cestas Básicas" — antes um único card fixo, hardcoded). Sem
+/// nenhuma campanha cadastrada, a seção inteira some (era sempre visível
+/// antes da generalização).
+class _DonationCampaignCards extends ConsumerWidget {
+  const _DonationCampaignCards();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final campaigns = ref.watch(activeDonationCampaignsProvider);
+    if (campaigns.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final campaign in campaigns) ...[
+          const SizedBox(height: 16),
+          _BasketCampaignCard(campaign: campaign),
+        ],
+      ],
+    );
+  }
+}
+
+/// Card "Doe para {campanha}" (04/09/2026) — abre [BasketCampaignPage].
 /// Destacado dos demais `_PixOfferCard` (04/09/2026, pedido do usuário) —
 /// borda dourada + fundo com leve tingimento dourado (`Color.alphaBlend`
 /// sobre `navyBlueLight`, mesmo mecanismo de `_momentBox` da Ordem de Culto)
@@ -330,15 +371,14 @@ class _PixOfferCard extends StatelessWidget {
 /// usuário — já existia dentro de `BasketCampaignPage`, aqui é a mesma
 /// informação, mais compacta, pra dar pra ver sem precisar abrir a tela)
 /// direto no card fixo da Contribua, quando a meta do mês está configurada
-/// (`BasketCampaignSettings.hasProgress`).
-class _BasketCampaignCard extends ConsumerWidget {
-  const _BasketCampaignCard();
+/// (`DonationCampaign.hasProgress`).
+class _BasketCampaignCard extends StatelessWidget {
+  const _BasketCampaignCard({required this.campaign});
+
+  final DonationCampaign campaign;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final campaign =
-        ref.watch(basketCampaignProvider).asData?.value ??
-        BasketCampaignSettings.empty;
+  Widget build(BuildContext context) {
     return Card(
       color: Color.alphaBlend(
         SibValColors.goldAccent.withValues(alpha: 0.16),
@@ -350,9 +390,11 @@ class _BasketCampaignCard extends ConsumerWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const BasketCampaignPage())),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => BasketCampaignPage(campaignId: campaign.id),
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -373,20 +415,20 @@ class _BasketCampaignCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Doe para Cestas Básicas',
-                          style: TextStyle(
+                          'Doe para ${campaign.name}',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
+                        const SizedBox(height: 2),
+                        const Text(
                           'Contribua via Pix ou doe alimentos',
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),

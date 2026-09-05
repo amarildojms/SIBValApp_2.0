@@ -10,25 +10,34 @@ import '../widgets/sibval_app_bar.dart';
 import 'basket_donation_form_page.dart';
 import 'basket_widgets.dart';
 
-/// "Doar alimentos" (04/09/2026) — lista os itens que a igreja mais precisa
-/// (`basketFoodItemsProvider`) e, se o usuário já tem uma intenção de
-/// doação pendente ([BasketDonation.isPending]), mostra o resumo dela com o
-/// atalho "Já entreguei minha doação" em vez do botão de iniciar uma nova.
+/// "Doar alimentos" (04/09/2026) — lista os itens que a campanha mais
+/// precisa (`basketFoodItemsProvider(campaignId)`) e, se o usuário já tem uma
+/// intenção de doação pendente ([BasketDonation.isPending]), mostra o resumo
+/// dela com os atalhos "Editar"/"Cancelar" em vez do botão de iniciar uma
+/// nova.
+///
+/// **04/09/2026, revisão do usuário**: quem marca a doação como entregue
+/// deixou de ser o próprio doador — agora é a Diaconia, no painel
+/// `BasketDiaconiaDashboardPage` (ver `BasketDonationRepository.markFoodDelivered`).
+/// O doador só edita os itens ou cancela, sempre que a doação ainda estiver
+/// pendente — editar não reinicia o prazo de 7 dias
+/// (`BasketDonationRepository.updateItems`).
 class BasketDonateFoodPage extends ConsumerWidget {
-  const BasketDonateFoodPage({super.key});
+  const BasketDonateFoodPage({super.key, required this.campaignId});
+
+  final String campaignId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final itemsAsync = ref.watch(basketFoodItemsProvider);
+    final itemsAsync = ref.watch(basketFoodItemsProvider(campaignId));
     final campaign =
-        ref.watch(basketCampaignProvider).asData?.value ??
-        BasketCampaignSettings.empty;
+        ref.watch(donationCampaignProvider(campaignId)).asData?.value;
     final uid = ref.watch(currentUidProvider);
     final pendingDonation = uid == null
         ? null
         : (ref.watch(myBasketDonationsProvider(uid)).asData?.value ??
                   const <BasketDonation>[])
-              .where((d) => d.isPending)
+              .where((d) => d.campaignId == campaignId && d.type == BasketDonationType.food && d.isPending)
               .toList()
               .basketFirstOrNull;
 
@@ -78,7 +87,10 @@ class BasketDonateFoodPage extends ConsumerWidget {
                           children: [
                             for (var i = 0; i < items.length; i++) ...[
                               if (i > 0) const Divider(height: 1),
-                              _NeededItemTile(item: items[i]),
+                              _NeededItemTile(
+                                item: items[i],
+                                goalCount: campaign?.goalCount ?? 0,
+                              ),
                             ],
                           ],
                         ),
@@ -94,13 +106,15 @@ class BasketDonateFoodPage extends ConsumerWidget {
                         label: const Text('Entrar para informar uma doação'),
                       )
                     else if (pendingDonation != null)
-                      _PendingDonationCard(donation: pendingDonation)
+                      _PendingDonationCard(donation: pendingDonation, catalog: items)
                     else if (items.isNotEmpty)
                       ElevatedButton.icon(
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) =>
-                                BasketDonationFormPage(catalog: items),
+                            builder: (_) => BasketDonationFormPage(
+                              campaignId: campaignId,
+                              catalog: items,
+                            ),
                           ),
                         ),
                         icon: const Icon(Icons.add),
@@ -109,7 +123,7 @@ class BasketDonateFoodPage extends ConsumerWidget {
                         ),
                       ),
                     const SizedBox(height: 16),
-                    BasketDeliveryInfoCard(deliveryInfo: campaign.deliveryInfo),
+                    BasketDeliveryInfoCard(deliveryInfo: campaign?.deliveryInfo ?? ''),
                   ],
                 ),
               ),
@@ -126,9 +140,10 @@ extension _BasketFirstOrNull<T> on List<T> {
 }
 
 class _NeededItemTile extends StatelessWidget {
-  const _NeededItemTile({required this.item});
+  const _NeededItemTile({required this.item, required this.goalCount});
 
   final BasketFoodItem item;
+  final int goalCount;
 
   @override
   Widget build(BuildContext context) {
@@ -148,19 +163,22 @@ class _NeededItemTile extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: BasketPriorityBadge(priority: item.priority),
       ),
-      trailing: Text(
-        'Precisamos de\n${item.neededQuantity} ${item.unit}',
-        textAlign: TextAlign.right,
-        style: TextStyle(color: context.textSecondary, fontSize: 12),
-      ),
+      trailing: item.quantityPerBasket > 0
+          ? Text(
+              'Precisamos de\n${item.remainingNeeded(goalCount)} ${item.unit}',
+              textAlign: TextAlign.right,
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            )
+          : null,
     );
   }
 }
 
 class _PendingDonationCard extends ConsumerStatefulWidget {
-  const _PendingDonationCard({required this.donation});
+  const _PendingDonationCard({required this.donation, required this.catalog});
 
   final BasketDonation donation;
+  final List<BasketFoodItem> catalog;
 
   @override
   ConsumerState<_PendingDonationCard> createState() =>
@@ -168,26 +186,39 @@ class _PendingDonationCard extends ConsumerStatefulWidget {
 }
 
 class _PendingDonationCardState extends ConsumerState<_PendingDonationCard> {
-  bool _saving = false;
+  bool _cancelling = false;
 
-  Future<void> _markDelivered() async {
-    setState(() => _saving = true);
+  Future<void> _cancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancelar doação'),
+        content: const Text('Tem certeza que deseja cancelar esta doação?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Voltar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Cancelar doação'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _cancelling = true);
     try {
       await ref
           .read(basketDonationRepositoryProvider)
-          .markDelivered(widget.donation.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Obrigado! Doação marcada como entregue.'),
-        ),
-      );
+          .cancel(widget.donation.id);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Falha ao registrar: $e')));
+            .showSnackBar(SnackBar(content: Text('Falha ao cancelar: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _cancelling = false);
     }
   }
 
@@ -227,16 +258,38 @@ class _PendingDonationCardState extends ConsumerState<_PendingDonationCard> {
                 ),
               ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _saving ? null : _markDelivered,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.check_circle_outline),
-              label: const Text('Já entreguei minha doação'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BasketDonationFormPage(
+                          campaignId: widget.donation.campaignId,
+                          catalog: widget.catalog,
+                          editing: widget.donation,
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _cancelling ? null : _cancel,
+                    icon: _cancelling
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.close),
+                    label: const Text('Cancelar'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

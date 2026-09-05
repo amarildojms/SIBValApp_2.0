@@ -25,6 +25,8 @@ Future<void> syncNotificationsForScreen(WidgetRef ref, {required String type, St
         canViewPrayerRequests: profile?.canViewPrayerRequests ?? false,
         canViewVisitorSummaries: profile?.canViewVisitorSummaries ?? false,
         canViewVisitorDetails: profile?.canViewVisitorDetails ?? false,
+        canManageBasketDonations: profile?.canManageBasketDonations ?? false,
+        canConfirmBasketPix: profile?.canConfirmBasketPix ?? false,
       );
 
   final unread = notifications.where(

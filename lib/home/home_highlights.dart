@@ -29,6 +29,7 @@ import '../service_order/service_order_countdown.dart';
 import '../theme/app_theme.dart';
 import '../util/verse_of_day.dart';
 import 'home_quick_tiles.dart';
+import 'mural_page.dart';
 
 /// Índice da aba Eventos na barra inferior (`MainShell._pages`) — Início(0),
 /// Devocionais(1), Eventos(2), Contribua(3). Usado pelo "Ver todos"/"Ver
@@ -61,7 +62,7 @@ class HomeHighlights extends StatelessWidget {
         _QuickAccessGrid(),
         _WeekAndNoticesRow(),
         _MyClassSection(),
-        _TodayDevotionalSection(),
+        _TodaySection(),
         _UpcomingEventsSection(),
         SizedBox(height: 8),
       ],
@@ -954,132 +955,271 @@ class _UpcomingEventRow extends StatelessWidget {
   }
 }
 
-/// "Devocional de Hoje" — dentro de uma `_HighlightCard`, só aparece quando
-/// existe uma devocional publicada com `dateKey` igual ao dia de hoje (mesmo
-/// critério de `Post.isFromToday` pro post automático de devocional no
-/// Mural).
+/// "Devocional de Hoje" / "Aniversariantes de Hoje" — dentro de uma
+/// `_HighlightCard`, intercalando os dois quando os dois existem (04/09/2026,
+/// pedido do usuário: "a exemplo dos avisos, vamos ficar intercalando entre
+/// a devocional do dia e Aniversariantes do dia"), mesmo mecanismo de
+/// `PageView`+`Timer` de `_NoticesCardState`. Com só um dos dois, mostra ele
+/// fixo (sem carrossel); sem nenhum, a seção some.
 ///
-/// Imagem (02/09/2026, pedido do usuário: "use a imagem que já usamos como
-/// padrão para devocionais em Flyers") — não duplica a lógica de escolher o
-/// flyer (`recurringEventFlyers`, categoria `DevotionalFlyerCategory.dev`):
-/// isso já é feito pela Cloud Function `postDevotionalToFeed`
+/// Devocional: só aparece quando existe uma devocional publicada com
+/// `dateKey` igual ao dia de hoje (mesmo critério de `Post.isFromToday` pro
+/// post automático de devocional no Mural). Imagem (02/09/2026, pedido do
+/// usuário: "use a imagem que já usamos como padrão para devocionais em
+/// Flyers") — não duplica a lógica de escolher o flyer
+/// (`recurringEventFlyers`, categoria `DevotionalFlyerCategory.dev`): isso já
+/// é feito pela Cloud Function `postDevotionalToFeed`
 /// (`SIBValApp2/functions/index.js`) toda vez que ela cria/atualiza o post
 /// automático da devocional no Mural. Em vez disso, acha esse mesmo post
-/// (`PostType.devotional`, `targetId == devotional.id`, mesmo vínculo já
-/// usado por `PostCard` pra abrir `DevotionalDetailPage` a partir do flyer)
-/// dentro de `postsProvider` e reaproveita o `imageUrl` dele. Sem post
-/// encontrado ainda (ex.: gatilho em tempo real não rodou) ou sem imagem
-/// configurada pro dia, cai no ícone de livro de sempre.
-class _TodayDevotionalSection extends ConsumerWidget {
-  const _TodayDevotionalSection();
+/// (`PostType.devotional`, `targetId == devotional.id`) dentro de
+/// `postsProvider` e reaproveita o `imageUrl` dele.
+///
+/// Aniversariante(s): mesmo post agregado `PostType.birthday` que já aparece
+/// no Mural (`postBirthdaysToFeed`, 1 documento por dia com foto/nome/
+/// felicitações de todos os aniversariantes do dia) — toque leva pro mesmo
+/// destino que o Mural já dá (`PostCommentsPage`), "encaminha pro mural onde
+/// fica o post dos aniversariantes" (pedido literal do usuário).
+class _TodaySection extends ConsumerStatefulWidget {
+  const _TodaySection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TodaySection> createState() => _TodaySectionState();
+}
+
+class _TodaySectionState extends ConsumerState<_TodaySection> {
+  final _pageController = PageController();
+  Timer? _autoAdvanceTimer;
+  int _pageIndex = 0;
+  int _slideCount = 0;
+
+  void _ensureTimer(int count) {
+    if (count == _slideCount) return;
+    _slideCount = count;
+    _autoAdvanceTimer?.cancel();
+    if (count <= 1) return;
+    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_pageController.hasClients) return;
+      final next = ((_pageController.page ?? 0).round() + 1) % count;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final devotionalsAsync = ref.watch(devotionalsProvider);
     final devotionals = devotionalsAsync.asData?.value ?? const <Devotional>[];
     final todayKey = DevotionalRepository.dateKeyOf(DateTime.now());
-    Devotional? today;
+    Devotional? devotional;
     for (final d in devotionals) {
       if (d.dateKey == todayKey) {
-        today = d;
+        devotional = d;
         break;
       }
     }
-    if (today == null) return const SizedBox.shrink();
-    final devotional = today;
 
     final posts = ref.watch(postsProvider).asData?.value ?? const <Post>[];
-    String imageUrl = '';
+    String devotionalImageUrl = '';
+    Post? birthdayPost;
     for (final p in posts) {
-      if (p.postType == PostType.devotional && p.targetId == devotional.id) {
-        imageUrl = p.imageUrl;
-        break;
+      if (devotional != null &&
+          p.postType == PostType.devotional &&
+          p.targetId == devotional.id) {
+        devotionalImageUrl = p.imageUrl;
+      }
+      if (p.postType == PostType.birthday && p.isFromToday) {
+        birthdayPost = p;
       }
     }
+
+    final slides = <_TodaySlide>[
+      if (devotional != null)
+        _TodaySlide(
+          title: 'Devocional de Hoje',
+          child: _DevotionalSlide(devotional: devotional, imageUrl: devotionalImageUrl),
+        ),
+      if (birthdayPost != null)
+        _TodaySlide(
+          title: 'Aniversariantes de Hoje',
+          child: _BirthdaySlide(post: birthdayPost),
+        ),
+    ];
+    if (slides.isEmpty) return const SizedBox.shrink();
+    _ensureTimer(slides.length);
+    if (_pageIndex >= slides.length) _pageIndex = 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: _HighlightCard(
-        title: 'Devocional de Hoje',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) =>
-                  DevotionalDetailPage(devotionalId: devotional.id),
-            ),
-          ),
-          child: Row(
-            children: [
-              if (imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    imageUrl,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) =>
-                        const _DevotionalIconThumb(),
-                  ),
-                )
-              else
-                const _DevotionalIconThumb(),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      devotional.baseReference == null
-                          ? devotional.title
-                          : '${devotional.title} (${devotional.baseReference})',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    // Resumo do conteúdo (02/09/2026, pedido do usuário: "é
-                    // possível ter um pequeno resumo da devocional do dia do
-                    // que se trata?") — as duas primeiras linhas do texto
-                    // corrido, sem nenhum resumo/IA à parte: a devocional
-                    // não tem um campo de resumo próprio no model, então
-                    // isto é só uma prévia do texto completo.
-                    if (devotional.text.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        devotional.text,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.textSecondary,
-                          fontSize: 11.5,
-                          height: 1.25,
-                        ),
-                      ),
-                    ],
-                    if (devotional.author.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'Por ${devotional.author}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
+        title: slides[_pageIndex].title,
+        child: slides.length == 1
+            ? slides.first.child
+            : SizedBox(
+                height: 72,
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: slides.length,
+                  onPageChanged: (index) => setState(() => _pageIndex = index),
+                  itemBuilder: (context, index) => slides[index].child,
                 ),
               ),
-              Icon(Icons.chevron_right, color: context.textSecondary),
-            ],
-          ),
+      ),
+    );
+  }
+}
+
+class _TodaySlide {
+  const _TodaySlide({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+}
+
+class _DevotionalSlide extends StatelessWidget {
+  const _DevotionalSlide({required this.devotional, required this.imageUrl});
+
+  final Devotional devotional;
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DevotionalDetailPage(devotionalId: devotional.id),
         ),
+      ),
+      child: Row(
+        children: [
+          if (imageUrl.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                imageUrl,
+                width: 64,
+                height: 64,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) =>
+                    const _DevotionalIconThumb(),
+              ),
+            )
+          else
+            const _DevotionalIconThumb(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  devotional.baseReference == null
+                      ? devotional.title
+                      : '${devotional.title} (${devotional.baseReference})',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                // Resumo do conteúdo (02/09/2026, pedido do usuário: "é
+                // possível ter um pequeno resumo da devocional do dia do que
+                // se trata?") — as duas primeiras linhas do texto corrido,
+                // sem nenhum resumo/IA à parte: a devocional não tem um
+                // campo de resumo próprio no model, então isto é só uma
+                // prévia do texto completo.
+                if (devotional.text.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    devotional.text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 11.5,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+                if (devotional.author.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Por ${devotional.author}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: context.textSecondary),
+        ],
+      ),
+    );
+  }
+}
+
+/// Aniversariante(s) de hoje (04/09/2026, pedido do usuário) — mesmo post
+/// agregado `PostType.birthday` já usado no Mural (`_buildBirthdayCard`,
+/// `post_card.dart`): foto (quando houver) + texto pronto (nome(s) +
+/// felicitações, montado pela Cloud Function). **04/09/2026, correção do
+/// usuário**: o toque deve levar pro Mural (onde o post vive, junto com os
+/// demais), não direto pra dentro dos comentários — era `PostCommentsPage`,
+/// virou `MuralPage`.
+class _BirthdaySlide extends StatelessWidget {
+  const _BirthdaySlide({required this.post});
+
+  final Post post;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const MuralPage()),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 32,
+            backgroundColor: SibValColors.goldAccent.withValues(alpha: 0.15),
+            backgroundImage: post.imageUrl.isNotEmpty
+                ? NetworkImage(post.imageUrl)
+                : null,
+            child: post.imageUrl.isEmpty
+                ? const Icon(Icons.cake_outlined, color: SibValColors.goldAccent)
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              post.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 13,
+                height: 1.25,
+              ),
+            ),
+          ),
+          Icon(Icons.chevron_right, color: context.textSecondary),
+        ],
       ),
     );
   }

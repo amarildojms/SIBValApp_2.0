@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../contribute/pix_offer_page.dart';
+import '../data/contribution_repository.dart';
 import '../data/hymnal_repository.dart';
 import '../data/praise_repertoire_repository.dart';
 import '../data/service_order_repository.dart';
@@ -392,10 +394,77 @@ class _ServiceOrderReadOnlyBodyState
     );
   }
 
+  /// Bottom sheet "Dízimos e Ofertas" (04/09/2026, pedido do usuário) — só
+  /// as chaves Pix cadastradas na Contribua (`ContributionInfo.pixEntries`,
+  /// mesmo critério de `_PixOfferCard` em `contribute_page.dart`: chave e
+  /// `displayTitle` preenchidos), **sem** as campanhas de doação
+  /// (`donationCampaigns` é uma coleção separada, nunca entra aqui —
+  /// "menos as doações" já sai de graça por não misturar as duas fontes).
+  /// Tocar numa opção abre o mesmo `PixOfferPage` que a Contribua usa.
+  Future<void> _showOffersSheet(BuildContext context) async {
+    final info = await ref.read(contributionInfoProvider.future);
+    final offers = info.pixEntries
+        .where((p) => p.key.isNotEmpty && p.displayTitle.isNotEmpty)
+        .toList();
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Dízimos e Ofertas',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              if (offers.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Nenhuma opção cadastrada ainda.'),
+                )
+              else
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final pix in offers)
+                        ListTile(
+                          leading: const Icon(Icons.pix),
+                          title: Text(pix.displayTitle),
+                          onTap: () {
+                            Navigator.of(sheetContext).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PixOfferPage(
+                                  description: pix.displayTitle,
+                                  churchName: info.churchName,
+                                  city: info.city,
+                                  pixKey: pix.key,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   List<_DetailRow> _detailRowsFor(
     ServiceOrderItem item,
     ServiceOrder order,
     WeeklyRepertoire? repertoire,
+    List<PraiseSong> catalog,
   ) {
     final rows = <_DetailRow>[];
     if (item.type == ServiceOrderMomentType.bibleReading) {
@@ -470,7 +539,6 @@ class _ServiceOrderReadOnlyBodyState
         // Louvor), regra não alterada por este pedido.
         final isInstrumentista =
             ref.read(currentUserProfileProvider).asData?.value?.isInstrumentista ?? false;
-        final catalog = ref.read(praiseSongsProvider).asData?.value ?? const [];
         for (final assignment in repertoire.forSlot(slot)) {
           final base = assignment.songArtist.isEmpty
               ? assignment.songName
@@ -502,6 +570,12 @@ class _ServiceOrderReadOnlyBodyState
       weeklyRepertoireForDateProvider(order.dateTime),
     );
     final repertoire = repertoireAsync.asData?.value;
+    // `ref.watch` (não `ref.read`) — `praiseSongsProvider` é `autoDispose` e
+    // nada mais o mantém vivo nesta tela; sem observá-lo aqui, a letra da
+    // música do momento "Louvor" nunca aparecia pra quem não é Instrumentista
+    // (bug relatado pelo usuário, 04/09/2026) — mesma causa raiz corrigida em
+    // `ServiceOrderLivePage`.
+    final catalog = ref.watch(praiseSongsProvider).asData?.value ?? const [];
     final completed = order.completedMomentKeys.toSet();
     final items = order.momentOrder;
     final currentIndex = _currentIndex(items, order, completed);
@@ -516,7 +590,7 @@ class _ServiceOrderReadOnlyBodyState
         final isDone = _isDone(completed, baseKey, leaves, item);
         final isCurrent =
             !isDone && index == currentIndex && !order.isFinalized;
-        final rows = _detailRowsFor(item, order, repertoire);
+        final rows = _detailRowsFor(item, order, repertoire, catalog);
         final momentCard = _PraiseMomentCard(
           index: index,
           item: item,
@@ -534,16 +608,25 @@ class _ServiceOrderReadOnlyBodyState
           ServiceOrderMomentType.announcements => order.announcementsNotes,
           _ => '',
         };
+        // "Dízimos e Ofertas" — botão logo abaixo do momento de dedicação
+        // dos dízimos (04/09/2026, pedido do usuário: "com exceção de quem
+        // estiver dirigindo o culto... um botão abaixo dos dízimos e
+        // ofertas... com as opções de dízimos e ofertas cadastradas na
+        // Contribua (menos as doações)") — só aparece nas visões
+        // somente-leitura (`ServiceOrderReadOnlyBody`, reaproveitada por
+        // Louvor/membro comum/dono antes de iniciar); a tela do dirigente
+        // (`ServiceOrderLivePage`) não reaproveita este widget, então já
+        // fica de fora automaticamente, sem gate extra.
+        final extras = <Widget>[momentCard];
         if (momentNotes.isNotEmpty) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              momentCard,
-              _MomentNotesCard(text: momentNotes),
-            ],
-          );
+          extras.add(_MomentNotesCard(text: momentNotes));
         }
-        return momentCard;
+        if (item.type == ServiceOrderMomentType.tithesOffering) {
+          extras.add(_TithesOfferingButton(onTap: () => _showOffersSheet(context)));
+        }
+        return extras.length == 1
+            ? extras.first
+            : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: extras);
       },
     );
   }
@@ -774,6 +857,49 @@ class _MomentNotesCard extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(color: Colors.white70, fontSize: 14),
+      ),
+    );
+  }
+}
+
+/// "Dízimos e Ofertas" (04/09/2026, pedido do usuário) — botão logo abaixo
+/// do momento de dedicação dos dízimos, só nas visões somente-leitura (quem
+/// não está dirigindo o culto); abre `_ServiceOrderReadOnlyBodyState._showOffersSheet`.
+class _TithesOfferingButton extends StatelessWidget {
+  const _TithesOfferingButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.pix, color: SibValColors.goldAccent, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Contribuir com Dízimos e Ofertas',
+                  style: TextStyle(
+                    color: SibValColors.goldAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.white70),
+            ],
+          ),
+        ),
       ),
     );
   }

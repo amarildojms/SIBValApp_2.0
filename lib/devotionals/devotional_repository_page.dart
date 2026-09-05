@@ -98,6 +98,11 @@ class DevotionalRepositoryPage extends ConsumerWidget {
                             MaterialPageRoute(builder: (_) => DevotionalFormPage(devotionalId: devotional.id)),
                           ),
                           onLongPress: () => _confirmDelete(context, ref, devotional),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.content_copy_outlined),
+                            tooltip: 'Copiar para outra data',
+                            onPressed: () => _copyToAnotherDate(context, ref, devotional),
+                          ),
                         ),
                       );
                     },
@@ -128,6 +133,42 @@ class DevotionalRepositoryPage extends ConsumerWidget {
   }
 
   String _capitalize(String text) => text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
+
+  /// "Copiar para outra data" (04/09/2026, pedido do usuário) — pede a nova
+  /// data num `showDatePicker`, cria a cópia (`DevotionalRepository.copyTo`)
+  /// e abre `DevotionalFormPage` já nela, pra ajustes finos antes de
+  /// considerar pronta. O original não é tocado.
+  Future<void> _copyToAnotherDate(
+    BuildContext context,
+    WidgetRef ref,
+    Devotional devotional,
+  ) async {
+    final now = DateTime.now();
+    final newDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+      helpText: 'Copiar "${devotional.title}" para qual data?',
+    );
+    if (newDate == null || !context.mounted) return;
+    try {
+      final newId = await ref
+          .read(devotionalRepositoryProvider)
+          .copyTo(sourceId: devotional.id, newDate: newDate);
+      ref.invalidate(devotionalRepositoryListProvider);
+      ref.invalidate(devotionalsProvider);
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => DevotionalFormPage(devotionalId: newId)),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Falha ao copiar: $e')));
+      }
+    }
+  }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, Devotional devotional) {
     showDialog<void>(

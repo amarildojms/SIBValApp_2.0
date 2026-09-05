@@ -14,11 +14,23 @@ class _DonationLine {
 
 /// "Informe o que você pretende doar" (04/09/2026) — segunda etapa do fluxo
 /// de doação de alimentos: escolher itens do catálogo (ou um item avulso,
-/// fora da lista pré-definida pelo admin) e a quantidade de cada um.
+/// fora da lista pré-definida pela Diaconia) e a quantidade de cada um.
+///
+/// [editing] (04/09/2026, pedido do usuário: "editar sua doação antes da
+/// entrega") — quando preenchido, pré-carrega as linhas com os itens já
+/// salvos e `BasketDonationConfirmPage` chama `updateItems` em vez de
+/// `createFood`, preservando `createdAt`/`expiresAt` (não reinicia o prazo).
 class BasketDonationFormPage extends StatefulWidget {
-  const BasketDonationFormPage({super.key, required this.catalog});
+  const BasketDonationFormPage({
+    super.key,
+    required this.campaignId,
+    required this.catalog,
+    this.editing,
+  });
 
+  final String campaignId;
   final List<BasketFoodItem> catalog;
+  final BasketDonation? editing;
 
   @override
   State<BasketDonationFormPage> createState() => _BasketDonationFormPageState();
@@ -26,6 +38,25 @@ class BasketDonationFormPage extends StatefulWidget {
 
 class _BasketDonationFormPageState extends State<BasketDonationFormPage> {
   final List<_DonationLine> _lines = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final editing = widget.editing;
+    if (editing == null) return;
+    for (final line in editing.items) {
+      final catalogItem = widget.catalog.where((i) => i.id == line.itemId).firstOrNull;
+      final item = catalogItem ??
+          BasketFoodItem(
+            id: line.itemId,
+            campaignId: widget.campaignId,
+            name: line.itemName,
+            unit: line.unit,
+            priority: BasketPriority.media,
+          );
+      _lines.add(_DonationLine(item: item)..quantity = line.quantity);
+    }
+  }
 
   void _incrementQuantity(_DonationLine line, int delta) {
     setState(() {
@@ -98,10 +129,10 @@ class _BasketDonationFormPageState extends State<BasketDonationFormPage> {
         _DonationLine(
           item: BasketFoodItem(
             id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
+            campaignId: widget.campaignId,
             name: name,
             unit: unit,
             priority: BasketPriority.media,
-            neededQuantity: 0,
           ),
         ),
       );
@@ -120,7 +151,11 @@ class _BasketDonationFormPageState extends State<BasketDonationFormPage> {
     ];
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BasketDonationConfirmPage(items: items),
+        builder: (_) => BasketDonationConfirmPage(
+          campaignId: widget.campaignId,
+          items: items,
+          editing: widget.editing,
+        ),
       ),
     );
   }

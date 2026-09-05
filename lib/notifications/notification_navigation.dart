@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../admin/manage_users_page.dart';
 import '../agenda/agenda_approval_page.dart';
 import '../birthdays/birthdays_page.dart';
+import '../contribute/basket_diaconia_dashboard_page.dart';
 import '../devotionals/devotional_detail_page.dart';
 import '../events/event_detail_page.dart';
 import '../events/event_pending_list_page.dart';
@@ -59,6 +60,10 @@ void navigateForNotificationType(BuildContext context, {required String type, re
       }
     case NotificationType.visitor:
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IntroductionPage()));
+    case NotificationType.basketDonationPending:
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const BasketDiaconiaDashboardPage()),
+      );
     case NotificationType.serviceOrderReminder:
     case NotificationType.serviceOrderStarted:
       // Despacha por papel (28/08/2026, pedido do usuário) — Dirigentes/

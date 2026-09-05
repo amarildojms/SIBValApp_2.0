@@ -3554,6 +3554,121 @@ doação — `uid` bate com quem está logado —, admin lê/atualiza qualquer u
 fiz `firebase deploy`**, mesma cautela de sempre — até o deploy, ler/criar
 itens ou doações falha com permission-denied em produção.
 
+**Doações de Cestas Básicas — Diaconia/Tesouraria, contabilização
+automática e generalização multi-campanha (04/09/2026, pedidos do usuário):**
+o fluxo era 100% self-service (o próprio doador criava a intenção e marcava
+a própria entrega), a meta/arrecadação do mês era digitada à mão, e só
+existia uma campanha hardcoded. Confirmado com o usuário via
+`AskUserQuestion` antes de implementar (fluxo do Pix, modelo da "receita da
+cesta", papéis separados, generalizar agora):
+
+- **Dois papéis novos** (`Capability.manageBasketDonations`/
+  `.confirmBasketPix`, `lib/models/app_role.dart`) — Diaconia recebe/
+  confirma doações (marca alimento como entregue, confirma Pix, gerencia
+  catálogo/config de uma campanha já existente); Tesouraria só confirma Pix
+  (mesma ação que Diaconia também pode fazer — confirmado que é uma ação
+  única, não uma aprovação em duas etapas obrigatórias). Mesmo precedente do
+  Instrumentista: não entram em `defaultAppRoles` (coleção `roles` já não
+  está vazia), o admin cria "Diaconia"/"Tesouraria" manualmente em
+  "Gerenciar Perfis de Acesso". `CurrentUserProfile.canManageBasketDonations`/
+  `.canConfirmBasketPix`/`.canCreateDonationCampaigns` (este último admin-only
+  — criar uma campanha nova é decisão estrutural).
+- **Generalização multi-campanha**: `settings/basketCampaign` (singleton)
+  virou `donationCampaigns/{id}` (`DonationCampaign`,
+  `lib/models/basket_donation.dart`) — "Cestas Básicas" é só a primeira;
+  admin cadastra novas em `DonationCampaignsAdminPage` (tile "Campanhas de
+  Doação" em `SettingsManagementPage`, admin-only). `basketFoodItems`/
+  `basketDonations` ganharam `campaignId`. Contribua
+  (`_DonationCampaignCards`, `contribute_page.dart`) virou um card por
+  campanha **ativa** — sem nenhuma cadastrada, a seção some (antes era
+  sempre visível, hardcoded).
+- **Receita da cesta**: reusa o catálogo de "itens que mais precisamos" —
+  cada `BasketFoodItem` ganhou `quantityPerBasket` (0 = fora da receita) no
+  lugar de `neededQuantity` (antes digitado à mão). A quantidade ainda
+  necessária (`BasketFoodItem.remainingNeeded(goalCount)`) é calculada
+  (`quantityPerBasket × meta de cestas do mês − estoque já recebido`), não
+  mais digitada.
+- **Contabilização automática, via transação Firestore no cliente (sem
+  Cloud Function)** — `BasketDonationRepository.markFoodDelivered`: soma
+  cada item entregue ao `stockReceived` do `BasketFoodItem`, recalcula
+  `DonationCampaign.foodBasketsCollected` (`min` do `floor(stock/
+  quantityPerBasket)` sobre os itens da receita — uma cesta "completa"
+  conta assim que TODOS os itens da receita atingem o necessário, podendo
+  formar mais de uma de uma vez). `.confirmPix`: soma o valor confirmado a
+  `pixAmountConfirmedThisMonth`, recalcula `pixBasketsCollected =
+  floor(total/valuePerBasket)`. `DonationCampaign.collectedCount` (soma dos
+  dois) nunca é digitado à mão — `BasketCampaignSettingsPage` mostra só
+  leitura.
+- **Fluxo Pix novo**: `PixOfferPage` ganhou `onGenerated: void
+  Function(double amount)?` (default `null`, nenhum outro call site
+  afetado) — `BasketCampaignPage` passa um callback que, assim que o
+  doador gera o código (a tela já pedia o valor antes de gerar), cria uma
+  `BasketDonation(type: pix)` pendente, visível só à Diaconia/Tesouraria —
+  sem esperar nenhuma confirmação de pagamento. Confirmado com o usuário:
+  qualquer um dos dois papéis confirma pelo app depois de conferir o
+  extrato (não é uma aprovação em duas etapas obrigatórias).
+- **Quem marca a entrega deixou de ser o doador** — antes
+  `BasketDonateFoodPage`/`BasketMyDonationsPage` tinham "Já entreguei minha
+  doação"; agora é a Diaconia, no novo painel
+  `BasketDiaconiaDashboardPage` (tile "Doações Pendentes" no pool de
+  `home_quick_tiles.dart`, visível a quem tem qualquer uma das duas
+  capacidades) — seção "Alimentos" (Diaconia) e seção "Pix" (Diaconia ou
+  Tesouraria), com o botão de ação certo em cada uma.
+- **Doador pode editar/cancelar antes da entrega** (pedido explícito) —
+  `BasketDonation.cancelled` (novo), `BasketDonationRepository.updateItems`/
+  `.cancel`, só o próprio dono, só enquanto `isPending`.
+  `updateItems` não mexe em `createdAt`/`expiresAt` — editar não reinicia o
+  prazo dos 7 dias. `BasketDonationFormPage`/`BasketDonationConfirmPage`
+  ganharam o parâmetro `editing` pra esse fluxo.
+- **Notificações** (`SIBValApp2/functions/index.js`, só código-fonte, sem
+  deploy): novo `NotificationType.basketDonationPending`/
+  `NotificationAudience.basketReview`, casado no cliente por
+  `canManageBasketDonations || canConfirmBasketPix`
+  (`notification_repository.dart`). Novo trigger
+  `onBasketDonationCreatedNotify` notifica Diaconia (sempre) e Tesouraria
+  (só doação Pix). Como Diaconia/Tesouraria são papéis **dinâmicos** (id
+  escolhido pelo admin, ao contrário de `dirigentes`/`eventos`/etc.,
+  herdados da migração de 03/09 com id fixo), o helper de tokens não pode
+  usar `array-contains` de um id literal — novo `getAdminAndCapabilityTokens`
+  lê o índice invertido `capabilityRoles/{capabilityId}.roleIds` (o mesmo
+  que `firestore.rules`/`hasCapability()` já usa) e consulta `users` em
+  lotes de 10 (`array-contains-any`). Novo `resetMonthlyDonationCampaigns`
+  (dia 1, 05h BRT) zera os contadores do mês — peça inferida (não pedida
+  palavra por palavra) a partir de "arrecadação do mês" ser um ciclo
+  mensal de verdade, mesmo padrão de `resetWeeklyFeed`/`resetAnnualMinistries`.
+- `SIBValApp2/firestore.rules`: novas `isDiaconia()`/`isTesouraria()`
+  (wrappers de `hasCapability`); `match /donationCampaigns` (leitura
+  pública, criar/excluir só admin, configurar admin ou Diaconia);
+  `basketFoodItems` (escrita: era só admin, ganhou Diaconia);
+  `basketDonations` (leitura ganha Diaconia/Tesouraria; `update` do dono
+  restrito a `items`/`cancelled` só enquanto pendente; `update` de
+  Diaconia/Tesouraria restrito aos campos que as transações de fato
+  gravam, condicionado ao `type` da doação). **Só editei o código-fonte —
+  não fiz `firebase deploy`**, mesma cautela de sempre; até o deploy, os
+  dois papéis novos, a leitura/escrita ampliada e as notificações não
+  funcionam de verdade em produção (a contabilização em si funciona sem
+  deploy — é lógica de cliente).
+
+**Devocionais — copiar para outra data (04/09/2026, pedido do usuário):**
+`DevotionalRepository.copyTo({sourceId, newDate})` duplica título/texto/
+autor/texto-base num documento novo (`readBy` vazio), sem tocar no
+original. Ação (ícone de cópia) em cada item de `DevotionalRepositoryPage`
+→ `showDatePicker` → cria a cópia → abre `DevotionalFormPage` já nela, pra
+ajustes finos antes de considerar pronta.
+
+**Início — "Devocional de Hoje" intercalando com "Aniversariantes de Hoje"
+(04/09/2026, pedido do usuário: "a exemplo dos avisos... ficar intercalando
+entre a devocional do dia e Aniversariantes do dia"):** `_TodayDevotionalSection`
+(estática) virou `_TodaySection` (`home_highlights.dart`), mesmo mecanismo
+de `PageView`+`Timer` de 5s já usado pelo card "Avisos" (`_NoticesCardState`).
+Aniversariante(s) do dia reaproveita o mesmo post agregado `PostType.birthday`
+que já existe pro Mural (`postBirthdaysToFeed`, foto + nome(s) +
+felicitações prontos) — sem post nem devocional de hoje, a seção some; com
+só um dos dois, mostra ele fixo, sem carrossel; com os dois, intercala e o
+título do card acompanha o slide atual. Toque no aniversariante abre
+`PostCommentsPage` do mesmo post — "encaminha pro mural onde fica o post
+dos aniversariantes", pedido literal do usuário.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do
