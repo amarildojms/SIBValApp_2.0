@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/cifra_repository.dart';
+import '../data/praise_repertoire_repository.dart';
 import '../models/praise_repertoire.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sibval_app_bar.dart';
@@ -37,6 +38,13 @@ class EnsaioDetailPage extends ConsumerWidget {
         .where((c) => c.content.trim().isNotEmpty)
         .map((c) => c.songId)
         .toSet();
+    // Solista(s) de cada música (05/09/2026, pedido do usuário) — vem do
+    // catálogo mestre (`PraiseSong.soloists`), casado por `songId`; o
+    // repertório semanal em si não guarda solista, só nome/cantor/tom.
+    final soloistsBySongId = {
+      for (final song in ref.watch(praiseSongsProvider).asData?.value ?? const [])
+        song.id: song.soloists,
+    };
 
     return Scaffold(
       appBar: const SibValAppBar(isHome: false),
@@ -61,6 +69,7 @@ class EnsaioDetailPage extends ConsumerWidget {
                       _AssignmentTile(
                         assignment: assignment,
                         hasCifra: songIdsWithCifra.contains(assignment.songId),
+                        soloists: soloistsBySongId[assignment.songId] ?? const [],
                       ),
                   if (repertoire.links.isNotEmpty) ...[
                     const SizedBox(height: 16),
@@ -100,16 +109,22 @@ class EnsaioDetailPage extends ConsumerWidget {
 }
 
 class _AssignmentTile extends StatelessWidget {
-  const _AssignmentTile({required this.assignment, required this.hasCifra});
+  const _AssignmentTile({
+    required this.assignment,
+    required this.hasCifra,
+    this.soloists = const [],
+  });
 
   final PraiseAssignment assignment;
   final bool hasCifra;
+  final List<String> soloists;
 
   @override
   Widget build(BuildContext context) {
     final subtitleParts = [
       if (assignment.songArtist.isNotEmpty) assignment.songArtist,
       if (assignment.toneDisplay.isNotEmpty) 'Tom: ${assignment.toneDisplay}',
+      if (soloists.isNotEmpty) 'Solista(s): ${soloists.join(', ')}',
     ];
     return ListTile(
       contentPadding: EdgeInsets.zero,

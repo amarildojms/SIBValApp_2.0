@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/cifra_repository.dart';
@@ -152,7 +153,30 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
     final cleaned = cleanCifraClubText(
       utf8.decode(bytes, allowMalformed: true),
     );
+    await _applyImportedText(cleaned);
+  }
 
+  /// Botão "Colar" (05/09/2026, pedido do usuário) — cola direto da área de
+  /// transferência, sem passar por arquivo. Mesma limpeza
+  /// (`cleanCifraClubText`, corta cabeçalho de site de cifra/colapsa linhas
+  /// em branco) e mesma confirmação de sobrescrita do "Importar .txt".
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text;
+    if (text == null || text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Área de transferência vazia.')),
+        );
+      }
+      return;
+    }
+    await _applyImportedText(cleanCifraClubText(text));
+  }
+
+  /// Compartilhado por "Importar .txt" e "Colar" — pede confirmação antes de
+  /// sobrescrever se já havia algo digitado.
+  Future<void> _applyImportedText(String cleaned) async {
     if (!mounted) return;
     if (_contentController.text.trim().isNotEmpty) {
       final confirmed = await showDialog<bool>(
@@ -160,8 +184,8 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
         builder: (context) => AlertDialog(
           title: const Text('Substituir o conteúdo atual?'),
           content: const Text(
-            'O texto do arquivo importado vai substituir o que já está '
-            'digitado nesta cifra.',
+            'O texto importado vai substituir o que já está digitado nesta '
+            'cifra.',
           ),
           actions: [
             TextButton(
@@ -411,6 +435,18 @@ class _CifraEditorPageState extends ConsumerState<CifraEditorPage> {
                               fontSize: 12,
                             ),
                           ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 4,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _pasteFromClipboard,
+                          icon: const Icon(Icons.content_paste, size: 18),
+                          label: const Text('Colar'),
                         ),
                         TextButton.icon(
                           onPressed: _importFile,

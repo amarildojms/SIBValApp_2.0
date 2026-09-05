@@ -139,10 +139,6 @@ class _ServiceOrderMemberViewPageState extends ConsumerState<ServiceOrderMemberV
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Row(
             children: [
-              if (!order.isFinalized) ...[
-                const ServiceOrderLiveBadge(),
-                const SizedBox(width: 10),
-              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

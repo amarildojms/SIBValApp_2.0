@@ -429,6 +429,14 @@ class ServiceOrderItem {
 
   String get label => type?.label ?? extraMomentName ?? '';
 
+  /// Título exibido pro momento — sempre igual a [label] (05/09/2026,
+  /// revisão: o usuário pediu de volta o título genérico "Momento
+  /// Missionário", só acrescentando o que foi selecionado **abaixo**, no
+  /// `summary()`, em vez de substituir o título). Mantido como método (em
+  /// vez de virar `label` direto nos call sites) só pra não precisar tocar
+  /// de novo nos 4 lugares que já passaram a chamar `labelFor(order)`.
+  String labelFor(ServiceOrder order) => label;
+
   /// Texto curto abaixo do rótulo do momento (ex.: pra distinguir os três
   /// "Louvor" entre si, ou mostrar o nome/texto bíblico preenchido num
   /// momento adicional) — `null` pros itens fixos sem dado próprio e pros
@@ -471,16 +479,16 @@ class ServiceOrderItem {
       case ServiceOrderMomentType.participation:
         return order.participation.isEmpty ? null : order.participation;
       case ServiceOrderMomentType.missionMoment:
+        // O título do momento continua genérico ("Momento Missionário") —
+        // só o que foi selecionado ("Missões Mundiais"/"Nacionais"/
+        // "Estaduais") aparece no resumo abaixo do título (05/09/2026,
+        // pedido do usuário). Tema/divisa **não** entram mais aqui — quem
+        // mostra isso é o link "Tema/Divisa" (sub-ação), sempre exibido
+        // junto com este resumo, nunca no lugar dele (ver
+        // `_MomentCard`/`_PraiseMomentCard`, que pararam de esconder o
+        // resumo quando há sub-ação pra este tipo específico).
         if (order.missionMoment == MissionMoment.naoHavera) return null;
-        final mottoRefs = order.missionMottoReferences
-            .map((r) => r.reference)
-            .whereType<String>()
-            .join('; ');
-        final parts = [
-          order.missionTheme,
-          if (mottoRefs.isNotEmpty) mottoRefs,
-        ].where((p) => p.isNotEmpty);
-        return '${order.missionMoment.label} — ${parts.join(' · ')}';
+        return order.missionMoment.label;
       case ServiceOrderMomentType.tithesOffering:
         final refs = order.tithesBibleReadings
             .map((r) => r.reference)

@@ -82,13 +82,14 @@ const _doneGreen = Color(0xFF43A047);
 /// Ao concluir todos os momentos, aparece "Finalizar Culto" no rodapé —
 /// marca `ServiceOrder.isFinalized` e volta pra lista.
 ///
-/// **Selo "ao vivo" dinâmico** (02/09/2026, pedido do usuário) — antes só
-/// fixo no cabeçalho da tela; agora também aparece do lado esquerdo do card
-/// do momento atual (`isCurrent`), junto com o dourado piscando — muda de
-/// posição sozinho conforme o culto avança, sem nenhum estado extra (só
-/// reaproveita `isCurrent`, já calculado por `_currentItemIndex`). Mesmo
-/// tratamento replicado nas visões somente-leitura (Louvor/membro/dono antes
-/// de iniciar), ver `_PraiseMomentCard` em `service_order_praise_view_page.dart`.
+/// **Selo "ao vivo" só no momento atual** (02/09/2026, dinâmico; removido do
+/// cabeçalho fixo da tela em 05/09/2026, pedido do usuário) — aparece só do
+/// lado esquerdo do card do momento atual (`isCurrent`), junto com o dourado
+/// piscando — muda de posição sozinho conforme o culto avança, sem nenhum
+/// estado extra (só reaproveita `isCurrent`, já calculado por
+/// `_currentItemIndex`). Mesmo tratamento replicado nas visões somente-leitura
+/// (Louvor/membro/dono antes de iniciar), ver `_PraiseMomentCard` em
+/// `service_order_praise_view_page.dart`.
 class ServiceOrderLivePage extends ConsumerStatefulWidget {
   const ServiceOrderLivePage({super.key, required this.order});
 
@@ -285,7 +286,7 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
       return [
         _SubAction(
           key: '$baseKey:motto',
-          label: 'Divisa',
+          label: 'Tema/Divisa',
           open: (ctx) => Navigator.of(ctx).push<void>(
             MaterialPageRoute(
               builder: (_) => ServiceOrderMissionMomentPage(
@@ -632,10 +633,6 @@ class _ServiceOrderLivePageState extends ConsumerState<ServiceOrderLivePage> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
                 child: Row(
                   children: [
-                    if (!order.isFinalized) ...[
-                      const ServiceOrderLiveBadge(),
-                      const SizedBox(width: 10),
-                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1050,7 +1047,7 @@ class _MomentCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            item.label,
+                            item.labelFor(order),
                             style: TextStyle(
                               color: textColor,
                               fontSize: 16,

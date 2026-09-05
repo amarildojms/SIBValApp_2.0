@@ -54,7 +54,7 @@ class ServiceOrderPreviewPage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '- ${item.label}',
+                                '- ${item.labelFor(order)}',
                                 style: const TextStyle(
                                   color: SibValColors.goldAccent,
                                   fontSize: 14,

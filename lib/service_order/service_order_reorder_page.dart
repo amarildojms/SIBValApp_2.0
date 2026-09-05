@@ -233,7 +233,7 @@ class _ServiceOrderReorderPageState
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     child: ListTile(
                       leading: CircleAvatar(child: Text('${index + 1}')),
-                      title: Text(item.label),
+                      title: Text(item.labelFor(widget.draft)),
                       subtitle: summary != null ? Text(summary) : null,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

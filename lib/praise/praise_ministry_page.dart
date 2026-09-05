@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -229,7 +231,8 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
               ? '$_filterYear-${_filterMonth!.toString().padLeft(2, '0')}'
               : null;
           final songs = allSongs.where((song) {
-            if (_filterClassification != null && song.classification != _filterClassification) {
+            if (_filterClassification != null &&
+                !song.classifications.contains(_filterClassification)) {
               return false;
             }
             if (_filterSoloist != null && !song.soloists.contains(_filterSoloist)) {
@@ -539,7 +542,11 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
   void _showSongDialog(BuildContext context, WidgetRef ref, {PraiseSong? song}) {
     final nameController = TextEditingController(text: song?.name ?? '');
     final artistController = TextEditingController(text: song?.artist ?? '');
-    var classification = song?.classification ?? PraiseSongClassification.avulso;
+    // Mais de uma classificação por música (05/09/2026, pedido do usuário) —
+    // mesmo padrão de `Set` mutável já usado em outros multi-selects desta
+    // base (ex. capacidades de um papel em `manage_roles_page.dart`).
+    final classifications = song?.classifications.toSet() ??
+        <PraiseSongClassification>{PraiseSongClassification.avulso};
     // Seleção (não mais texto livre) restrita a quem tem o papel Louvor —
     // ver `_SoloistDropdown` (03/09/2026, pedido do usuário).
     final soloistSelections = (song?.soloists.isEmpty ?? true)
@@ -568,7 +575,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
     // contaria como alteração (diferente da Ordem de Culto).
     final initialName = nameController.text;
     final initialArtist = artistController.text;
-    final initialClassification = classification;
+    final initialClassifications = Set<PraiseSongClassification>.of(classifications);
     final initialSoloists = List<String?>.of(soloistSelections);
     final initialRefMonth = refMonth;
     final initialRefYear = refYear;
@@ -585,7 +592,7 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
     bool hasUnsavedChanges() =>
         nameController.text != initialName ||
         artistController.text != initialArtist ||
-        classification != initialClassification ||
+        !setEquals(classifications, initialClassifications) ||
         soloistsChanged() ||
         refMonth != initialRefMonth ||
         refYear != initialRefYear ||
@@ -648,18 +655,35 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                     onChanged: (_) => setDialogState(() {}),
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<PraiseSongClassification>(
-                    initialValue: classification,
-                    isExpanded: true,
-                    dropdownColor: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
-                    decoration: const InputDecoration(labelText: 'Classificação'),
-                    items: [
-                      for (final c in PraiseSongClassification.values)
-                        DropdownMenuItem(value: c, child: Text(c.label)),
-                    ],
-                    onChanged: (value) => setDialogState(
-                      () => classification = value ?? PraiseSongClassification.avulso,
+                  Text(
+                    'Classificação',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Uma música pode ter mais de uma classificação
+                  // (05/09/2026, pedido do usuário) — virou seleção múltipla
+                  // (`FilterChip`), não mais um dropdown de valor único.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final c in PraiseSongClassification.values)
+                        FilterChip(
+                          label: Text(c.label),
+                          selected: classifications.contains(c),
+                          onSelected: (selected) => setDialogState(() {
+                            if (selected) {
+                              classifications.add(c);
+                            } else {
+                              classifications.remove(c);
+                            }
+                          }),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -762,22 +786,46 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                   // trecho/metadados no plano gratuito) — o botão abre uma
                   // busca no navegador pra facilitar achar e copiar a letra
                   // (02/09/2026, pedido do usuário).
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        final query = Uri.encodeComponent(
-                          'letra ${nameController.text.trim()} ${artistController.text.trim()}'
-                              .trim(),
-                        );
-                        launchUrl(
-                          Uri.parse('https://www.google.com/search?q=$query'),
-                          mode: LaunchMode.externalApplication,
-                        );
-                      },
-                      icon: const Icon(Icons.search, size: 18),
-                      label: const Text('Buscar letra'),
-                    ),
+                  Wrap(
+                    spacing: 4,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          final query = Uri.encodeComponent(
+                            'letra ${nameController.text.trim()} ${artistController.text.trim()}'
+                                .trim(),
+                          );
+                          launchUrl(
+                            Uri.parse('https://www.google.com/search?q=$query'),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('Buscar letra'),
+                      ),
+                      // Botão "Colar" (05/09/2026, pedido do usuário) — cola
+                      // direto da área de transferência, sem passar pela
+                      // busca no navegador.
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final data = await Clipboard.getData('text/plain');
+                          final text = data?.text;
+                          if (text == null || text.trim().isEmpty) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Área de transferência vazia.'),
+                                ),
+                              );
+                            }
+                            return;
+                          }
+                          setDialogState(() => lyricsController.text = text);
+                        },
+                        icon: const Icon(Icons.content_paste, size: 18),
+                        label: const Text('Colar'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   TextField(
@@ -825,7 +873,9 @@ class _MonthlyRepertoireTabState extends ConsumerState<_MonthlyRepertoireTab> {
                   id: song?.id ?? '',
                   name: name,
                   artist: artist,
-                  classification: classification,
+                  classifications: classifications.isEmpty
+                      ? const [PraiseSongClassification.avulso]
+                      : classifications.toList(),
                   soloists: soloists,
                   referenceMonthKey: referenceMonthKey,
                   lyrics: lyrics,
@@ -898,7 +948,7 @@ class _SongTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitleParts = [
       if (song.artist.isNotEmpty) song.artist,
-      song.classification.label,
+      song.classificationsLabel,
       if (song.soloists.isNotEmpty) 'Solista(s): ${song.soloists.join(', ')}',
     ];
     return ListTile(

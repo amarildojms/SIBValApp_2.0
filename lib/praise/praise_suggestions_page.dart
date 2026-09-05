@@ -60,7 +60,8 @@ class _PraiseSuggestionsPageState extends ConsumerState<PraiseSuggestionsPage> {
     final results = !hasCriteria
         ? const <PraiseSong>[]
         : songs.where((s) {
-            if (_filterClassification != null && s.classification != _filterClassification) {
+            if (_filterClassification != null &&
+                !s.classifications.contains(_filterClassification)) {
               return false;
             }
             if (_filterSoloist != null && !s.soloists.contains(_filterSoloist)) {
@@ -182,7 +183,7 @@ class _PraiseSuggestionsPageState extends ConsumerState<PraiseSuggestionsPage> {
                         final added = _added.contains(song.id);
                         final subtitleParts = [
                           if (song.artist.isNotEmpty) song.artist,
-                          song.classification.label,
+                          song.classificationsLabel,
                           if (song.soloists.isNotEmpty)
                             'Solista(s): ${song.soloists.join(', ')}',
                           song.referenceMonthLabel,

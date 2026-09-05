@@ -66,7 +66,9 @@ import 'service_order_preview_page.dart';
 /// lado esquerdo do card do momento atual — widgets duplicados aqui
 /// (`_PulseValue`, `_doneGreen`) por serem privados ao arquivo de origem,
 /// mesmo padrão de duplicação já usado por `_momentIcon`/`_emojiFor` neste
-/// mesmo arquivo.
+/// mesmo arquivo. **05/09/2026, pedido do usuário**: o selo fixo no
+/// cabeçalho da tela foi removido — só o selo dinâmico do momento atual
+/// (dentro de `_PraiseMomentCard`) continua.
 class ServiceOrderPraiseViewPage extends ConsumerStatefulWidget {
   const ServiceOrderPraiseViewPage({super.key, required this.orderId});
 
@@ -153,10 +155,6 @@ class _ServiceOrderPraiseViewPageState
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Row(
             children: [
-              if (order.isStarted && !order.isFinalized) ...[
-                const ServiceOrderLiveBadge(),
-                const SizedBox(width: 10),
-              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,7 +487,7 @@ class _ServiceOrderReadOnlyBodyState
       if (refs.isNotEmpty) {
         rows.add(
           _DetailRow(
-            label: 'Divisa',
+            label: 'Tema/Divisa',
             onTap: () => _openMissionMotto(order.missionTheme, refs),
           ),
         );
@@ -540,21 +538,28 @@ class _ServiceOrderReadOnlyBodyState
         final isInstrumentista =
             ref.read(currentUserProfileProvider).asData?.value?.isInstrumentista ?? false;
         for (final assignment in repertoire.forSlot(slot)) {
+          final catalogSong = catalog.where((s) => s.id == assignment.songId).firstOrNull;
           final base = assignment.songArtist.isEmpty
               ? assignment.songName
               : '${assignment.songName} — ${assignment.songArtist}';
-          final label =
-              widget.showPraiseDetails && assignment.toneDisplay.isNotEmpty
-              ? '$base (Tom: ${assignment.toneDisplay})'
-              : base;
+          // Solista de cada música nos momentos de Louvor (05/09/2026,
+          // pedido do usuário) — mesma regra do tom: só na visão "com
+          // detalhes" (Louvor/sonoplastia, `showPraiseDetails`), não na
+          // visão de membro comum. Vem do catálogo mestre
+          // (`PraiseSong.soloists`), não do repertório semanal em si.
+          final soloists = catalogSong?.soloists ?? const [];
+          var label = base;
+          if (widget.showPraiseDetails && assignment.toneDisplay.isNotEmpty) {
+            label = '$label (Tom: ${assignment.toneDisplay})';
+          }
+          if (widget.showPraiseDetails && soloists.isNotEmpty) {
+            label = '$label — Solista: ${soloists.join(', ')}';
+          }
           VoidCallback? onTap;
           if (isInstrumentista) {
             onTap = () => _openCifra(assignment.songId, assignment.songName);
-          } else {
-            final catalogSong = catalog.where((s) => s.id == assignment.songId).firstOrNull;
-            if (catalogSong != null && catalogSong.hasLyrics) {
-              onTap = () => _openLyrics(catalogSong);
-            }
+          } else if (catalogSong != null && catalogSong.hasLyrics) {
+            onTap = () => _openLyrics(catalogSong);
           }
           rows.add(_DetailRow(label: label, onTap: onTap));
         }
@@ -1057,7 +1062,7 @@ class _PraiseMomentCard extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        item.label,
+                        item.labelFor(order),
                         style: TextStyle(
                           color: isDone ? _doneGreen : Colors.white,
                           fontSize: 16,
@@ -1070,7 +1075,16 @@ class _PraiseMomentCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (rows.isEmpty && summary != null)
+                // Resumo some quando há sub-ações pra maioria dos tipos (o
+                // conteúdo já aparece na própria linha da sub-ação, ex.
+                // "Leitura bíblica") — exceto Momento Missionário
+                // (05/09/2026, pedido do usuário): o tipo selecionado
+                // ("Missões Estaduais"/etc.) precisa continuar visível
+                // mesmo com o link "Tema/Divisa" logo abaixo, porque o
+                // link, sozinho, não diz qual tipo foi escolhido.
+                if (summary != null &&
+                    (rows.isEmpty ||
+                        item.type == ServiceOrderMomentType.missionMoment))
                   Padding(
                     padding: const EdgeInsets.only(left: 42, top: 4),
                     child: Text(

@@ -3669,6 +3669,80 @@ título do card acompanha o slide atual. Toque no aniversariante abre
 `PostCommentsPage` do mesmo post — "encaminha pro mural onde fica o post
 dos aniversariantes", pedido literal do usuário.
 
+**Ordem de Culto — 18ª rodada: selo "ao vivo" só no momento atual, título do
+Momento Missionário, "Tema/Divisa", classificação múltipla, botão Colar,
+solista na visão do Louvor/sonoplastia e no repertório semanal (05/09/2026,
+pedidos do usuário):**
+
+- **Selo "ao vivo" fixo removido do cabeçalho** das três telas de
+  apresentação (`ServiceOrderLivePage`, `ServiceOrderPraiseViewPage`,
+  `ServiceOrderMemberViewPage`) — só o selo dinâmico (`ServiceOrderLiveBadge`
+  do lado esquerdo do card do momento atual, dentro de `_MomentCard`/
+  `_MomentGroupCard`/`_PraiseMomentCard`) continua.
+- **Título do Momento Missionário — duas rodadas de correção na mesma
+  sessão.** 1ª versão trocou o título "Momento Missionário" pelo tipo
+  selecionado — usuário corrigiu: título continua genérico,
+  `ServiceOrderItem.labelFor(order)` virou um método trivial (`=> label`,
+  mantido só pra não desfazer a troca nos 4 call sites que já chamavam:
+  `ServiceOrderReorderPage`, `ServiceOrderPreviewPage`,
+  `ServiceOrderPraiseViewPage._PraiseMomentCard`,
+  `ServiceOrderLivePage._MomentCard`). 2ª versão pôs o tipo selecionado de
+  volta no `summary()`, mas concatenado com tema/divisa (`'{tipo} —
+  {tema} · {refs}'`) — usuário corrigiu de novo: o tipo
+  ("Missões Estaduais"/etc.) deve aparecer **sozinho**, "antes do
+  Tema/Divisa" (o link/sub-ação que abre `ServiceOrderMissionMomentPage`).
+  `summary()` desse tipo agora retorna só `order.missionMoment.label`, sem
+  tema/refs. Bug real achado nessa 2ª correção: `_PraiseMomentCard`
+  (`service_order_praise_view_page.dart`, visão Louvor/membro) só mostrava
+  `summary` quando `rows.isEmpty` — como o link "Tema/Divisa" vira uma
+  `_DetailRow` (`rows` não-vazio) sempre que há motto de referência
+  preenchida, o resumo com o tipo selecionado sumia justamente quando havia
+  Tema/Divisa pra mostrar. Corrigido com uma exceção pro Momento Missionário
+  (`rows.isEmpty || item.type == missionMoment`) — os demais tipos (Leitura
+  bíblica, dízimos, momento adicional com texto bíblico) continuam com o
+  comportamento antigo, sem duplicar texto quando a própria sub-ação já
+  mostra o conteúdo.
+- **Link "Divisa" → "Tema/Divisa"** — `ServiceOrderLivePage`/
+  `ServiceOrderPraiseViewPage` (sub-ação/`_DetailRow` que abre
+  `ServiceOrderMissionMomentPage`). O cabeçalho "Divisa" dentro do campo de
+  cadastro (`service_order_form_page.dart`) e dentro da própria
+  `ServiceOrderMissionMomentPage` não foram tocados — o pedido era só sobre
+  o link clicável.
+- **Repertório Mensal: música pode ter mais de uma classificação** —
+  `PraiseSong.classification` (único) virou `.classifications`
+  (`List<PraiseSongClassification>`, `lib/models/praise_repertoire.dart`) —
+  `fromFirestore` lê o novo campo `classifications`, cai pro antigo
+  `classification` (singular) quando a música foi salva antes desta
+  mudança, sem backfill. Novo getter `classificationsLabel` (join por
+  vírgula). Cadastro (`praise_ministry_page.dart`, `_showSongDialog`) trocou
+  o `DropdownButtonFormField` único por `FilterChip`s num `Wrap` (seleção
+  múltipla); filtro (`_MonthlyRepertoireTab`/`PraiseSuggestionsPage`)
+  continua de valor único (`_filterClassification`), mas casa contra
+  `song.classifications.contains(...)`.
+- **Botão "Colar"** — `CifraEditorPage` (ao lado de "Importar .txt") e o
+  campo "Letra" em `praise_ministry_page.dart` (ao lado de "Buscar letra"),
+  ambos via `Clipboard.getData('text/plain')`; no editor de cifra passa pela
+  mesma limpeza (`cleanCifraClubText`) e confirmação de sobrescrita que o
+  import de arquivo já tinha (`_applyImportedText`, extraído/compartilhado).
+- **Solista em cada música dos momentos de Louvor, na visão do Louvor e da
+  sonoplastia** — `ServiceOrderPraiseViewPage._detailRowsFor` acrescenta "—
+  Solista: X, Y" no rótulo da música quando `showPraiseDetails` (hoje só
+  essa tela — qualquer papel com a capacidade `view_praise_order`, incluindo
+  um futuro papel "Sonoplastia" que o admin crie com essa mesma capacidade,
+  cai na mesma tela) e a música tem solista cadastrado no catálogo mestre
+  (`PraiseSong.soloists`, casado por `songId` contra `catalog`, já
+  observado nesta tela desde a correção do bug de 04/09/2026). A visão de
+  membro comum (`showPraiseDetails: false`) continua sem mostrar solista,
+  mesma regra do tom.
+- **Solista no Repertório Semanal** — `weekly_repertoire_form_page.dart`
+  (`_AssignmentRow`, cadastro) mostra "Solista(s): ..." abaixo do seletor de
+  música, casado por `draft.songId` contra a lista `songs` (catálogo
+  mestre) já disponível no widget; `ensaios_list_page.dart`
+  (`EnsaioDetailPage`/`_AssignmentTile`, visão somente-leitura de uma
+  semana) passou a observar `praiseSongsProvider` pra montar o mesmo dado,
+  já que `PraiseAssignment` (o registro salvo na semana) não guarda solista
+  — só nome/cantor/tom denormalizados.
+
 ## Como responder "o que falta migrar"
 
 Diffar as pastas `ui/<feature>/` do app nativo contra `lib/<feature>/` do

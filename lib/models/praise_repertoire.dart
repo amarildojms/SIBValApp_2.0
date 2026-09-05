@@ -73,7 +73,11 @@ class PraiseSong {
   final String id;
   final String name;
   final String artist;
-  final PraiseSongClassification classification;
+
+  /// Uma música pode se encaixar em mais de uma classificação ao mesmo
+  /// tempo (05/09/2026, pedido do usuário — antes era uma só). Sempre com
+  /// pelo menos 1 item (`avulso` quando nada é marcado no cadastro).
+  final List<PraiseSongClassification> classifications;
   final List<String> soloists;
   final String? referenceMonthKey;
   final String lyrics;
@@ -82,7 +86,7 @@ class PraiseSong {
     required this.id,
     required this.name,
     this.artist = '',
-    this.classification = PraiseSongClassification.avulso,
+    this.classifications = const [PraiseSongClassification.avulso],
     this.soloists = const [],
     this.referenceMonthKey,
     this.lyrics = '',
@@ -90,15 +94,25 @@ class PraiseSong {
 
   String get referenceMonthLabel => praiseReferenceMonthLabel(referenceMonthKey);
 
+  String get classificationsLabel =>
+      classifications.map((c) => c.label).join(', ');
+
   factory PraiseSong.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
+    // `classifications` (lista) é o formato atual; cai pro campo antigo
+    // `classification` (único) quando a música foi salva antes desta
+    // mudança — sem backfill, mesmo padrão de sempre nesta base.
+    final rawList = data['classifications'] as List<dynamic>?;
+    final classifications = rawList != null
+        ? rawList.map((e) => PraiseSongClassification.fromName(e as String?)).toList()
+        : [PraiseSongClassification.fromName(data['classification'] as String?)];
     return PraiseSong(
       id: doc.id,
       name: data['name'] as String? ?? '',
       artist: data['artist'] as String? ?? '',
-      classification: PraiseSongClassification.fromName(
-        data['classification'] as String?,
-      ),
+      classifications: classifications.isEmpty
+          ? const [PraiseSongClassification.avulso]
+          : classifications,
       soloists: (data['soloists'] as List<dynamic>?)?.cast<String>() ?? const [],
       referenceMonthKey: data['referenceMonthKey'] as String?,
       lyrics: data['lyrics'] as String? ?? '',
@@ -110,7 +124,7 @@ class PraiseSong {
   Map<String, dynamic> toMap() => {
     'name': name,
     'artist': artist,
-    'classification': classification.name,
+    'classifications': classifications.map((c) => c.name).toList(),
     'soloists': soloists,
     'referenceMonthKey': referenceMonthKey,
     'lyrics': lyrics,

@@ -462,6 +462,25 @@ class _AssignmentRow extends StatelessWidget {
                 IconButton(icon: const Icon(Icons.close), onPressed: onRemove),
             ],
           ),
+          Builder(
+            builder: (context) {
+              // Solista(s) da música escalada (05/09/2026, pedido do
+              // usuário: "no repertório semanal aparecer os solistas de cada
+              // música") — vem do catálogo mestre (`PraiseSong.soloists`),
+              // casado por `draft.songId`; some quando a música não tem
+              // solista cadastrado.
+              final song = songs.where((s) => s.id == draft.songId).firstOrNull;
+              final soloists = song?.soloists ?? const [];
+              if (soloists.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Solista(s): ${soloists.join(', ')}',
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
